@@ -101,6 +101,7 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const [showBankModal, setShowBankModal] = useState(false);
   const [showBankListModal, setShowBankListModal] = useState(false);
   const [bankSearch, setBankSearch] = useState('');
+  const [selectedBankName, setSelectedBankName] = useState('');
 
   const paymentMethod: PaymentMethod | undefined = enabledMethods.find(
     (m) => m.title === order?.paymentMethod,
@@ -132,29 +133,28 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
 
   const handleSelectBank = async (bank: BankInfo) => {
     setShowBankListModal(false);
+    setSelectedBankName(bank.name);
 
-    // Try each deep link scheme for the selected bank
+    // Try opening the bank app with a 1.5s timeout
+    let opened = false;
+
     for (const scheme of bank.schemes) {
+      if (opened) break;
       try {
         const supported = await Linking.canOpenURL(scheme);
         if (supported) {
-          await Linking.openURL(scheme);
-          return;
+          const openPromise = Linking.openURL(scheme);
+          const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 1500));
+          await Promise.race([openPromise, timeoutPromise]);
+          opened = true;
         }
       } catch {
-        // continue
+        // continue to next scheme
       }
     }
 
-    // Fallback: show QR modal with all info
-    Alert.alert(
-      `Không mở được ${bank.name}`,
-      `Vui lòng mở thủ công app ${bank.name} và quét mã QR để thanh toán.`,
-      [
-        { text: 'Đóng', style: 'cancel' },
-        { text: 'Xem mã QR', onPress: () => setShowBankModal(true) },
-      ],
-    );
+    // Always show the QR modal with instructions (even if opened successfully, as a guide)
+    setShowBankModal(true);
   };
 
   const handleConfirmTransfer = async () => {
@@ -474,9 +474,9 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
       <Modal visible={showBankModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.bankModalCard}>
-            <Text style={styles.bankModalTitle}>Quét mã QR để thanh toán</Text>
+            <Text style={styles.bankModalTitle}>Mở app ngân hàng của bạn</Text>
             <Text style={styles.bankModalSubtext}>
-              Mở app ngân hàng bất kỳ (Vietcombank, MB Bank, Techcombank, BIDV, ACB, VPBank...) và quét mã QR.
+              Vui lòng mở app {selectedBankName || 'ngân hàng'}, chọn Quét QR và quét mã bên dưới để thanh toán.
             </Text>
 
             {/* QR in modal */}
@@ -599,10 +599,17 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
                   <ExternalLink size={16} color={COLORS.lightText} />
                 </TouchableOpacity>
               ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+              </ScrollView>
+
+              {/* Note */}
+              <View style={styles.bankListNote}>
+              <Text style={styles.bankListNoteText}>
+                Một số ngân hàng có thể không hỗ trợ mở trực tiếp từ trình duyệt. Bạn vẫn có thể mở app ngân hàng và quét QR để thanh toán.
+              </Text>
+              </View>
+              </View>
+              </View>
+              </Modal>
       </SafeAreaView>
   );
 }
@@ -1000,6 +1007,15 @@ const styles = StyleSheet.create({
   bankListInfo: { flex: 1 },
   bankListName: { fontSize: 15, fontWeight: '700', color: COLORS.darkText },
   bankListShort: { fontSize: 12, color: COLORS.lightText, marginTop: 2 },
+  bankListNote: {
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.lightPurple,
+    borderRadius: 10,
+    padding: SPACING.md,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  bankListNoteText: { fontSize: 12, color: COLORS.mediumText, lineHeight: 18 },
 
   // Confirmed state
   confirmedScroll: {
