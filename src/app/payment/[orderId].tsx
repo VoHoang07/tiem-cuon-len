@@ -70,6 +70,7 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showBankModal, setShowBankModal] = useState(false);
 
   const paymentMethod: PaymentMethod | undefined = enabledMethods.find(
     (m) => m.title === order?.paymentMethod,
@@ -97,33 +98,23 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const handleOpenBankApp = async () => {
     if (!paymentMethod || !order) return;
 
-    // Build VietQR payment URL
     const amount = order.total;
     const addInfo = transferContent;
 
-    // Try bank app deep links
-    const deepLinks: string[] = [
-      `vcbdigibank://transfer?account=${accountNo}&amount=${amount}&message=${encodeURIComponent(addInfo)}`,
-      `vietqr://pay?bank=${bankCode}&account=${accountNo}&amount=${amount}&content=${encodeURIComponent(addInfo)}`,
-    ];
-
-    for (const url of deepLinks) {
-      try {
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-          await Linking.openURL(url);
-          return;
-        }
-      } catch {
-        // continue
+    // Try generic VietQR deep link (works with any banking app that supports QR)
+    try {
+      const vietqrDeepLink = `vietqr://pay?bank=${bankCode}&account=${accountNo}&amount=${amount}&content=${encodeURIComponent(addInfo)}`;
+      const supported = await Linking.canOpenURL(vietqrDeepLink);
+      if (supported) {
+        await Linking.openURL(vietqrDeepLink);
+        return;
       }
+    } catch {
+      // fall through to modal
     }
 
-    // Fallback: show alert with instructions
-    Alert.alert(
-      'Không mở được app ngân hàng',
-      'Vui lòng mở app ngân hàng và quét mã QR để thanh toán.\n\nNếu app ngân hàng không tự mở, hãy quét mã QR bên trên bằng app ngân hàng của bạn.',
-    );
+    // Fallback: show QR modal with all payment info
+    setShowBankModal(true);
   };
 
   const handleConfirmTransfer = async () => {
@@ -316,7 +307,7 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
                 style={styles.actionBtn}
                 onPress={handleOpenBankApp}>
                 <ExternalLink size={20} color={COLORS.primary} />
-                <Text style={styles.actionBtnText}>Mở app{'\n'}ngân hàng</Text>
+                <Text style={styles.actionBtnText}>Mở app ngân hàng bất kỳ</Text>
               </TouchableOpacity>
             )}
 
@@ -364,7 +355,7 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
             <Text style={styles.noteTitle}>Hướng dẫn thanh toán</Text>
             {paymentMethod?.type === 'bank_transfer' ? (
               <Text style={styles.noteText}>
-                1. Mở app ngân hàng hoặc quét mã QR{'\n'}
+                1. Mở app ngân hàng bất kỳ và quét mã QR{'\n'}
                 2. Nhập số tài khoản và số tiền chính xác{'\n'}
                 3. Nhập đúng nội dung chuyển khoản{'\n'}
                 4. Xác nhận và hoàn tất chuyển khoản{'\n'}
@@ -438,7 +429,88 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+
+      {/* Bank QR Fallback Modal */}
+      <Modal visible={showBankModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.bankModalCard}>
+            <Text style={styles.bankModalTitle}>Quét mã QR để thanh toán</Text>
+            <Text style={styles.bankModalSubtext}>
+              Mở app ngân hàng bất kỳ (Vietcombank, MB Bank, Techcombank, BIDV, ACB, VPBank...) và quét mã QR.
+            </Text>
+
+            {/* QR in modal */}
+            <View style={styles.bankModalQrWrap}>
+              {paymentMethod?.type === 'bank_transfer' && vietqrImageUrl ? (
+                <Image
+                  source={{ uri: vietqrImageUrl }}
+                  style={styles.bankModalQr}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={[styles.qrPlaceholder, { width: 180, height: 180 }]}>
+                  {typeInfo.icon}
+                  <Text style={[styles.qrPlaceholderText, { color: typeInfo.color }]}>
+                    QR thanh toán
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Amount */}
+            <Text style={styles.bankModalAmount}>{formatVND(order.total)}</Text>
+
+            {/* Info rows */}
+            <View style={styles.bankModalInfo}>
+              {paymentMethod?.account_number && (
+                <View style={styles.bankModalRow}>
+                  <Text style={styles.bankModalLabel}>Số tài khoản</Text>
+                  <Text style={styles.bankModalValue} selectable>{paymentMethod.account_number}</Text>
+                </View>
+              )}
+              <View style={styles.bankModalRow}>
+                <Text style={styles.bankModalLabel}>Nội dung CK</Text>
+                <Text style={[styles.bankModalValue, styles.bankModalHighlight]} selectable>
+                  {transferContent}
+                </Text>
+              </View>
+            </View>
+
+            {/* Action buttons in modal */}
+            <View style={styles.bankModalActions}>
+              {paymentMethod?.account_number && (
+                <TouchableOpacity
+                  style={styles.bankModalActionBtn}
+                  onPress={() => handleCopy(paymentMethod.account_number!, 'account')}>
+                  {copiedField === 'account' ? (
+                    <CheckCheck size={18} color={COLORS.success} />
+                  ) : (
+                    <Copy size={18} color={COLORS.primary} />
+                  )}
+                  <Text style={styles.bankModalActionText}>Sao chép STK</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.bankModalActionBtn}
+                onPress={() => handleCopy(transferContent, 'content')}>
+                {copiedField === 'content' ? (
+                  <CheckCheck size={18} color={COLORS.success} />
+                ) : (
+                  <Copy size={18} color={COLORS.primary} />
+                )}
+                <Text style={styles.bankModalActionText}>Sao chép nội dung CK</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.bankModalCloseBtn}
+              onPress={() => setShowBankModal(false)}>
+              <Text style={styles.bankModalCloseText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      </SafeAreaView>
   );
 }
 
@@ -725,6 +797,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.mediumText },
+
+  // Bank QR modal
+  bankModalCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    gap: SPACING.md,
+    width: '100%',
+    maxHeight: '90%',
+    ...SHADOWS.large,
+  },
+  bankModalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText, textAlign: 'center' },
+  bankModalSubtext: { fontSize: 13, color: COLORS.mediumText, textAlign: 'center', lineHeight: 20 },
+  bankModalQrWrap: { alignItems: 'center', marginVertical: SPACING.sm },
+  bankModalQr: { width: 200, height: 200, borderRadius: 16 },
+  bankModalAmount: { fontSize: 28, fontWeight: '900', fontStyle: 'italic', color: COLORS.primary },
+  bankModalInfo: {
+    width: '100%',
+    backgroundColor: COLORS.cream,
+    borderRadius: 14,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  bankModalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  bankModalLabel: { fontSize: 13, color: COLORS.mediumText, fontWeight: '600' },
+  bankModalValue: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+  bankModalHighlight: {
+    color: COLORS.primary,
+    backgroundColor: COLORS.softBeige,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  bankModalActions: { flexDirection: 'row', gap: SPACING.sm, width: '100%' },
+  bankModalActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.cream,
+    borderRadius: 12,
+    paddingVertical: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  bankModalActionText: { fontSize: 13, fontWeight: '700', color: COLORS.darkText },
+  bankModalCloseBtn: {
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  bankModalCloseText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
 
   // Confirmed state
   confirmedScroll: {
