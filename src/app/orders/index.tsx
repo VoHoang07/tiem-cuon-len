@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,27 +15,23 @@ import { useAuth } from '@/store/AuthContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
-import { Order } from '@/types/order';
-
-const STATUS_COLORS: Record<string, string> = {
-  'Đang xử lý': '#E8A840',
-  'Đang giao': '#4A90D9',
-  'Hoàn thành': '#6BAF5C',
-};
+import { getOrderStatusLabel, getOrderStatusColor } from '@/constants/orderStatus';
+import type { Order } from '@/types/order';
 
 export default function OrdersScreen() {
   const router = useRouter();
-  const { orders, getOrdersByUser } = useOrders();
+  const { orders, getOrdersByUser, refetchOrders } = useOrders();
   const { user, role } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
   const isAdmin = role === 'admin';
-  const displayOrders = isAdmin ? orders : getOrdersByUser(user?.email ?? '');
+  const displayOrders = isAdmin ? orders : getOrdersByUser(user?.id ?? '');
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  };
+    await refetchOrders();
+    setRefreshing(false);
+  }, [refetchOrders]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -66,9 +62,11 @@ export default function OrdersScreen() {
                 onPress={() => router.push(`/orders/${order.id}`)}>
                 <View style={styles.orderHeader}>
                   <Text style={styles.orderId}>#{order.id.slice(-8)}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[order.status] + '20' }]}>
-                    <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[order.status] }]} />
-                    <Text style={[styles.statusText, { color: STATUS_COLORS[order.status] }]}>{order.status}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getOrderStatusColor(order.status) + '20' }]}>
+                    <View style={[styles.statusDot, { backgroundColor: getOrderStatusColor(order.status) }]} />
+                    <Text style={[styles.statusText, { color: getOrderStatusColor(order.status) }]}>
+                      {getOrderStatusLabel(order.status)}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.orderBody}>

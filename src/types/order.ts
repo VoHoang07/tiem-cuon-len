@@ -1,7 +1,14 @@
 import { Product } from './product';
 import { Address } from './address';
 
-export type OrderStatus = 'Đang xử lý' | 'Đang giao' | 'Hoàn thành';
+export type OrderStatus =
+  | 'pending_payment'
+  | 'awaiting_confirmation'
+  | 'placed'
+  | 'Đang xử lý'
+  | 'Đang chuẩn bị hàng'
+  | 'Đang giao'
+  | 'Hoàn thành';
 
 export interface OrderItem {
   product: Product;

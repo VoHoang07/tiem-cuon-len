@@ -13,18 +13,11 @@ import { useOrders } from '@/store/OrderContext';
 import { useAuth } from '@/store/AuthContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
-
-const STATUS_COLORS: Record<string, string> = {
-  'Đang xử lý': '#E8A840',
-  'Đang giao': '#4A90D9',
-  'Hoàn thành': '#6BAF5C',
-};
-
-const NEXT_STATUS: Record<string, string | null> = {
-  'Đang xử lý': 'Đang giao',
-  'Đang giao': 'Hoàn thành',
-  'Hoàn thành': null,
-};
+import {
+  getOrderStatusLabel,
+  getOrderStatusColor,
+  ORDER_STATUS_NEXT,
+} from '@/constants/orderStatus';
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -45,7 +38,7 @@ export default function OrderDetailScreen() {
   }
 
   const isAdmin = role === 'admin';
-  const nextStatus = NEXT_STATUS[order.status];
+  const nextStatus = ORDER_STATUS_NEXT[order.status];
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -60,15 +53,19 @@ export default function OrderDetailScreen() {
 
         <View style={styles.section}>
           <View style={styles.statusRow}>
-            <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[order.status] + '20' }]}>
-              <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[order.status] }]} />
-              <Text style={[styles.statusText, { color: STATUS_COLORS[order.status] }]}>{order.status}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: getOrderStatusColor(order.status) + '20' }]}>
+              <View style={[styles.statusDot, { backgroundColor: getOrderStatusColor(order.status) }]} />
+              <Text style={[styles.statusText, { color: getOrderStatusColor(order.status) }]}>
+                {getOrderStatusLabel(order.status)}
+              </Text>
             </View>
             {isAdmin && nextStatus && (
               <TouchableOpacity
                 style={styles.updateStatusBtn}
                 onPress={() => updateOrderStatus(order.id, nextStatus)}>
-                <Text style={styles.updateStatusText}>Đánh dấu: {nextStatus}</Text>
+                <Text style={styles.updateStatusText}>
+                  Chuyển: {getOrderStatusLabel(nextStatus)}
+                </Text>
               </TouchableOpacity>
             )}
           </View>

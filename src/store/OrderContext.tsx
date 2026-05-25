@@ -15,6 +15,7 @@ interface OrderContextType {
   addOrder: (order: Order) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   getOrdersByUser: (userId: string) => Order[];
+  refetchOrders: () => Promise<void>;
 }
 
 const OrderContext = createContext<OrderContextType | null>(null);
@@ -23,24 +24,32 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const { user, role } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
 
-  useEffect(() => {
+  const fetchOrders = useCallback(async () => {
     const query = supabase.from('orders').select('*').order('createdAt', { ascending: false });
 
-    // Admin thấy tất cả, customer chỉ thấy đơn của mình
     if (role === 'admin') {
-      query.then(({ data, error }) => {
-        if (!error && data) setOrders(data as Order[]);
-      });
+      const { data, error } = await query;
+      console.log('[ORDERS FETCH] admin', data?.length, 'orders');
+      if (!error && data) setOrders(data as Order[]);
     } else if (user) {
-      query.eq('user_id', user.id).then(({ data, error }) => {
-        if (!error && data) setOrders(data as Order[]);
-      });
+      const { data, error } = await query.eq('userId', user.id);
+      console.log('[ORDERS FETCH] user', user.id, data?.length, 'orders', error?.message ?? '');
+      if (!error && data) setOrders(data as Order[]);
     } else {
       setOrders([]);
     }
   }, [user, role]);
 
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  const refetchOrders = useCallback(async () => {
+    await fetchOrders();
+  }, [fetchOrders]);
+
   const addOrder = useCallback((order: Order) => {
+    console.log('[ORDER CREATED]', order);
     setOrders((prev) => [order, ...prev]);
     supabase.from('orders').insert(order).then(({ error }) => {
       if (error) console.error('[SUPABASE] Lỗi tạo đơn:', error.message);
@@ -60,7 +69,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, getOrdersByUser }}>
+    <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, getOrdersByUser, refetchOrders }}>
       {children}
     </OrderContext.Provider>
   );

@@ -171,6 +171,7 @@ export default function ProfileScreen() {
             <MenuItem icon={Package} label={PROF_MANAGE_PRODUCTS} onPress={() => router.push('/manage-products')} />
             <MenuItem icon={ShoppingBag} label={PROF_PREVIOUS_ORDERS} onPress={() => router.push('/orders')} />
             <MenuItem icon={Heart} label={PROF_FAVORITES_MENU} onPress={() => router.push('/favorites')} />
+            <MenuItem icon={CreditCard} label={PROF_CUSTOMER_PAYMENT} onPress={() => router.push('/payment-methods')} />
             <MenuItem icon={Settings} label={PROF_SETTINGS} onPress={() => router.push('/settings')} />
             <MenuItem icon={HelpCircle} label={PROF_HELP} onPress={() => router.push('/help')} />
             <MenuItem icon={Shield} label={PROF_PRIVACY} onPress={() => router.push('/privacy')} />
@@ -228,7 +229,7 @@ export default function ProfileScreen() {
           <MenuItem icon={ShoppingBag} label={PROF_CUSTOMER_MY_ORDERS} onPress={() => router.push('/orders')} />
           <MenuItem icon={Heart} label={PROF_FAVORITES_MENU} onPress={() => router.push('/favorites')} />
           <MenuItem icon={MapPin} label={PROF_CUSTOMER_ADDRESS} onPress={() => router.push('/addresses')} />
-          <MenuItem icon={CreditCard} label={PROF_CUSTOMER_PAYMENT} />
+          <MenuItem icon={CreditCard} label={PROF_CUSTOMER_PAYMENT} onPress={() => router.push('/payment-methods')} />
           <MenuItem icon={Settings} label={PROF_SETTINGS} onPress={() => router.push('/settings')} />
           <MenuItem icon={HelpCircle} label={PROF_HELP} onPress={() => router.push('/help')} />
         </View>
