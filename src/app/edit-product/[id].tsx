@@ -213,7 +213,10 @@ export default function EditProductScreen() {
     Alert.alert('Đã cập nhật', 'Sản phẩm đã được cập nhật.', [
       {
         text: 'OK',
-        onPress: () => router.back(),
+        onPress: () => {
+          if (router.canGoBack()) router.back();
+          else router.replace('/manage-products');
+        },
       },
     ]);
   };
@@ -225,7 +228,7 @@ export default function EditProductScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/manage-products'); }} style={styles.backBtn}>
             <ChevronLeft size={24} color={COLORS.darkText} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Sửa sản phẩm</Text>

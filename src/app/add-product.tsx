@@ -214,7 +214,7 @@ export default function AddProductScreen() {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace('/');
+            router.replace('/manage-products');
           }
         },
       },
@@ -229,7 +229,7 @@ export default function AddProductScreen() {
         keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/manage-products'); }} style={styles.backBtn}>
             <ChevronLeft size={24} color={COLORS.darkText} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{AP_TITLE}</Text>

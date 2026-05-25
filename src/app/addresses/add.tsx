@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,14 @@ import {
   StyleSheet,
   Alert,
   Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, MapPin } from 'lucide-react-native';
 import { useAddresses } from '@/store/AddressContext';
 import { useAuth } from '@/store/AuthContext';
+import { useAutoLocation } from '@/hooks/useAutoLocation';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 
 export default function AddAddressScreen() {
@@ -32,6 +34,19 @@ export default function AddAddressScreen() {
   const [detailAddress, setDetailAddress] = useState(existing?.detailAddress ?? '');
   const [isDefault, setIsDefault] = useState(existing?.isDefault ?? false);
 
+  const { getCurrentLocation, loading: locationLoading, error: locationError, setError: setLocationError } = useAutoLocation();
+
+  const handleAutoLocation = async () => {
+    setLocationError(null);
+    const resolved = await getCurrentLocation();
+    if (resolved) {
+      if (resolved.city) setCity(resolved.city);
+      if (resolved.district) setDistrict(resolved.district);
+      if (resolved.ward) setWard(resolved.ward);
+      if (resolved.detailAddress) setDetailAddress(resolved.detailAddress);
+    }
+  };
+
   const handleSave = () => {
     if (!fullName.trim() || !phone.trim() || !city.trim() || !detailAddress.trim()) {
       Alert.alert('Thiếu thông tin', 'Vui lòng điền đầy đủ Họ tên, SĐT, Thành phố và Địa chỉ cụ thể.');
@@ -48,10 +63,10 @@ export default function AddAddressScreen() {
         detailAddress: detailAddress.trim(),
         isDefault,
       });
-      router.back();
-    } else {
+      if (router.canGoBack()) router.back(); else router.replace('/addresses');
+      } else {
       const added = addAddress({
-        userId: user?.email ?? '',
+        userId: user?.id ?? '',
         fullName: fullName.trim(),
         phone: phone.trim(),
         city: city.trim(),
@@ -64,15 +79,15 @@ export default function AddAddressScreen() {
         Alert.alert('Địa chỉ trùng', 'Địa chỉ này đã tồn tại.');
         return;
       }
-      router.back();
-    }
+      if (router.canGoBack()) router.back(); else router.replace('/addresses');
+      }
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/addresses'); }} style={styles.backBtn}>
             <ChevronLeft size={24} color={COLORS.darkText} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{existing ? 'Chỉnh sửa địa chỉ' : 'Thêm địa chỉ mới'}</Text>
@@ -80,6 +95,27 @@ export default function AddAddressScreen() {
         </View>
 
         <View style={styles.form}>
+          <TouchableOpacity
+            style={[styles.locationBtn, locationLoading && styles.locationBtnDisabled]}
+            onPress={handleAutoLocation}
+            disabled={locationLoading}
+            activeOpacity={0.7}>
+            {locationLoading ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <MapPin size={20} color={COLORS.primary} />
+            )}
+            <Text style={styles.locationBtnText}>
+              {locationLoading ? 'Đang lấy vị trí...' : 'Dùng vị trí hiện tại'}
+            </Text>
+          </TouchableOpacity>
+
+          {locationError ? (
+            <View style={styles.locationError}>
+              <Text style={styles.locationErrorText}>{locationError}</Text>
+            </View>
+          ) : null}
+
           <FormField label="Họ và tên" value={fullName} onChangeText={setFullName} placeholder="VD: Nguyễn Văn A" />
           <FormField label="Số điện thoại" value={phone} onChangeText={setPhone} placeholder="VD: 0912345678" keyboardType="phone-pad" />
           <FormField label="Thành phố" value={city} onChangeText={setCity} placeholder="VD: Hồ Chí Minh" />
@@ -157,6 +193,39 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
   form: { paddingHorizontal: SPACING.lg },
+  locationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.softBeige,
+    borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    marginBottom: SPACING.lg,
+  },
+  locationBtnDisabled: {
+    opacity: 0.6,
+  },
+  locationBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  locationError: {
+    backgroundColor: '#FDF0ED',
+    borderRadius: 10,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  locationErrorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.error,
+    textAlign: 'center',
+  },
   fieldGroup: { marginBottom: SPACING.lg },
   fieldLabel: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: SPACING.xs },
   input: {

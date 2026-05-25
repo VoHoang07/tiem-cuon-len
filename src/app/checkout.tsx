@@ -118,7 +118,7 @@ export default function CheckoutScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); }} style={styles.backBtn}>
             <ChevronLeft size={24} color={COLORS.darkText} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{CHECKOUT_TITLE}</Text>

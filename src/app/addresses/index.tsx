@@ -39,7 +39,7 @@ export default function AddressesScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/addresses'); }} style={styles.backBtn}>
             <ChevronLeft size={24} color={COLORS.darkText} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Địa chỉ giao hàng</Text>

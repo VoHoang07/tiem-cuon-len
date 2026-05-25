@@ -35,7 +35,7 @@ export function AddressProvider({ children }: { children: ReactNode }) {
     supabase
       .from('addresses')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('userId', user.id)
       .then(({ data, error }) => {
         if (!error && data) setAddresses(data as Address[]);
       });
@@ -83,8 +83,8 @@ export function AddressProvider({ children }: { children: ReactNode }) {
       prev.map((a) => ({ ...a, isDefault: a.id === id }))
     );
     // Update in Supabase
-    supabase.from('addresses').update({ is_default: false }).neq('id', id).eq('user_id', user?.id ?? '').then(() => {});
-    supabase.from('addresses').update({ is_default: true }).eq('id', id).then(() => {});
+    supabase.from('addresses').update({ isDefault: false }).neq('id', id).eq('userId', user?.id ?? '').then(() => {});
+    supabase.from('addresses').update({ isDefault: true }).eq('id', id).then(() => {});
   }, [user]);
 
   const getDefaultAddress = useCallback(

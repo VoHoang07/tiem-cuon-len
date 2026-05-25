@@ -27,13 +27,13 @@ export default function EditProfileScreen() {
     setSaving(true);
     await updateProfile(name.trim());
     setSaving(false);
-    if (router.canGoBack()) router.back(); else router.replace('/');
+    if (router.canGoBack()) router.back(); else router.replace('/profile');
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/profile'); }} style={styles.backBtn}>
           <ChevronLeft size={24} color={COLORS.darkText} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chỉnh sửa Profile</Text>
