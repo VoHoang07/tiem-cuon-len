@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -63,8 +64,13 @@ export default function RegisterScreen() {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.container}>
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
           <View style={styles.headerSection}>
             <BrandLogo size="xl" variant="circular" />
             <Text style={styles.subtitle}>Tạo tài khoản mới</Text>
@@ -176,9 +182,9 @@ export default function RegisterScreen() {
               <Text style={styles.footerLink}>Đăng nhập</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </ScrollView>
+          </KeyboardAvoidingView>
+          </SafeAreaView>
   );
 }
 
@@ -189,6 +195,12 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xxl,
+    paddingBottom: 80,
   },
   container: {
     flex: 1,

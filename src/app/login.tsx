@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -63,8 +64,13 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.container}>
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
           {/* Logo / Header */}
           <View style={styles.headerSection}>
             <BrandLogo size="xl" variant="circular" />
@@ -145,10 +151,10 @@ export default function LoginScreen() {
               <Text style={styles.footerLink}>Đăng ký</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+          </ScrollView>
+          </KeyboardAvoidingView>
+          </SafeAreaView>
+          );
 }
 
 const styles = StyleSheet.create({
@@ -164,10 +170,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: SPACING.xxl,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: SPACING.xxl,
+    paddingBottom: 80,
   },
   headerSection: {
     alignItems: 'center',
