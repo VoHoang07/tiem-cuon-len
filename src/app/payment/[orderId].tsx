@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -27,6 +28,8 @@ import {
   CheckCircle,
   Clock,
   ShieldCheck,
+  Search,
+  X,
 } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
@@ -58,6 +61,31 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   },
   };
 
+  interface BankInfo {
+  name: string;
+  shortName: string;
+  bin: string;
+  schemes: string[]; // deep link URL schemes to try
+  }
+
+  const BANK_LIST: BankInfo[] = [
+  { name: 'Vietcombank', shortName: 'VCB', bin: '970436', schemes: ['vcbdigibank://', 'https://www.vietcombank.com.vn'] },
+  { name: 'MB Bank', shortName: 'MB', bin: '970422', schemes: ['mbbank://', 'https://www.mbbank.com.vn'] },
+  { name: 'Techcombank', shortName: 'TCB', bin: '970407', schemes: ['tcbdigibank://', 'https://www.techcombank.com.vn'] },
+  { name: 'BIDV', shortName: 'BIDV', bin: '970418', schemes: ['bidvsmartbanking://', 'https://www.bidv.com.vn'] },
+  { name: 'VietinBank', shortName: 'CTG', bin: '970415', schemes: ['vietinbank://', 'https://www.vietinbank.vn'] },
+  { name: 'ACB', shortName: 'ACB', bin: '970416', schemes: ['acbapp://', 'https://www.acb.com.vn'] },
+  { name: 'VPBank', shortName: 'VPB', bin: '970432', schemes: ['vpbankonline://', 'https://www.vpbank.com.vn'] },
+  { name: 'TPBank', shortName: 'TPB', bin: '970423', schemes: ['tpbank://', 'https://tpb.vn'] },
+  { name: 'Sacombank', shortName: 'STB', bin: '970403', schemes: ['sacombank://', 'https://www.sacombank.com.vn'] },
+  { name: 'Agribank', shortName: 'AGB', bin: '970405', schemes: ['agribank://', 'https://www.agribank.com.vn'] },
+  { name: 'HDBank', shortName: 'HDB', bin: '970437', schemes: ['hdbank://', 'https://www.hdbank.com.vn'] },
+  { name: 'SHB', shortName: 'SHB', bin: '970443', schemes: ['shbmobile://', 'https://www.shb.com.vn'] },
+  { name: 'MSB', shortName: 'MSB', bin: '970426', schemes: ['msbmobile://', 'https://www.msb.com.vn'] },
+  { name: 'OCB', shortName: 'OCB', bin: '970448', schemes: ['ocbomni://', 'https://www.ocb.com.vn'] },
+  { name: 'VIB', shortName: 'VIB', bin: '970441', schemes: ['vibmobile://', 'https://www.vib.com.vn'] },
+  ];
+
   export default function PaymentScreen() {
   const { orderId: paramOrderId } = useLocalSearchParams<{ orderId: string }>();
   const router = useRouter();
@@ -71,6 +99,8 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const [confirmed, setConfirmed] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
+  const [showBankListModal, setShowBankListModal] = useState(false);
+  const [bankSearch, setBankSearch] = useState('');
 
   const paymentMethod: PaymentMethod | undefined = enabledMethods.find(
     (m) => m.title === order?.paymentMethod,
@@ -95,26 +125,36 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const handleOpenBankApp = async () => {
-    if (!paymentMethod || !order) return;
+  const handleOpenBankApp = () => {
+    // Open bank selection list instead of trying a single deep link
+    setShowBankListModal(true);
+  };
 
-    const amount = order.total;
-    const addInfo = transferContent;
+  const handleSelectBank = async (bank: BankInfo) => {
+    setShowBankListModal(false);
 
-    // Try generic VietQR deep link (works with any banking app that supports QR)
-    try {
-      const vietqrDeepLink = `vietqr://pay?bank=${bankCode}&account=${accountNo}&amount=${amount}&content=${encodeURIComponent(addInfo)}`;
-      const supported = await Linking.canOpenURL(vietqrDeepLink);
-      if (supported) {
-        await Linking.openURL(vietqrDeepLink);
-        return;
+    // Try each deep link scheme for the selected bank
+    for (const scheme of bank.schemes) {
+      try {
+        const supported = await Linking.canOpenURL(scheme);
+        if (supported) {
+          await Linking.openURL(scheme);
+          return;
+        }
+      } catch {
+        // continue
       }
-    } catch {
-      // fall through to modal
     }
 
-    // Fallback: show QR modal with all payment info
-    setShowBankModal(true);
+    // Fallback: show QR modal with all info
+    Alert.alert(
+      `Không mở được ${bank.name}`,
+      `Vui lòng mở thủ công app ${bank.name} và quét mã QR để thanh toán.`,
+      [
+        { text: 'Đóng', style: 'cancel' },
+        { text: 'Xem mã QR', onPress: () => setShowBankModal(true) },
+      ],
+    );
   };
 
   const handleConfirmTransfer = async () => {
@@ -510,6 +550,59 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
           </View>
         </View>
       </Modal>
+
+      {/* Bank List Modal */}
+      <Modal visible={showBankListModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.bankListCard}>
+            {/* Header */}
+            <View style={styles.bankListHeader}>
+              <Text style={styles.bankListTitle}>Chọn ngân hàng của bạn</Text>
+              <TouchableOpacity onPress={() => { setShowBankListModal(false); setBankSearch(''); }}>
+                <X size={24} color={COLORS.mediumText} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search */}
+            <View style={styles.bankSearchWrap}>
+              <Search size={18} color={COLORS.lightText} />
+              <TextInput
+                style={styles.bankSearchInput}
+                placeholder="Tìm ngân hàng..."
+                placeholderTextColor={COLORS.lightText}
+                value={bankSearch}
+                onChangeText={setBankSearch}
+                autoFocus
+              />
+            </View>
+
+            {/* Bank list */}
+            <ScrollView style={styles.bankScroll} showsVerticalScrollIndicator={false}>
+              {BANK_LIST.filter(
+                (b) =>
+                  !bankSearch ||
+                  b.name.toLowerCase().includes(bankSearch.toLowerCase()) ||
+                  b.shortName.toLowerCase().includes(bankSearch.toLowerCase()),
+              ).map((bank) => (
+                <TouchableOpacity
+                  key={bank.bin}
+                  style={styles.bankListItem}
+                  onPress={() => handleSelectBank(bank)}
+                  activeOpacity={0.6}>
+                  <View style={styles.bankListIcon}>
+                    <Building2 size={22} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.bankListInfo}>
+                    <Text style={styles.bankListName}>{bank.name}</Text>
+                    <Text style={styles.bankListShort}>{bank.shortName}</Text>
+                  </View>
+                  <ExternalLink size={16} color={COLORS.lightText} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       </SafeAreaView>
   );
 }
@@ -854,6 +947,59 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   bankModalCloseText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+
+  // Bank list modal
+  bankListCard: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: SPACING.xl,
+    maxHeight: '85%',
+    width: '100%',
+  },
+  bankListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  bankListTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
+  bankSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cream,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  bankSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: COLORS.darkText,
+    paddingVertical: SPACING.sm,
+  },
+  bankScroll: { maxHeight: 400 },
+  bankListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: SPACING.md,
+  },
+  bankListIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: COLORS.softBeige,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bankListInfo: { flex: 1 },
+  bankListName: { fontSize: 15, fontWeight: '700', color: COLORS.darkText },
+  bankListShort: { fontSize: 12, color: COLORS.lightText, marginTop: 2 },
 
   // Confirmed state
   confirmedScroll: {
