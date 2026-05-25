@@ -79,6 +79,15 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const transferPrefix = paymentMethod?.transfer_prefix ?? 'CUONLEN';
   const transferContent = `${transferPrefix}-${orderShortId}`;
 
+  // Generate VietQR image URL with real amount and content
+  const bankCode = '970436';
+  const accountNo = paymentMethod?.account_number ?? '';
+  const accountName = paymentMethod?.account_name ?? '';
+  const orderAmount = order?.total ?? 0;
+  const vietqrImageUrl = accountNo
+    ? `https://img.vietqr.io/image/${bankCode}-${accountNo}-compact.png?accountName=${encodeURIComponent(accountName)}&amount=${orderAmount}&addInfo=${encodeURIComponent(transferContent)}`
+    : '';
+
   const handleCopy = async (text: string, field: string) => {
     await Clipboard.setStringAsync(text);
     setCopiedField(field);
@@ -86,16 +95,19 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   };
 
   const handleOpenBankApp = async () => {
-    if (!paymentMethod) return;
-    // Try VietQR deep link first, then QR image, then fallback
-    const urls: string[] = [];
-    if (paymentMethod.qr_image) urls.push(paymentMethod.qr_image);
-    // Generic banking deep link patterns
-    urls.push('vietqr://');
-    urls.push('vcbdigibank://'); // Vietcombank
-    urls.push('https://www.vietcombank.com.vn');
+    if (!paymentMethod || !order) return;
 
-    for (const url of urls) {
+    // Build VietQR payment URL
+    const amount = order.total;
+    const addInfo = transferContent;
+
+    // Try bank app deep links
+    const deepLinks: string[] = [
+      `vcbdigibank://transfer?account=${accountNo}&amount=${amount}&message=${encodeURIComponent(addInfo)}`,
+      `vietqr://pay?bank=${bankCode}&account=${accountNo}&amount=${amount}&content=${encodeURIComponent(addInfo)}`,
+    ];
+
+    for (const url of deepLinks) {
       try {
         const supported = await Linking.canOpenURL(url);
         if (supported) {
@@ -103,13 +115,14 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
           return;
         }
       } catch {
-        // continue to next
+        // continue
       }
     }
 
+    // Fallback: show alert with instructions
     Alert.alert(
-      'Không mở được app',
-      'Vui lòng mở app ngân hàng và quét mã QR để thanh toán.',
+      'Không mở được app ngân hàng',
+      'Vui lòng mở app ngân hàng và quét mã QR để thanh toán.\n\nNếu app ngân hàng không tự mở, hãy quét mã QR bên trên bằng app ngân hàng của bạn.',
     );
   };
 
@@ -237,7 +250,13 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
         {/* QR Card */}
         <View style={styles.section}>
           <View style={styles.qrCard}>
-            {paymentMethod?.qr_image ? (
+            {paymentMethod?.type === 'bank_transfer' && vietqrImageUrl ? (
+              <Image
+                source={{ uri: vietqrImageUrl }}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
+            ) : paymentMethod?.qr_image ? (
               <Image
                 source={{ uri: paymentMethod.qr_image }}
                 style={styles.qrImage}
