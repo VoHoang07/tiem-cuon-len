@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Heart, ChevronLeft, Minus, Plus, Star, MessageSquare, Edit3, Trash2 } from 'lucide-react-native';
+import { Heart, ChevronLeft, Minus, Plus, Star, MessageSquare, Edit3, Trash2, Home } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { Product, Review } from '@/types/product';
@@ -85,13 +85,13 @@ export default function ProductDetailScreen() {
   const canReview = role === 'customer';
   const isAdmin = role === 'admin';
 
-  const handleAddToCart = () => {
-    addToCart(product, quantity);
+  const handleAddToCart = async () => {
+    await addToCart(product, quantity);
     router.push('/cart');
   };
 
-  const handleBuyNow = () => {
-    addToCart(product, quantity);
+  const handleBuyNow = async () => {
+    await addToCart(product, quantity);
     router.push('/checkout');
   };
 
@@ -129,6 +129,9 @@ export default function ProductDetailScreen() {
         <View style={styles.imageArea}>
           <TouchableOpacity style={styles.backBtn} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }}>
             <ChevronLeft size={24} color={COLORS.darkText} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+            <Home size={20} color={COLORS.darkText} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.favBtn}
@@ -382,6 +385,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
+  },
+  homeBtn: {
+    position: 'absolute',
+    top: 16,
+    left: 64,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
   favBtn: {
     position: 'absolute',

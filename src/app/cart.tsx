@@ -15,7 +15,8 @@ import {
   Plus,
   Trash2,
   ShoppingBag,
-} from 'lucide-react-native';
+  Home,
+  } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
@@ -52,9 +53,14 @@ export default function CartScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
-            <ChevronLeft size={24} color={COLORS.darkText} />
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+              <ChevronLeft size={24} color={COLORS.darkText} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+              <Home size={20} color={COLORS.darkText} />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.headerTitle}>{CART_TITLE}</Text>
           {cart.length > 0 && (
             <TouchableOpacity onPress={() => clearCart()}>
@@ -195,6 +201,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   backBtn: {
     width: 40,
     height: 40,
@@ -203,6 +214,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
+  },
+  homeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
   headerTitle: {
     fontSize: 22,

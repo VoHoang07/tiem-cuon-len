@@ -11,9 +11,14 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
-          <ChevronLeft size={22} color={COLORS.darkText} />
-        </TouchableOpacity>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+            <ChevronLeft size={22} color={COLORS.darkText} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+            <Home size={18} color={COLORS.darkText} />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.headerTitle}>Cài đặt</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -53,6 +58,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   backBtn: {
     width: 38,
     height: 38,
@@ -61,6 +71,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
+  },
+  homeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
   headerTitle: { fontSize: 20, fontWeight: '700', color: COLORS.darkText },
   menuSection: {

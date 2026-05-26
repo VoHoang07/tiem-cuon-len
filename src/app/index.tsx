@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Dimensions,
   RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
@@ -37,7 +37,14 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { products, isLoading } = useShop();
+  const { products, isLoading, refetchCartFavorites } = useShop();
+
+  // Refetch cart/favorites when screen regains focus (back navigation, tab switch)
+  useFocusEffect(
+    useCallback(() => {
+      refetchCartFavorites();
+    }, [refetchCartFavorites])
+  );
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [searchInput, setSearchInput] = useState('');
   const search = useDebounce(searchInput, 300);

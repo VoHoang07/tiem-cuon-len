@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, Home } from 'lucide-react-native';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 
 export default function PrivacyScreen() {
@@ -12,9 +12,14 @@ export default function PrivacyScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
-            <ChevronLeft size={24} color={COLORS.darkText} />
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+              <ChevronLeft size={24} color={COLORS.darkText} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+              <Home size={20} color={COLORS.darkText} />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.headerTitle}>Quyền riêng tư</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -67,6 +72,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   backBtn: {
     width: 40,
     height: 40,
@@ -75,6 +85,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
+  },
+  homeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
   headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.darkText },
   content: {

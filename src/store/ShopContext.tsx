@@ -19,7 +19,7 @@ interface ShopContextType {
   updateProduct: (id: string, product: Product) => void;
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
-  addToCart: (product: Product, quantity: number) => void;
+  addToCart: (product: Product, quantity: number) => Promise<void>;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -27,6 +27,7 @@ interface ShopContextType {
   isFavorite: (productId: string) => boolean;
   cartTotal: number;
   cartCount: number;
+  refetchCartFavorites: () => Promise<void>;
 }
 
 const ShopContext = createContext<ShopContextType | null>(null);
@@ -55,13 +56,17 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  // Load cart + favorites khi user đăng nhập
-  useEffect(() => {
+  // Load cart + favorites when user logs in
+  const fetchCartFavorites = useCallback(async () => {
     if (!user) {
+      console.log('[CART RESTORE] no user, clearing');
       setCart([]);
       setFavorites([]);
       return;
     }
+
+    // Fetch cart from Supabase
+    console.log('[CART FETCH] user', user.id);
     supabase
       .from('cart_items')
       .select('product_id, quantity')
@@ -71,13 +76,20 @@ export function ShopProvider({ children }: { children: ReactNode }) {
           const items: CartItem[] = data
             .map((ci: any) => {
               const product = products.find((p) => p.id === ci.product_id);
-              return product ? { product, quantity: ci.quantity } : null;
+              if (product) return { product, quantity: ci.quantity };
+              // Product not in local state — create minimal object
+              // The products list will be refreshed by the products useEffect
+              return { product: { id: ci.product_id, name: 'Sản phẩm', price: 0 } as Product, quantity: ci.quantity };
             })
-            .filter(Boolean) as CartItem[];
+            .filter((ci): ci is CartItem => ci !== null && ci.quantity > 0);
+          console.log('[CART RESTORE]', items.length, 'items');
           setCart(items);
+        } else {
+          setCart([]);
         }
       });
 
+    // Fetch favorites
     supabase
       .from('favorites')
       .select('product_id')
@@ -85,9 +97,45 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       .then(({ data }) => {
         if (data) {
           setFavorites(data.map((f: any) => f.product_id));
+        } else {
+          setFavorites([]);
         }
       });
   }, [user, products]);
+
+  useEffect(() => {
+    fetchCartFavorites();
+  }, [fetchCartFavorites]);
+
+  // bfcache recovery: Safari restores pages from cache without remounting
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        // Page was restored from bfcache (Safari back/forward)
+        fetchCartFavorites();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchCartFavorites();
+      }
+    };
+
+    window.addEventListener('pageshow', handlePageShow);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchCartFavorites]);
+
+  const refetchCartFavorites = useCallback(async () => {
+    await fetchCartFavorites();
+  }, [fetchCartFavorites]);
 
   const addProduct = useCallback((product: Product) => {
     setProducts((prev) => [product, ...prev]);
@@ -128,26 +176,34 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ─── Cart ────────────────────────────────
-  const syncCartItem = useCallback((productId: string, quantity: number | null) => {
+  const syncCartItem = useCallback(async (productId: string, quantity: number | null): Promise<void> => {
     if (!user) return;
+    console.log('[CART SAVE]', { userId: user.id, productId, quantity });
     if (quantity === null || quantity <= 0) {
-      supabase.from('cart_items').delete().eq('user_id', user.id).eq('product_id', productId).then(() => {});
+      await supabase.from('cart_items').delete().eq('user_id', user.id).eq('product_id', productId);
     } else {
-      supabase.from('cart_items').upsert({ user_id: user.id, product_id: productId, quantity }, { onConflict: 'user_id,product_id' }).then(() => {});
+      await supabase.from('cart_items').upsert(
+        { user_id: user.id, product_id: productId, quantity },
+        { onConflict: 'user_id,product_id' },
+      );
     }
+    console.log('[CART SAVED]', productId);
   }, [user]);
 
-  const addToCart = useCallback((product: Product, quantity: number) => {
+  const addToCart = useCallback(async (product: Product, quantity: number) => {
+    console.log('[CART ADD]', product.id, quantity);
+    let newQty = quantity;
     setCart((prev) => {
       const existing = prev.find((ci) => ci.product.id === product.id);
       if (existing) {
-        const newQty = existing.quantity + quantity;
-        syncCartItem(product.id, newQty);
+        newQty = existing.quantity + quantity;
         return prev.map((ci) => ci.product.id === product.id ? { ...ci, quantity: newQty } : ci);
       }
-      syncCartItem(product.id, quantity);
       return [...prev, { product, quantity }];
     });
+    // Wait for Supabase to confirm before returning
+    await syncCartItem(product.id, newQty);
+    console.log('[CART ADDED]', product.id);
   }, [syncCartItem]);
 
   const removeFromCart = useCallback((productId: string) => {
@@ -212,7 +268,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         isFavorite,
         cartTotal,
         cartCount,
-      }}>
+        refetchCartFavorites,
+        }}>
       {children}
     </ShopContext.Provider>
   );
