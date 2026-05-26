@@ -140,16 +140,18 @@ export default function ProductDetailScreen() {
           <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
             <Home size={20} color={COLORS.darkText} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.favBtn}
-            onPress={() => toggleFavorite(product.id)}
-            activeOpacity={0.7}>
-            <Heart
-              size={22}
-              color={fav ? '#e74c3c' : '#8B5E4A'}
-              fill={fav ? '#e74c3c' : 'transparent'}
-            />
-          </TouchableOpacity>
+          {!isAdmin && (
+            <TouchableOpacity
+              style={styles.favBtn}
+              onPress={() => toggleFavorite(product.id)}
+              activeOpacity={0.7}>
+              <Heart
+                size={22}
+                color={fav ? '#e74c3c' : '#8B5E4A'}
+                fill={fav ? '#e74c3c' : 'transparent'}
+              />
+            </TouchableOpacity>
+          )}
           {product.image ? (
             <Image
               source={{ uri: product.image }}
@@ -302,32 +304,34 @@ export default function ProductDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Bottom Action Bar */}
-      <View style={styles.bottomBar}>
-        <View style={styles.quantitySelector}>
+      {/* Bottom Action Bar — customers only */}
+      {!isAdmin && (
+        <View style={styles.bottomBar}>
+          <View style={styles.quantitySelector}>
+            <TouchableOpacity
+              style={styles.qtyBtn}
+              onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+              <Minus size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+            <Text style={styles.qtyText}>{quantity}</Text>
+            <TouchableOpacity
+              style={styles.qtyBtn}
+              onPress={() => setQuantity(quantity + 1)}>
+              <Plus size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-            <Minus size={18} color={COLORS.primary} />
+            style={styles.addToCartBtn}
+            onPress={handleAddToCart}>
+            <Text style={styles.addToCartText} numberOfLines={1}>{PD_ADD_TO_CART}</Text>
           </TouchableOpacity>
-          <Text style={styles.qtyText}>{quantity}</Text>
           <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => setQuantity(quantity + 1)}>
-            <Plus size={18} color={COLORS.primary} />
+            style={styles.buyNowBtn}
+            onPress={handleBuyNow}>
+            <Text style={styles.buyNowText} numberOfLines={1}>{PD_BUY_NOW}</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.addToCartBtn}
-          onPress={handleAddToCart}>
-          <Text style={styles.addToCartText} numberOfLines={1}>{PD_ADD_TO_CART}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-          style={styles.buyNowBtn}
-          onPress={handleBuyNow}>
-          <Text style={styles.buyNowText} numberOfLines={1}>{PD_BUY_NOW}</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </SafeAreaView>
   );
 }

@@ -24,6 +24,7 @@ import {
   TrendingUp,
   DollarSign,
   BarChart3,
+  PlusCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useShop } from '@/store/ShopContext';
@@ -114,12 +115,12 @@ export default function ProfileScreen() {
           <View style={styles.statsRow}>
             {[
               { label: PROF_PRODUCTS, value: products.length, icon: Package, onPress: () => router.push('/manage-products') },
-              { label: PROF_FAVORITES, value: favorites.length, icon: Heart, onPress: () => router.push('/favorites') },
               { label: PROF_ORDERS, value: orders.length, icon: ShoppingBag, onPress: () => router.push('/orders') },
+              { label: 'Doanh thu', value: formatVND(totalRevenue), icon: DollarSign, onPress: () => router.push('/orders') },
             ].map((stat) => (
               <TouchableOpacity key={stat.label} style={styles.statCard} onPress={stat.onPress} activeOpacity={0.7}>
                 <stat.icon size={24} color={COLORS.primary} />
-                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={stat.label === 'Doanh thu' ? styles.statValueSmall : styles.statValue}>{stat.value}</Text>
                 <Text style={styles.statLabel}>{stat.label}</Text>
               </TouchableOpacity>
             ))}
@@ -170,8 +171,8 @@ export default function ProfileScreen() {
           {/* Menu Items */}
           <View style={styles.menuSection}>
             <MenuItem icon={Package} label={PROF_MANAGE_PRODUCTS} onPress={() => router.push('/manage-products')} />
+            <MenuItem icon={PlusCircle} label="Thêm sản phẩm" onPress={() => router.push('/add-product')} />
             <MenuItem icon={ShoppingBag} label={PROF_PREVIOUS_ORDERS} onPress={() => router.push('/orders')} />
-            <MenuItem icon={Heart} label={PROF_FAVORITES_MENU} onPress={() => router.push('/favorites')} />
             <MenuItem icon={CreditCard} label={PROF_CUSTOMER_PAYMENT} onPress={() => router.push('/payment-methods')} />
             <MenuItem icon={Settings} label={PROF_SETTINGS} onPress={() => router.push('/settings')} />
             <MenuItem icon={HelpCircle} label={PROF_HELP} onPress={() => router.push('/help')} />
@@ -356,6 +357,12 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.darkText,
+    marginTop: SPACING.xs,
+  },
+  statValueSmall: {
+    fontSize: 14,
     fontWeight: '800',
     color: COLORS.darkText,
     marginTop: SPACING.xs,

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, Globe, Shield, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, Bell, Globe, Shield, ChevronRight, Home } from 'lucide-react-native';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 
 export default function SettingsScreen() {

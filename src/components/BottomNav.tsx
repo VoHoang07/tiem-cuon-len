@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import {
   ShoppingCart,
@@ -7,6 +7,7 @@ import {
   PlusCircle,
   User,
   Home,
+  ShoppingBag,
 } from 'lucide-react-native';
 import { COLORS, SPACING } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
@@ -17,8 +18,7 @@ import {
   NAV_ADD,
   NAV_CART,
   NAV_PROFILE,
-  AUTH_ACCESS_DENIED,
-} from '@/constants/strings';
+  } from '@/constants/strings';
 
 export function BottomNav() {
   const router = useRouter();
@@ -30,9 +30,8 @@ export function BottomNav() {
 
   const adminTabs = [
     { route: '/', icon: Home, label: NAV_HOME },
-    { route: '/favorites', icon: Heart, label: NAV_FAVORITES },
-    { route: '/add-product', icon: PlusCircle, label: NAV_ADD, adminOnly: true },
-    { route: '/cart', icon: ShoppingCart, label: NAV_CART },
+    { route: '/add-product', icon: PlusCircle, label: NAV_ADD },
+    { route: '/orders', icon: ShoppingBag, label: 'Đơn hàng' },
     { route: '/profile', icon: User, label: NAV_PROFILE },
   ];
 
@@ -41,23 +40,22 @@ export function BottomNav() {
     { route: '/favorites', icon: Heart, label: NAV_FAVORITES },
     { route: '/cart', icon: ShoppingCart, label: NAV_CART },
     { route: '/profile', icon: User, label: NAV_PROFILE },
-  ];
+    ];
 
-  const tabs = isAdmin ? adminTabs : customerTabs;
+    const tabs = isAdmin ? adminTabs : customerTabs;
 
-  return (
+    return (
     <View style={styles.container}>
       <View style={styles.nav}>
         {tabs.map((tab) => {
           const { route, icon: Icon, label } = tab;
-          const adminOnly = 'adminOnly' in tab && tab.adminOnly;
           const focused = pathname === route;
           const color = focused ? COLORS.primary : COLORS.lightText;
           const textStyle = focused ? styles.tabTextActive : styles.tabText;
 
           const showBadge =
-            !adminOnly && ((label === NAV_FAVORITES && favorites.length > 0) ||
-              (label === NAV_CART && cartCount > 0));
+            (label === NAV_FAVORITES && favorites.length > 0) ||
+            (label === NAV_CART && cartCount > 0);
           const badgeCount =
             label === NAV_FAVORITES ? favorites.length : cartCount;
 
@@ -65,13 +63,7 @@ export function BottomNav() {
             <TouchableOpacity
               key={route}
               style={styles.tab}
-              onPress={() => {
-                if (adminOnly && !isAdmin) {
-                  Alert.alert(AUTH_ACCESS_DENIED);
-                  return;
-                }
-                router.replace(route as any);
-              }}>
+              onPress={() => router.replace(route as any)}>
               <Icon size={22} color={color} />
               {showBadge && (
                 <View style={styles.badge}>
