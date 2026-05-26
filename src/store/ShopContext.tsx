@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
 import { Product, CartItem, Review } from '@/types/product';
@@ -15,6 +16,7 @@ interface ShopContextType {
   cart: CartItem[];
   favorites: string[];
   isLoading: boolean;
+  cartHydrated: boolean;
   addProduct: (product: Product) => void;
   updateProduct: (id: string, product: Product) => void;
   removeProduct: (id: string) => void;
@@ -32,111 +34,183 @@ interface ShopContextType {
 
 const ShopContext = createContext<ShopContextType | null>(null);
 
+function getCartOwnerId(user: { id: string; email: string } | null): string {
+  // Stable owner id: use Supabase auth UUID, fallback to email, fallback to guest
+  return user?.id || user?.email || 'guest';
+}
+
 export function ShopProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [cartHydrated, setCartHydrated] = useState(false);
+  const prevOwnerId = useRef<string>('');
 
-  // Load products từ Supabase
-  useEffect(() => {
-    supabase
-      .from('products')
-      .select('*')
-      .order('createdAt', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('[SUPABASE] Lỗi load sản phẩm:', error.message);
-        }
-        if (data) {
-          setProducts(data as Product[]);
-        }
-        setLoaded(true);
-      });
-  }, []);
+  const cartOwnerId = getCartOwnerId(user);
 
-  // Load cart + favorites when user logs in
+  // Hydrate cart from localStorage (web) / AsyncStorage fallback
+  const hydrateCartFromStorage = useCallback((): CartItem[] | null => {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return null;
+      const raw = window.localStorage.getItem(`cart_${cartOwnerId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed as CartItem[];
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [cartOwnerId]);
+
+  // Persist cart to localStorage
+  const persistCart = useCallback((items: CartItem[]) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(`cart_${cartOwnerId}`, JSON.stringify(items));
+      }
+    } catch {
+      // ignore
+    }
+  }, [cartOwnerId]);
+
+  // ─── Fetch cart + favorites from Supabase ───
   const fetchCartFavorites = useCallback(async () => {
     if (!user) {
-      console.log('[CART RESTORE] no user, clearing');
-      setCart([]);
-      setFavorites([]);
+      console.log('[CART RESTORE] no user');
+      // Don't clear if already hydrated — wait for real auth state
       return;
     }
 
-    // Fetch cart from Supabase
     console.log('[CART FETCH] user', user.id);
-    supabase
+
+    const { data } = await supabase
       .from('cart_items')
       .select('product_id, quantity')
-      .eq('user_id', user.id)
-      .then(({ data }) => {
-        if (data) {
-          const items: CartItem[] = data
-            .map((ci: any) => {
-              const product = products.find((p) => p.id === ci.product_id);
-              if (product) return { product, quantity: ci.quantity };
-              // Product not in local state — create minimal object
-              // The products list will be refreshed by the products useEffect
-              return { product: { id: ci.product_id, name: 'Sản phẩm', price: 0 } as Product, quantity: ci.quantity };
-            })
-            .filter((ci): ci is CartItem => ci !== null && ci.quantity > 0);
-          console.log('[CART RESTORE]', items.length, 'items');
-          setCart(items);
-        } else {
-          setCart([]);
-        }
-      });
+      .eq('user_id', user.id);
+
+    if (data && data.length > 0) {
+      const items: CartItem[] = data
+        .map((ci: any) => {
+          const product = products.find((p) => p.id === ci.product_id);
+          if (product) return { product, quantity: ci.quantity };
+          return { product: { id: ci.product_id, name: 'Sản phẩm', price: 0 } as Product, quantity: ci.quantity };
+        })
+        .filter((ci) => ci.quantity > 0);
+      console.log('[CART HYDRATE RESULT]', items.length, 'items from Supabase');
+      setCart(items);
+      persistCart(items);
+    } else {
+      // Try localStorage fallback
+      const localCart = hydrateCartFromStorage();
+      if (localCart && localCart.length > 0) {
+        console.log('[CART HYDRATE RESULT]', localCart.length, 'items from localStorage');
+        setCart(localCart);
+      }
+      // else: truly empty cart — that's fine
+    }
+
+    setCartHydrated(true);
 
     // Fetch favorites
     supabase
       .from('favorites')
       .select('product_id')
       .eq('user_id', user.id)
-      .then(({ data }) => {
-        if (data) {
-          setFavorites(data.map((f: any) => f.product_id));
-        } else {
-          setFavorites([]);
-        }
+      .then(({ data: favData }) => {
+        if (favData) setFavorites(favData.map((f: any) => f.product_id));
       });
-  }, [user, products]);
+  }, [user, products, persistCart, hydrateCartFromStorage]);
 
+  // Track owner changes — clear ONLY when switching users
   useEffect(() => {
-    fetchCartFavorites();
-  }, [fetchCartFavorites]);
+    if (prevOwnerId.current && prevOwnerId.current !== cartOwnerId) {
+      console.log('[CART OWNER SWITCH]', prevOwnerId.current, '→', cartOwnerId);
+      setCart([]);
+      setCartHydrated(false);
+      setFavorites([]);
+    }
+    prevOwnerId.current = cartOwnerId;
+  }, [cartOwnerId]);
 
-  // bfcache recovery: Safari restores pages from cache without remounting
+  // Load products
+  useEffect(() => {
+    supabase
+      .from('products')
+      .select('*')
+      .order('createdAt', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) console.error('[SUPABASE] Lỗi load sản phẩm:', error.message);
+        if (data) setProducts(data as Product[]);
+        setLoaded(true);
+      });
+  }, []);
+
+  // Fetch cart + favorites on mount / user change
+  useEffect(() => {
+    if (!user) {
+      // User not logged in — hydrate from localStorage
+      const localCart = hydrateCartFromStorage();
+      if (localCart && localCart.length > 0) {
+        console.log('[CART HYDRATE RESULT]', localCart.length, 'items from localStorage (guest)');
+        setCart(localCart);
+      }
+      setCartHydrated(true);
+      setFavorites([]);
+      return;
+    }
+
+    fetchCartFavorites();
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // bfcache recovery: Safari/Zalo restore pages from cache
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handlePageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
-        // Page was restored from bfcache (Safari back/forward)
-        fetchCartFavorites();
+        console.log('[CART RESTORE] bfcache restore');
+        if (user) {
+          fetchCartFavorites();
+        } else {
+          const localCart = hydrateCartFromStorage();
+          if (localCart) setCart(localCart);
+        }
       }
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchCartFavorites();
+        console.log('[CART RESTORE] visibility change');
+        if (user) {
+          fetchCartFavorites();
+        } else {
+          const localCart = hydrateCartFromStorage();
+          if (localCart) setCart(localCart);
+        }
       }
     };
 
     window.addEventListener('pageshow', handlePageShow);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       window.removeEventListener('pageshow', handlePageShow);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchCartFavorites]);
+  }, [user, fetchCartFavorites, hydrateCartFromStorage]);
 
   const refetchCartFavorites = useCallback(async () => {
-    await fetchCartFavorites();
-  }, [fetchCartFavorites]);
+    if (user) {
+      await fetchCartFavorites();
+    } else {
+      const localCart = hydrateCartFromStorage();
+      if (localCart) setCart(localCart);
+    }
+  }, [user, fetchCartFavorites, hydrateCartFromStorage]);
 
+  // ─── Product CRUD ───
   const addProduct = useCallback((product: Product) => {
     setProducts((prev) => [product, ...prev]);
     const { isFavorite, ...dbProduct } = product;
@@ -175,10 +249,10 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  // ─── Cart ────────────────────────────────
-  const syncCartItem = useCallback(async (productId: string, quantity: number | null): Promise<void> => {
+  // ─── Cart ───
+  const syncCartToSupabase = useCallback(async (productId: string, quantity: number | null) => {
     if (!user) return;
-    console.log('[CART SAVE]', { userId: user.id, productId, quantity });
+    console.log('[CART PERSIST] supabase', { userId: user.id, productId, quantity });
     if (quantity === null || quantity <= 0) {
       await supabase.from('cart_items').delete().eq('user_id', user.id).eq('product_id', productId);
     } else {
@@ -187,46 +261,53 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         { onConflict: 'user_id,product_id' },
       );
     }
-    console.log('[CART SAVED]', productId);
+    console.log('[CART PERSIST DONE]', productId);
   }, [user]);
 
   const addToCart = useCallback(async (product: Product, quantity: number) => {
     console.log('[CART ADD]', product.id, quantity);
     let newQty = quantity;
-    setCart((prev) => {
-      const existing = prev.find((ci) => ci.product.id === product.id);
-      if (existing) {
-        newQty = existing.quantity + quantity;
-        return prev.map((ci) => ci.product.id === product.id ? { ...ci, quantity: newQty } : ci);
-      }
-      return [...prev, { product, quantity }];
-    });
-    // Wait for Supabase to confirm before returning
-    await syncCartItem(product.id, newQty);
+
+    const nextCart = produceNewCart(cart, product, quantity, (q) => { newQty = q; });
+    setCart(nextCart);
+    persistCart(nextCart);
+
+    await syncCartToSupabase(product.id, newQty);
     console.log('[CART ADDED]', product.id);
-  }, [syncCartItem]);
+  }, [cart, persistCart, syncCartToSupabase]);
 
   const removeFromCart = useCallback((productId: string) => {
-    setCart((prev) => prev.filter((ci) => ci.product.id !== productId));
-    syncCartItem(productId, null);
-  }, [syncCartItem]);
+    setCart((prev) => {
+      const next = prev.filter((ci) => ci.product.id !== productId);
+      persistCart(next);
+      syncCartToSupabase(productId, null);
+      return next;
+    });
+  }, [persistCart, syncCartToSupabase]);
 
   const updateCartQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
     }
-    setCart((prev) => prev.map((ci) => ci.product.id === productId ? { ...ci, quantity } : ci));
-    syncCartItem(productId, quantity);
-  }, [syncCartItem, removeFromCart]);
+    setCart((prev) => {
+      const next = prev.map((ci) => ci.product.id === productId ? { ...ci, quantity } : ci);
+      persistCart(next);
+      syncCartToSupabase(productId, quantity);
+      return next;
+    });
+  }, [persistCart, syncCartToSupabase, removeFromCart]);
 
   const clearCart = useCallback(() => {
-    if (!user) return;
+    console.trace('[CART CLEAR TRACE]');
     setCart([]);
-    supabase.from('cart_items').delete().eq('user_id', user.id).then(() => {});
-  }, [user]);
+    persistCart([]);
+    if (user) {
+      supabase.from('cart_items').delete().eq('user_id', user.id).then(() => {});
+    }
+  }, [user, persistCart]);
 
-  // ─── Favorites ────────────────────────────
+  // ─── Favorites ───
   const toggleFavorite = useCallback((productId: string) => {
     if (!user) return;
     setFavorites((prev) => {
@@ -234,16 +315,15 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       if (exists) {
         supabase.from('favorites').delete().eq('user_id', user.id).eq('product_id', productId).then(() => {});
         return prev.filter((id) => id !== productId);
-      } else {
-        supabase.from('favorites').insert({ user_id: user.id, product_id: productId }).then(() => {});
-        return [...prev, productId];
       }
+      supabase.from('favorites').insert({ user_id: user.id, product_id: productId }).then(() => {});
+      return [...prev, productId];
     });
   }, [user]);
 
   const isFavorite = useCallback(
     (productId: string) => favorites.includes(productId),
-    [favorites]
+    [favorites],
   );
 
   const cartTotal = cart.reduce((sum, ci) => sum + ci.product.price * ci.quantity, 0);
@@ -256,6 +336,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         cart,
         favorites,
         isLoading: !loaded,
+        cartHydrated,
         addProduct,
         updateProduct,
         removeProduct,
@@ -269,10 +350,27 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         cartTotal,
         cartCount,
         refetchCartFavorites,
-        }}>
+      }}>
       {children}
     </ShopContext.Provider>
   );
+}
+
+/** Pure function: compute new cart array without relying on closure state */
+function produceNewCart(
+  currentCart: CartItem[],
+  product: Product,
+  quantity: number,
+  onNewQty: (q: number) => void,
+): CartItem[] {
+  const existing = currentCart.find((ci) => ci.product.id === product.id);
+  if (existing) {
+    const newQty = existing.quantity + quantity;
+    onNewQty(newQty);
+    return currentCart.map((ci) => ci.product.id === product.id ? { ...ci, quantity: newQty } : ci);
+  }
+  onNewQty(quantity);
+  return [...currentCart, { product, quantity }];
 }
 
 export function useShop() {

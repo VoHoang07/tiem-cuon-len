@@ -37,7 +37,7 @@ import {
 
 export default function CartScreen() {
   const router = useRouter();
-  const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart } =
+  const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart, cartHydrated } =
     useShop();
 
   const handleCheckout = () => {
@@ -70,7 +70,12 @@ export default function CartScreen() {
           {cart.length === 0 && <View style={{ width: 60 }} />}
         </View>
 
-        {cart.length === 0 ? (
+        {!cartHydrated ? (
+          <View style={styles.emptyCart}>
+            <ShoppingBag size={64} color={COLORS.lightText} />
+            <Text style={styles.emptyTitle}>Đang tải giỏ hàng...</Text>
+          </View>
+        ) : cart.length === 0 ? (
           <View style={styles.emptyCart}>
             <ShoppingBag size={64} color={COLORS.lightText} />
             <Text style={styles.emptyTitle}>{CART_EMPTY_TITLE}</Text>
