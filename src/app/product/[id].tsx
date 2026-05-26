@@ -132,11 +132,12 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.favBtn}
-            onPress={() => toggleFavorite(product.id)}>
+            onPress={() => toggleFavorite(product.id)}
+            activeOpacity={0.7}>
             <Heart
-              size={24}
-              color={fav ? COLORS.primary : COLORS.white}
-              fill={fav ? COLORS.primary : 'transparent'}
+              size={22}
+              color={fav ? '#e74c3c' : '#8B5E4A'}
+              fill={fav ? '#e74c3c' : 'transparent'}
             />
           </TouchableOpacity>
           {product.image ? (
@@ -309,12 +310,12 @@ export default function ProductDetailScreen() {
         <TouchableOpacity
           style={styles.addToCartBtn}
           onPress={handleAddToCart}>
-          <Text style={styles.addToCartText}>{PD_ADD_TO_CART}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+          <Text style={styles.addToCartText} numberOfLines={1}>{PD_ADD_TO_CART}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
           style={styles.buyNowBtn}
           onPress={handleBuyNow}>
-          <Text style={styles.buyNowText}>{PD_BUY_NOW}</Text>
+          <Text style={styles.buyNowText} numberOfLines={1}>{PD_BUY_NOW}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -387,13 +388,18 @@ const styles = StyleSheet.create({
     top: 16,
     right: 16,
     zIndex: 10,
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    ...SHADOWS.small,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+    backdropFilter: 'blur(8px)',
   },
   imagePlaceholder: {
     width: 200,
@@ -510,54 +516,65 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xl,
     gap: SPACING.sm,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     ...SHADOWS.large,
   },
   quantitySelector: {
+    width: 96,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: COLORS.cream,
-    borderRadius: 15,
-    paddingHorizontal: SPACING.xs,
+    borderRadius: 18,
+    paddingHorizontal: SPACING.sm,
   },
   qtyBtn: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: COLORS.white,
   },
   qtyText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.darkText,
-    minWidth: 28,
+    minWidth: 24,
     textAlign: 'center',
   },
   addToCartBtn: {
     flex: 1,
-    borderRadius: 15,
-    paddingVertical: 14,
+    height: 52,
+    borderRadius: 18,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
     borderColor: COLORS.primary,
     backgroundColor: COLORS.white,
   },
   addToCartText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     fontStyle: 'italic',
     color: COLORS.primary,
   },
   buyNowBtn: {
-    flex: 1,
+    flex: 1.1,
+    height: 52,
     backgroundColor: COLORS.primary,
-    borderRadius: 15,
-    paddingVertical: 14,
+    borderRadius: 18,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   buyNowText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     fontStyle: 'italic',
     color: COLORS.white,
