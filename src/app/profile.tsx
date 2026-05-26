@@ -92,12 +92,6 @@ export default function ProfileScreen() {
     });
     const topProduct = Object.values(productSales).sort((a, b) => b.count - a.count)[0];
 
-    const stats = [
-      { label: PROF_PRODUCTS, value: products.length, icon: Package },
-      { label: PROF_FAVORITES, value: favorites.length, icon: Heart },
-      { label: PROF_ORDERS, value: orders.length, icon: ShoppingBag },
-    ];
-
     return (
       <SafeAreaView style={styles.safe}>
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -118,12 +112,16 @@ export default function ProfileScreen() {
 
           {/* Stats */}
           <View style={styles.statsRow}>
-            {stats.map((stat) => (
-              <View key={stat.label} style={styles.statCard}>
+            {[
+              { label: PROF_PRODUCTS, value: products.length, icon: Package, onPress: () => router.push('/manage-products') },
+              { label: PROF_FAVORITES, value: favorites.length, icon: Heart, onPress: () => router.push('/favorites') },
+              { label: PROF_ORDERS, value: orders.length, icon: ShoppingBag, onPress: () => router.push('/orders') },
+            ].map((stat) => (
+              <TouchableOpacity key={stat.label} style={styles.statCard} onPress={stat.onPress} activeOpacity={0.7}>
                 <stat.icon size={24} color={COLORS.primary} />
                 <Text style={styles.statValue}>{stat.value}</Text>
                 <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
 
@@ -135,34 +133,37 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.dashboardGrid}>
-              <View style={styles.dashboardCard}>
+              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
                 <DollarSign size={20} color={COLORS.success} />
                 <Text style={styles.dashboardValue}>{formatVND(totalRevenue)}</Text>
                 <Text style={styles.dashboardLabel}>Tổng doanh thu</Text>
-              </View>
-              <View style={styles.dashboardCard}>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
                 <TrendingUp size={20} color={COLORS.primary} />
                 <Text style={styles.dashboardValue}>{formatVND(avgOrderValue)}</Text>
                 <Text style={styles.dashboardLabel}>TB / đơn</Text>
-              </View>
-              <View style={styles.dashboardCard}>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
                 <Package size={20} color={COLORS.starYellow} />
                 <Text style={styles.dashboardValue}>{completedOrders}</Text>
                 <Text style={styles.dashboardLabel}>Đã hoàn thành</Text>
-              </View>
-              <View style={styles.dashboardCard}>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
                 <ShoppingBag size={20} color="#E8A840" />
                 <Text style={styles.dashboardValue}>{processingOrders}</Text>
                 <Text style={styles.dashboardLabel}>Đang xử lý</Text>
-              </View>
+              </TouchableOpacity>
             </View>
 
             {topProduct && (
-              <View style={styles.topProductCard}>
+              <TouchableOpacity
+                style={styles.topProductCard}
+                onPress={() => router.push(`/product/${topProduct.name}`)}
+                activeOpacity={0.7}>
                 <Text style={styles.topProductLabel}>Sản phẩm bán chạy nhất</Text>
                 <Text style={styles.topProductName}>{topProduct.name}</Text>
                 <Text style={styles.topProductCount}>Đã bán: {topProduct.count}</Text>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
 
@@ -191,11 +192,6 @@ export default function ProfileScreen() {
   }
 
   // ─── CUSTOMER PROFILE ───────────────────────
-  const customerStats = [
-    { label: PROF_CUSTOMER_ORDERS_LABEL, value: userOrders.length, icon: ShoppingBag },
-    { label: PROF_CUSTOMER_FAVORITES_LABEL, value: favorites.length, icon: Heart },
-    { label: PROF_CUSTOMER_CART_LABEL, value: cart.reduce((sum, ci) => sum + ci.quantity, 0), icon: Package },
-  ];
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -215,12 +211,16 @@ export default function ProfileScreen() {
 
         {/* Stats */}
         <View style={styles.statsRow}>
-          {customerStats.map((stat) => (
-            <View key={stat.label} style={styles.statCard}>
+          {[
+            { label: PROF_CUSTOMER_ORDERS_LABEL, value: userOrders.length, icon: ShoppingBag, onPress: () => router.push('/orders') },
+            { label: PROF_CUSTOMER_FAVORITES_LABEL, value: favorites.length, icon: Heart, onPress: () => router.push('/favorites') },
+            { label: PROF_CUSTOMER_CART_LABEL, value: cart.reduce((sum, ci) => sum + ci.quantity, 0), icon: Package, onPress: () => router.push('/cart') },
+          ].map((stat) => (
+            <TouchableOpacity key={stat.label} style={styles.statCard} onPress={stat.onPress} activeOpacity={0.7}>
               <stat.icon size={24} color={COLORS.primary} />
               <Text style={styles.statValue}>{stat.value}</Text>
               <Text style={styles.statLabel}>{stat.label}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
 

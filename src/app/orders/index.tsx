@@ -6,10 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ShoppingBag, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, ShoppingBag, ChevronRight, Trash2 } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { useAuth } from '@/store/AuthContext';
 import { BottomNav } from '@/components/BottomNav';
@@ -20,7 +21,7 @@ import type { Order } from '@/types/order';
 
 export default function OrdersScreen() {
   const router = useRouter();
-  const { orders, getOrdersByUser, refetchOrders } = useOrders();
+  const { orders, getOrdersByUser, refetchOrders, deleteOrder } = useOrders();
   const { user, role } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -32,6 +33,36 @@ export default function OrdersScreen() {
     await refetchOrders();
     setRefreshing(false);
   }, [refetchOrders]);
+
+  const handleDelete = (order: Order) => {
+    // Use confirm() on web for reliability, Alert.alert on native
+    if (typeof window !== 'undefined' && window.confirm) {
+      const confirmed = window.confirm('Bạn có chắc muốn xoá đơn hàng này không?');
+      if (!confirmed) return;
+      deleteOrder(order.id).catch((err) => {
+        console.error('[DELETE FAILED]', err);
+        Alert.alert('Lỗi', 'Không thể xoá đơn hàng. Vui lòng thử lại.');
+      });
+    } else {
+      Alert.alert(
+        'Xoá đơn hàng',
+        'Bạn có chắc muốn xoá đơn hàng này không?',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Xoá',
+            style: 'destructive',
+            onPress: () => {
+              deleteOrder(order.id).catch((err) => {
+                console.error('[DELETE FAILED]', err);
+                Alert.alert('Lỗi', 'Không thể xoá đơn hàng. Vui lòng thử lại.');
+              });
+            },
+          },
+        ],
+      );
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -56,32 +87,51 @@ export default function OrdersScreen() {
         ) : (
           <View style={styles.orderList}>
             {displayOrders.map((order) => (
-              <TouchableOpacity
-                key={order.id}
-                style={styles.orderCard}
-                onPress={() => router.push(`/orders/${order.id}`)}>
-                <View style={styles.orderHeader}>
-                  <Text style={styles.orderId}>#{order.id.slice(-8)}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getOrderStatusColor(order.status) + '20' }]}>
-                    <View style={[styles.statusDot, { backgroundColor: getOrderStatusColor(order.status) }]} />
-                    <Text style={[styles.statusText, { color: getOrderStatusColor(order.status) }]}>
-                      {getOrderStatusLabel(order.status)}
+              <View key={order.id} style={styles.orderCard}>
+                {/* Tap to navigate */}
+                <TouchableOpacity
+                  style={styles.orderCardBody}
+                  onPress={() => router.push(`/orders/${order.id}`)}
+                  activeOpacity={0.7}>
+                  {/* Header row: order ID + status badge */}
+                  <View style={styles.orderHeader}>
+                    <Text style={styles.orderId}>#{order.id.slice(-8)}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: getOrderStatusColor(order.status) + '20' }]}>
+                      <View style={[styles.statusDot, { backgroundColor: getOrderStatusColor(order.status) }]} />
+                      <Text style={[styles.statusText, { color: getOrderStatusColor(order.status) }]}>
+                        {getOrderStatusLabel(order.status)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Items + date */}
+                  <View style={styles.orderBody}>
+                    <Text style={styles.orderItems} numberOfLines={2}>
+                      {order.items.map((i) => `${i.product.name} x${i.quantity}`).join(', ')}
+                    </Text>
+                    <Text style={styles.orderDate}>
+                      {new Date(order.createdAt).toLocaleDateString('vi-VN')}
                     </Text>
                   </View>
+
+                  {/* Footer: total + chevron */}
+                  <View style={styles.orderFooter}>
+                    <Text style={styles.orderTotal}>{formatVND(order.total)}</Text>
+                    <ChevronRight size={18} color={COLORS.lightText} />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Trash button: below status, aligned right */}
+                <View style={styles.deleteRow}>
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDelete(order)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Trash2 size={16} color={COLORS.error} />
+                    <Text style={styles.deleteBtnText}>Xoá</Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.orderBody}>
-                  <Text style={styles.orderItems} numberOfLines={2}>
-                    {order.items.map((i) => `${i.product.name} x${i.quantity}`).join(', ')}
-                  </Text>
-                  <Text style={styles.orderDate}>
-                    {new Date(order.createdAt).toLocaleDateString('vi-VN')}
-                  </Text>
-                </View>
-                <View style={styles.orderFooter}>
-                  <Text style={styles.orderTotal}>{formatVND(order.total)}</Text>
-                  <ChevronRight size={18} color={COLORS.lightText} />
-                </View>
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -122,13 +172,20 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: '700', color: COLORS.darkText },
   emptySubtext: { fontSize: 14, color: COLORS.mediumText, textAlign: 'center' },
   orderList: { paddingHorizontal: SPACING.lg },
+
+  // Card
   orderCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
-    padding: SPACING.lg,
     marginBottom: SPACING.md,
     ...SHADOWS.small,
   },
+  orderCardBody: {
+    padding: SPACING.lg,
+    paddingBottom: SPACING.sm,
+  },
+
+  // Header
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -146,9 +203,13 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: 12, fontWeight: '700' },
+
+  // Body
   orderBody: { marginBottom: SPACING.sm },
   orderItems: { fontSize: 13, color: COLORS.mediumText, lineHeight: 18 },
   orderDate: { fontSize: 12, color: COLORS.lightText, marginTop: 4 },
+
+  // Footer
   orderFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -158,4 +219,26 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.sm,
   },
   orderTotal: { fontSize: 18, fontWeight: '800', color: COLORS.primary },
+
+  // Delete
+  deleteRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingRight: SPACING.lg,
+    paddingBottom: SPACING.sm,
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FDF0ED',
+    borderRadius: 8,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+  },
+  deleteBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.error,
+  },
 });

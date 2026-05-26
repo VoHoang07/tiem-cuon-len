@@ -31,6 +31,8 @@ import {
   PD_ADD_TO_CART,
 } from '@/constants/strings';
 
+const PD_BUY_NOW = 'Thanh toán ngay';
+
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -82,6 +84,16 @@ export default function ProductDetailScreen() {
 
   const canReview = role === 'customer';
   const isAdmin = role === 'admin';
+
+  const handleAddToCart = () => {
+    addToCart(product, quantity);
+    router.push('/cart');
+  };
+
+  const handleBuyNow = () => {
+    addToCart(product, quantity);
+    router.push('/checkout');
+  };
 
   const handleDelete = () => {
     Alert.alert(
@@ -296,11 +308,13 @@ export default function ProductDetailScreen() {
         </View>
         <TouchableOpacity
           style={styles.addToCartBtn}
-          onPress={() => {
-            addToCart(product, quantity);
-            router.replace('/cart');
-          }}>
+          onPress={handleAddToCart}>
           <Text style={styles.addToCartText}>{PD_ADD_TO_CART}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.buyNowBtn}
+          onPress={handleBuyNow}>
+          <Text style={styles.buyNowText}>{PD_BUY_NOW}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -496,8 +510,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.lg,
-    gap: SPACING.md,
+    padding: SPACING.md,
+    gap: SPACING.sm,
     ...SHADOWS.large,
   },
   quantitySelector: {
@@ -505,7 +519,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.cream,
     borderRadius: 15,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
   },
   qtyBtn: {
     width: 36,
@@ -517,18 +531,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.darkText,
-    minWidth: 30,
+    minWidth: 28,
     textAlign: 'center',
   },
   addToCartBtn: {
+    flex: 1,
+    borderRadius: 15,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
+  },
+  addToCartText: {
+    fontSize: 14,
+    fontWeight: '800',
+    fontStyle: 'italic',
+    color: COLORS.primary,
+  },
+  buyNowBtn: {
     flex: 1,
     backgroundColor: COLORS.primary,
     borderRadius: 15,
     paddingVertical: 14,
     alignItems: 'center',
   },
-  addToCartText: {
-    fontSize: 16,
+  buyNowText: {
+    fontSize: 14,
     fontWeight: '800',
     fontStyle: 'italic',
     color: COLORS.white,

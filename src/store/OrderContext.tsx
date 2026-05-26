@@ -14,6 +14,7 @@ interface OrderContextType {
   orders: Order[];
   addOrder: (order: Order) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  deleteOrder: (orderId: string) => Promise<void>;
   getOrdersByUser: (userId: string) => Order[];
   refetchOrders: () => Promise<void>;
 }
@@ -29,11 +30,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
     if (role === 'admin') {
       const { data, error } = await query;
-      console.log('[ORDERS FETCH] admin', data?.length, 'orders');
       if (!error && data) setOrders(data as Order[]);
     } else if (user) {
       const { data, error } = await query.eq('userId', user.id);
-      console.log('[ORDERS FETCH] user', user.id, data?.length, 'orders', error?.message ?? '');
       if (!error && data) setOrders(data as Order[]);
     } else {
       setOrders([]);
@@ -68,8 +67,25 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     [orders]
   );
 
+  const deleteOrder = useCallback(async (orderId: string) => {
+    console.log('DELETE ORDER', { id: orderId });
+
+    // Remove from local state immediately
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+    const { error } = await supabase.from('orders').delete().eq('id', orderId);
+
+    if (error) {
+      console.error('[DELETE ERROR]', error);
+      await fetchOrders(); // restore if failed
+      throw error;
+    }
+
+    console.log('[DELETE SUCCESS]', orderId);
+  }, [orders, fetchOrders]);
+
   return (
-    <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, getOrdersByUser, refetchOrders }}>
+    <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, deleteOrder, getOrdersByUser, refetchOrders }}>
       {children}
     </OrderContext.Provider>
   );

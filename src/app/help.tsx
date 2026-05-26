@@ -28,7 +28,7 @@ export default function HelpScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Câu hỏi thường gặp</Text>
-          <FaqItem question="Làm sao để đặt hàng?" answer="Chọn sản phẩm yêu thích, thêm vào Cart và tiến hành Checkout." />
+          <FaqItem question="Làm sao để đặt hàng?" answer="Chọn sản phẩm yêu thích, thêm vào giỏ hàng và tiến hành thanh toán." />
           <FaqItem question="Phí vận chuyển bao nhiêu?" answer="Hiện tại chúng tôi miễn phí vận chuyển cho tất cả đơn hàng." />
           <FaqItem question="Đổi trả như thế nào?" answer="Bạn có thể đổi trả trong vòng 7 ngày nếu sản phẩm bị lỗi từ nhà sản xuất." />
         </View>
