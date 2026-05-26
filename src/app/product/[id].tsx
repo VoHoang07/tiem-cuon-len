@@ -90,9 +90,16 @@ export default function ProductDetailScreen() {
     router.push('/cart');
   };
 
-  const handleBuyNow = async () => {
-    await addToCart(product, quantity);
-    router.push('/checkout');
+  const handleBuyNow = () => {
+    // Navigate to checkout with buyNow params — do NOT add to cart
+    router.push({
+      pathname: '/checkout',
+      params: {
+        mode: 'buyNow',
+        productId: product.id,
+        quantity,
+      },
+    });
   };
 
   const handleDelete = () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
@@ -49,11 +49,38 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { cart, cartTotal, clearCart } = useShop();
+  const { mode, productId, quantity: buyNowQty } = useLocalSearchParams<{
+    mode?: string;
+    productId?: string;
+    quantity?: string;
+  }>();
+  const isBuyNow = mode === 'buyNow';
+
+  const { cart, clearCart, products } = useShop();
   const { user } = useAuth();
   const { addOrder } = useOrders();
   const { userAddresses, getDefaultAddress } = useAddresses();
   const { enabledMethods, defaultMethod, loading: pmLoading } = usePaymentMethods();
+
+  // Compute buyNow product
+  const buyNowProduct = useMemo(() => {
+    if (!isBuyNow || !productId) return null;
+    return products.find((p) => p.id === productId) ?? null;
+  }, [isBuyNow, productId, products]);
+
+  const buyNowQtyNum = parseInt(buyNowQty ?? '1', 10) || 1;
+
+  // Compute checkout items based on mode
+  const checkoutItems = useMemo(() => {
+    if (isBuyNow && buyNowProduct) {
+      return [{ product: buyNowProduct, quantity: buyNowQtyNum }];
+    }
+    return cart;
+  }, [isBuyNow, buyNowProduct, buyNowQtyNum, cart]);
+
+  const checkoutTotal = useMemo(() => {
+    return checkoutItems.reduce((sum, ci) => sum + ci.product.price * ci.quantity, 0);
+  }, [checkoutItems]);
 
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -102,12 +129,12 @@ export default function CheckoutScreen() {
     const order = {
       id: orderId,
       userId: user?.id ?? user?.email ?? 'unknown',
-      items: cart.map((ci) => ({
+      items: checkoutItems.map((ci) => ({
         product: ci.product,
         quantity: ci.quantity,
         price: ci.product.price,
       })),
-      total: cartTotal,
+      total: checkoutTotal,
       shippingAddress: selectedAddress,
       paymentMethod: selectedPayment.title,
       status,
@@ -117,10 +144,10 @@ export default function CheckoutScreen() {
     addOrder(order);
 
     if (selectedPayment.type === 'cod') {
-      clearCart();
+      if (!isBuyNow) clearCart(); // Only clear cart in cart mode
       setSubmitted(true);
     } else {
-      // Navigate to dedicated payment screen
+      if (!isBuyNow) clearCart(); // Only clear cart in cart mode
       router.replace(`/payment/${orderId}`);
     }
     };
@@ -290,7 +317,7 @@ export default function CheckoutScreen() {
         {/* Order Summary */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
-          {cart.map((item) => (
+          {checkoutItems.map((item) => (
             <View key={item.product.id} style={styles.summaryItem}>
               <Text style={styles.itemName} numberOfLines={1}>
                 {item.product.name} x{item.quantity}
@@ -303,7 +330,7 @@ export default function CheckoutScreen() {
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
-            <Text style={styles.totalValue}>{formatVND(cartTotal)}</Text>
+            <Text style={styles.totalValue}>{formatVND(checkoutTotal)}</Text>
           </View>
         </View>
 
@@ -317,7 +344,7 @@ export default function CheckoutScreen() {
             {hasAddress
               ? selectedPayment?.type === 'cod'
                 ? 'Đặt hàng COD'
-                : `Thanh toán ${formatVND(cartTotal)}`
+                : `Thanh toán ${formatVND(checkoutTotal)}`
               : 'Thêm địa chỉ để thanh toán'}
           </Text>
         </TouchableOpacity>
