@@ -7,6 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { Platform, AppState } from 'react-native';
 import { Product, CartItem } from '@/types/product';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
@@ -121,10 +122,40 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [user, fetchCart, hydrateCartFromStorage]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handlePageShow = (e: PageTransitionEvent) => {
+        if (e.persisted) {
+          if (user) {
+            fetchCart();
+          } else {
+            const localCart = hydrateCartFromStorage();
+            if (localCart) setCart(localCart);
+          }
+        }
+      };
 
-    const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          if (user) {
+            fetchCart();
+          } else {
+            const localCart = hydrateCartFromStorage();
+            if (localCart) setCart(localCart);
+          }
+        }
+      };
+
+      window.addEventListener('pageshow', handlePageShow);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => {
+        window.removeEventListener('pageshow', handlePageShow);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
+
+    // Native: rehydrate cart when app comes to foreground
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
         if (user) {
           fetchCart();
         } else {
@@ -132,25 +163,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
           if (localCart) setCart(localCart);
         }
       }
-    };
+    });
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        if (user) {
-          fetchCart();
-        } else {
-          const localCart = hydrateCartFromStorage();
-          if (localCart) setCart(localCart);
-        }
-      }
-    };
-
-    window.addEventListener('pageshow', handlePageShow);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('pageshow', handlePageShow);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => sub.remove();
   }, [user, fetchCart, hydrateCartFromStorage]);
 
   const refetchCart = useCallback(async () => {
