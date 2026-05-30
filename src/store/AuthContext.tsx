@@ -21,6 +21,7 @@ interface AuthContextType {
   role: 'admin' | 'customer' | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  configError: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -40,75 +41,120 @@ function toAuthUser(session: Session | null): AuthUser | null {
   };
 }
 
+const NETWORK_ERROR_MSG =
+  'Không kết nối được Supabase. Vui lòng kiểm tra mạng hoặc cấu hình API.';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Lấy session hiện tại – bỏ qua lỗi refresh token
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(toAuthUser(session));
-      setIsLoading(false);
-    }).catch((err) => {
-      if (__DEV__) console.error('[AUTH] Lỗi getSession:', err);
-      setUser(null);
-      setIsLoading(false);
-    });
+    let cancelled = false;
 
-    // Lắng nghe thay đổi auth
+    const init = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!cancelled) {
+          setUser(toAuthUser(session));
+        }
+      } catch (err: unknown) {
+        if (__DEV__) console.error('[AUTH] Lỗi getSession:', err);
+        if (!cancelled) {
+          setConfigError(NETWORK_ERROR_MSG);
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    init();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-        setUser(toAuthUser(session));
-      } else if (event === 'USER_UPDATED') {
+      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         setUser(toAuthUser(session));
       } else {
         setUser(toAuthUser(session));
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase().trim(),
-      password,
-    });
-    if (error) {
-      return { success: false, error: 'Email hoặc mật khẩu không đúng.' };
+  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    if (configError) {
+      return { success: false, error: configError };
     }
-    return { success: true };
-  }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
-      email: email.toLowerCase().trim(),
-      password,
-      options: {
-        data: { name: name.trim(), role: 'customer' },
-      },
-    });
-    if (error) {
-      if (error.message.includes('already')) {
-        return { success: false, error: 'Email này đã được sử dụng.' };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password,
+      });
+
+      if (error) {
+        if (__DEV__) console.log('[LOGIN ERROR]', error);
+        return { success: false, error: 'Email hoặc mật khẩu không đúng.' };
       }
-      return { success: false, error: error.message };
+      return { success: true };
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[LOGIN ERROR]', err);
+      return { success: false, error: NETWORK_ERROR_MSG };
     }
-    return { success: true };
-  }, []);
+  }, [configError]);
+
+  const register = useCallback(async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    if (configError) {
+      return { success: false, error: configError };
+    }
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
+        password,
+        options: {
+          data: { name: name.trim(), role: 'customer' },
+        },
+      });
+
+      if (error) {
+        if (__DEV__) console.log('[REGISTER ERROR]', error);
+        if (error.message.includes('already')) {
+          return { success: false, error: 'Email này đã được sử dụng.' };
+        }
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err: unknown) {
+      if (__DEV__) console.log('[REGISTER ERROR]', err);
+      return { success: false, error: NETWORK_ERROR_MSG };
+    }
+  }, [configError]);
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (err: unknown) {
+      if (__DEV__) console.error('[AUTH] Lỗi logout:', err);
+    }
     setUser(null);
   }, []);
 
   const updateProfile = useCallback(async (name: string) => {
     if (!user) return;
-    const { error } = await supabase.auth.updateUser({
-      data: { name: name.trim() },
-    });
-    if (!error) {
-      setUser((prev) => prev ? { ...prev, name: name.trim() } : null);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { name: name.trim() },
+      });
+      if (!error) {
+        setUser((prev) => prev ? { ...prev, name: name.trim() } : null);
+      }
+    } catch (err: unknown) {
+      if (__DEV__) console.error('[AUTH] Lỗi updateProfile:', err);
     }
   }, [user]);
 
@@ -119,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: user?.role ?? null,
         isAuthenticated: user !== null,
         isLoading,
+        configError,
         login,
         register,
         logout,

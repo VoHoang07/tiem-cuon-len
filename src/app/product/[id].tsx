@@ -17,6 +17,7 @@ import { useAuth } from '@/store/AuthContext';
 import { Product, Review } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
+import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import {
   PD_NOT_FOUND,
   PD_GO_BACK,
@@ -86,6 +87,10 @@ export default function ProductDetailScreen() {
   const isAdmin = role === 'admin';
 
   const handleAddToCart = async () => {
+    if (quantity > product.quantity) {
+      Alert.alert('Không đủ hàng', `Chỉ còn ${product.quantity} sản phẩm trong kho.`);
+      return;
+    }
     await addToCart(product, quantity);
     router.push('/cart');
   };
@@ -120,15 +125,6 @@ export default function ProductDetailScreen() {
     );
   };
 
-  const categoryEmoji =
-    product.category === 'Bags'
-      ? '👜'
-      : product.category === 'Dolls'
-        ? '🧸'
-        : product.category === 'Accessories'
-          ? '🧣'
-          : '🧶';
-
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -147,8 +143,8 @@ export default function ProductDetailScreen() {
               activeOpacity={0.7}>
               <Heart
                 size={22}
-                color={fav ? '#e74c3c' : '#8B5E4A'}
-                fill={fav ? '#e74c3c' : 'transparent'}
+                color={fav ? COLORS.error : COLORS.primary}
+                fill={fav ? COLORS.error : 'transparent'}
               />
             </TouchableOpacity>
           )}
@@ -160,7 +156,7 @@ export default function ProductDetailScreen() {
             />
           ) : (
             <View style={styles.imagePlaceholder}>
-              <Text style={styles.imageEmoji}>{categoryEmoji}</Text>
+              <Text style={styles.imageEmoji}>{getCategoryEmoji(product.category)}</Text>
             </View>
           )}
         </View>
@@ -316,7 +312,7 @@ export default function ProductDetailScreen() {
             <Text style={styles.qtyText}>{quantity}</Text>
             <TouchableOpacity
               style={styles.qtyBtn}
-              onPress={() => setQuantity(quantity + 1)}>
+              onPress={() => setQuantity(Math.min(quantity + 1, product.quantity))}>
               <Plus size={18} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
@@ -430,7 +426,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 6,
     elevation: 4,
-    backdropFilter: 'blur(8px)',
   },
   imagePlaceholder: {
     width: 200,

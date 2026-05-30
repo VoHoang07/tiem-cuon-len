@@ -20,6 +20,7 @@ import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
+import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import { Product } from '@/types/product';
 
 export default function ManageProductsScreen() {
@@ -99,13 +100,7 @@ export default function ManageProductsScreen() {
               <View key={product.id} style={styles.productItem}>
                 <View style={styles.productImageContainer}>
                   <Text style={styles.productEmoji}>
-                    {product.category === 'Bags'
-                      ? '👜'
-                      : product.category === 'Dolls'
-                      ? '🧸'
-                      : product.category === 'Accessories'
-                      ? '🧣'
-                      : '🧶'}
+                    {getCategoryEmoji(product.category)}
                   </Text>
                 </View>
 

@@ -37,10 +37,11 @@ export default function FavoritesScreen() {
 
   const favoriteProducts = products.filter((p) => favorites.includes(p.id));
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  };
+    await refetchCartFavorites();
+    setRefreshing(false);
+  }, [refetchCartFavorites]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -63,7 +64,7 @@ export default function FavoritesScreen() {
             </Text>
             <TouchableOpacity
               style={styles.browseBtn}
-              onPress={() => router.replace('/')}>
+              onPress={() => router.push('/')}>
               <ShoppingBag size={18} color={COLORS.white} />
               <Text style={styles.browseBtnText}>{FAV_BROWSE}</Text>
             </TouchableOpacity>

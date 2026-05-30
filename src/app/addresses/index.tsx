@@ -78,7 +78,7 @@ export default function AddressesScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => removeAddress(addr.id)}
+                    onPress={() => handleDelete(addr.id)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Trash2 size={18} color={COLORS.error} />
                   </TouchableOpacity>

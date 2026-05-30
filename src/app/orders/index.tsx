@@ -111,6 +111,11 @@ export default function OrdersScreen() {
 
                   {/* Items + date */}
                   <View style={styles.orderBody}>
+                    {isAdmin && order.shippingAddress?.fullName ? (
+                      <Text style={styles.customerName}>
+                        {order.shippingAddress.fullName}
+                      </Text>
+                    ) : null}
                     <Text style={styles.orderItems} numberOfLines={2}>
                       {order.items.map((i) => `${i.product.name} x${i.quantity}`).join(', ')}
                     </Text>
@@ -229,6 +234,7 @@ const styles = StyleSheet.create({
 
   // Body
   orderBody: { marginBottom: SPACING.sm },
+  customerName: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: 4 },
   orderItems: { fontSize: 13, color: COLORS.mediumText, lineHeight: 18 },
   orderDate: { fontSize: 12, color: COLORS.lightText, marginTop: 4 },
 

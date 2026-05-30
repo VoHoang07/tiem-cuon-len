@@ -111,8 +111,8 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const transferPrefix = paymentMethod?.transfer_prefix ?? 'CUONLEN';
   const transferContent = `${transferPrefix}-${orderShortId}`;
 
-  // Generate VietQR image URL with real amount and content
-  const bankCode = '970436';
+  const bankInfo = BANK_LIST.find((b) => b.name === paymentMethod?.bank_name) ?? BANK_LIST[0];
+  const bankCode = bankInfo.bin;
   const accountNo = paymentMethod?.account_number ?? '';
   const accountName = paymentMethod?.account_name ?? '';
   const orderAmount = order?.total ?? 0;

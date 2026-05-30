@@ -22,11 +22,13 @@ import {
   ClipboardList,
 } from 'lucide-react-native';
 import { useAuth } from '@/store/AuthContext';
+import { useLogout } from '@/hooks/useLogout';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { role, logout } = useAuth();
+  const { role } = useAuth();
+  const { handleLogout } = useLogout();
   const isAdmin = role === 'admin';
 
   const comingSoon = () => {
@@ -84,7 +86,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Logout */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <LogOut size={20} color={COLORS.error} />
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>

@@ -21,6 +21,8 @@ interface ProductCardProps {
   onPress: (product: Product) => void;
 }
 
+import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
+
 export function ProductCard({ product, onPress }: ProductCardProps) {
   const { toggleFavorite, isFavorite } = useShop();
   const { width: windowWidth } = useWindowDimensions();
@@ -45,15 +47,7 @@ export function ProductCard({ product, onPress }: ProductCardProps) {
           />
         ) : (
           <View style={[styles.imagePlaceholder, { height: cardWidth * 1.05 }]}>
-            <Text style={styles.imageEmoji}>
-              {product.category === 'Bags'
-                ? '👜'
-                : product.category === 'Dolls'
-                  ? '🧸'
-                  : product.category === 'Accessories'
-                    ? '🧣'
-                    : '🧶'}
-            </Text>
+            <Text style={styles.imageEmoji}>{getCategoryEmoji(product.category)}</Text>
           </View>
         )}
         <TouchableOpacity
@@ -62,7 +56,7 @@ export function ProductCard({ product, onPress }: ProductCardProps) {
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Heart
             size={16}
-            color={fav ? COLORS.primary : '#999'}
+            color={fav ? COLORS.primary : COLORS.lightText}
             fill={fav ? COLORS.primary : 'transparent'}
           />
         </TouchableOpacity>

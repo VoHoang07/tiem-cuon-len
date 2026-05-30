@@ -87,11 +87,11 @@ const styles = StyleSheet.create({
   },
   circle: {
     borderWidth: 3,
-    borderColor: '#765341',
+    borderColor: COLORS.primary,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#d8cbc4',
+    backgroundColor: COLORS.background,
   },
   circleImage: {
     width: '100%',

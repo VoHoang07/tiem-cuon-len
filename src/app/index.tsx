@@ -37,7 +37,7 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { products, isLoading, refetchCartFavorites } = useShop();
+  const { products, isLoading, refetchCartFavorites, hasMore, loadMore } = useShop();
 
   // Refetch cart/favorites when screen regains focus (back navigation, tab switch)
   useFocusEffect(
@@ -82,6 +82,11 @@ export default function HomeScreen() {
     await refetchCartFavorites();
     setRefreshing(false);
   }, [refetchCartFavorites]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore || isLoading) return;
+    loadMore();
+  }, [hasMore, isLoading, loadMore]);
 
   if (isLoading) {
     return (
@@ -204,6 +209,12 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {hasMore && filteredProducts.length > 0 && (
+          <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore}>
+            <Text style={styles.loadMoreText}>Xem thêm sản phẩm</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={{ height: 100 }} />
       </ScrollView>
       <BottomNav />
@@ -290,5 +301,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.lightText,
     marginTop: SPACING.xs,
+  },
+  loadMoreBtn: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: SPACING.lg,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+  },
+  loadMoreText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
 });

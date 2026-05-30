@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -77,6 +78,19 @@ export default function OrderDetailScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Khách hàng</Text>
+          <Text style={styles.sectionValue}>{order.shippingAddress?.fullName ?? '—'}</Text>
+          {order.shippingAddress?.phone ? (
+            <Text style={styles.sectionSub}>{order.shippingAddress.phone}</Text>
+          ) : null}
+          {order.shippingAddress?.detailAddress ? (
+            <Text style={styles.sectionSub}>
+              {[order.shippingAddress.detailAddress, order.shippingAddress.ward, order.shippingAddress.district, order.shippingAddress.city].filter(Boolean).join(', ')}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ngày đặt</Text>
           <Text style={styles.sectionValue}>
             {new Date(order.createdAt).toLocaleDateString('vi-VN', {
@@ -94,7 +108,15 @@ export default function OrderDetailScreen() {
           {order.items.map((item) => (
             <View key={item.product.id} style={styles.itemRow}>
               <View style={styles.itemIcon}>
-                <Package size={20} color={COLORS.primary} />
+                {item.product.image ? (
+                  <Image
+                    source={{ uri: item.product.image }}
+                    style={styles.itemProductImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Package size={20} color={COLORS.primary} />
+                )}
               </View>
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>{item.product.name}</Text>
@@ -155,6 +177,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 13, fontWeight: '600', color: COLORS.lightText, marginBottom: 4 },
   sectionValue: { fontSize: 15, fontWeight: '600', color: COLORS.darkText },
+  sectionSub: { fontSize: 13, color: COLORS.mediumText, marginTop: 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusBadge: {
     flexDirection: 'row',
@@ -188,6 +211,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
+    overflow: 'hidden',
+  },
+  itemProductImage: {
+    width: 40,
+    height: 40,
+    resizeMode: 'cover',
   },
   itemInfo: { flex: 1 },
   itemName: { fontSize: 14, fontWeight: '600', color: COLORS.darkText },

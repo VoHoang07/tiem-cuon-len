@@ -9,6 +9,7 @@ import {
   Switch,
   TextInput,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -52,6 +53,7 @@ export default function PaymentMethodsScreen() {
     defaultMethod,
     loading,
     error,
+    addMethod,
     updateMethod,
     deleteMethod,
     setDefault,
@@ -70,6 +72,17 @@ export default function PaymentMethodsScreen() {
   const [editTransferPrefix, setEditTransferPrefix] = useState('');
   const [editPhoneNumber, setEditPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Add new payment method state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addType, setAddType] = useState<PaymentMethodType>('bank_transfer');
+  const [addTitle, setAddTitle] = useState('');
+  const [addBankName, setAddBankName] = useState('');
+  const [addAccountName, setAddAccountName] = useState('');
+  const [addAccountNumber, setAddAccountNumber] = useState('');
+  const [addTransferPrefix, setAddTransferPrefix] = useState('');
+  const [addPhoneNumber, setAddPhoneNumber] = useState('');
+  const [adding, setAdding] = useState(false);
 
   const startEdit = (method: PaymentMethod) => {
     setEditingId(method.id);
@@ -123,6 +136,36 @@ export default function PaymentMethodsScreen() {
     ]);
   };
 
+  const handleAddMethod = async () => {
+    if (!addTitle.trim()) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên hiển thị.');
+      return;
+    }
+
+    setAdding(true);
+    const input: Parameters<typeof addMethod>[0] = {
+      type: addType,
+      title: addTitle.trim(),
+      enabled: true,
+      is_default: false,
+    };
+
+    if (addType === 'bank_transfer') {
+      input.bank_name = addBankName.trim();
+      input.account_name = addAccountName.trim();
+      input.account_number = addAccountNumber.trim();
+      input.transfer_prefix = addTransferPrefix.trim() || 'CUONLEN';
+    }
+    if (addType === 'momo') {
+      input.phone_number = addPhoneNumber.trim();
+    }
+
+    await addMethod(input);
+    setAdding(false);
+    setShowAddModal(false);
+    setAddTitle(''); setAddBankName(''); setAddAccountName(''); setAddAccountNumber(''); setAddTransferPrefix(''); setAddPhoneNumber('');
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -164,6 +207,16 @@ export default function PaymentMethodsScreen() {
               Chọn phương thức thanh toán mặc định cho bạn. Phương thức mặc định sẽ được chọn sẵn khi thanh toán.
             </Text>
           </View>
+        )}
+
+        {/* Add New button (admin only) */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => setShowAddModal(true)}>
+            <Plus size={20} color={COLORS.white} />
+            <Text style={styles.addBtnText}>Thêm phương thức mới</Text>
+          </TouchableOpacity>
         )}
 
         {/* Method list */}
@@ -295,6 +348,63 @@ export default function PaymentMethodsScreen() {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      {/* Add Method Modal */}
+      <Modal visible={showAddModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Thêm phương thức mới</Text>
+
+            <FormField label="Tên hiển thị" value={addTitle} onChangeText={setAddTitle} />
+
+            {/* Type selector */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Loại</Text>
+              <View style={styles.typeRow}>
+                {(['bank_transfer', 'momo', 'zalopay', 'cod'] as PaymentMethodType[]).map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeChip, addType === t && styles.typeChipActive]}
+                    onPress={() => setAddType(t)}>
+                    <Text style={[styles.typeChipText, addType === t && styles.typeChipTextActive]}>
+                      {TYPE_LABELS[t]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {addType === 'bank_transfer' && (
+              <>
+                <FormField label="Ngân hàng" value={addBankName} onChangeText={setAddBankName} />
+                <FormField label="Chủ tài khoản" value={addAccountName} onChangeText={setAddAccountName} />
+                <FormField label="Số tài khoản" value={addAccountNumber} onChangeText={setAddAccountNumber} />
+                <FormField label="Tiền tố CK" value={addTransferPrefix} onChangeText={setAddTransferPrefix} />
+              </>
+            )}
+
+            {addType === 'momo' && (
+              <FormField label="Số điện thoại" value={addPhoneNumber} onChangeText={setAddPhoneNumber} keyboardType="phone-pad" />
+            )}
+
+            <View style={styles.editActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddModal(false)}>
+                <Text style={styles.cancelBtnText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, adding && styles.saveBtnDisabled]}
+                onPress={handleAddMethod}
+                disabled={adding}>
+                {adding ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.saveBtnText}>Thêm</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -463,4 +573,49 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  // Add button
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    marginHorizontal: SPACING.lg,
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginBottom: SPACING.xl,
+    ...SHADOWS.medium,
+  },
+  addBtnText: { fontSize: 16, fontWeight: '800', fontStyle: 'italic', color: COLORS.white },
+
+  // Add modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: SPACING.xl,
+    maxHeight: '90%',
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText, marginBottom: SPACING.lg, textAlign: 'center' },
+  typeRow: { flexDirection: 'row', gap: SPACING.xs, flexWrap: 'wrap' },
+  typeChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 10,
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  typeChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  typeChipText: { fontSize: 13, fontWeight: '600', color: COLORS.mediumText },
+  typeChipTextActive: { color: COLORS.white },
 });

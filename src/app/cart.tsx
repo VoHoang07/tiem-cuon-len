@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +22,7 @@ import { useShop } from '@/store/ShopContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
+import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import {
   CART_TITLE,
   CART_CLEAR_ALL,
@@ -49,6 +51,13 @@ export default function CartScreen() {
     router.push('/checkout');
   };
 
+  const handleClearCart = () => {
+    Alert.alert('Xóa giỏ hàng', 'Bạn có chắc muốn xóa toàn bộ giỏ hàng?', [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Xóa', style: 'destructive', onPress: () => clearCart() },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -64,7 +73,7 @@ export default function CartScreen() {
           </View>
           <Text style={styles.headerTitle}>{CART_TITLE}</Text>
           {cart.length > 0 && (
-            <TouchableOpacity onPress={() => clearCart()}>
+            <TouchableOpacity onPress={handleClearCart}>
               <Text style={styles.clearText}>{CART_CLEAR_ALL}</Text>
             </TouchableOpacity>
           )}
@@ -95,15 +104,15 @@ export default function CartScreen() {
             {cart.map((item) => (
               <View key={item.product.id} style={styles.cartItem}>
                 <View style={styles.itemImage}>
-                  <Text style={styles.itemEmoji}>
-                    {item.product.category === 'Bags'
-                      ? '👜'
-                      : item.product.category === 'Dolls'
-                        ? '🧸'
-                        : item.product.category === 'Accessories'
-                          ? '🧣'
-                          : '🧶'}
-                  </Text>
+                  {item.product.image ? (
+                    <Image
+                      source={{ uri: item.product.image }}
+                      style={styles.itemProductImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.itemEmoji}>{getCategoryEmoji(item.product.category)}</Text>
+                  )}
                 </View>
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemName} numberOfLines={2}>
@@ -290,6 +299,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  itemProductImage: {
+    width: 70,
+    height: 70,
+    resizeMode: 'cover',
   },
   itemEmoji: {
     fontSize: 32,

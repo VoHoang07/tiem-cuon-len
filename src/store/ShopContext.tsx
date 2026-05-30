@@ -10,6 +10,7 @@ interface ShopContextType {
   favorites: string[];
   isLoading: boolean;
   cartHydrated: boolean;
+  hasMore: boolean;
   addProduct: (product: Product) => void;
   updateProduct: (id: string, product: Product) => void;
   removeProduct: (id: string) => void;
@@ -22,6 +23,7 @@ interface ShopContextType {
   isFavorite: (productId: string) => boolean;
   cartTotal: number;
   cartCount: number;
+  loadMore: () => Promise<void>;
   refetchCartFavorites: () => Promise<void>;
 }
 
@@ -40,7 +42,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 }
 
 function ShopBridge({ children }: { children: ReactNode }) {
-  const { products, isLoading, addProduct, updateProduct, removeProduct, addReview, refetchProducts } = useProducts();
+  const { products, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, refetchProducts } = useProducts();
   const { cart, cartHydrated, cartTotal, cartCount, addToCart, removeFromCart, updateCartQuantity, clearCart, refetchCart } = useCart();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
@@ -56,6 +58,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
         favorites,
         isLoading,
         cartHydrated,
+        hasMore,
         addProduct,
         updateProduct,
         removeProduct,
@@ -68,6 +71,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
         isFavorite,
         cartTotal,
         cartCount,
+        loadMore,
         refetchCartFavorites,
       }}>
       {children}
