@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -11,6 +10,7 @@ import {
   Linking,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,14 +22,10 @@ import {
   Wallet,
   Copy,
   CheckCheck,
-  ExternalLink,
-  Download,
   Send,
   CheckCircle,
   Clock,
   ShieldCheck,
-  Search,
-  X,
 } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
@@ -38,55 +34,59 @@ import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import { getOrderStatusLabel } from '@/constants/orderStatus';
 
-const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: string; bg: string }> = {
+const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: string; bg: string; label: string }> = {
   bank_transfer: {
     icon: <Building2 size={28} color="#765341" />,
     color: '#765341',
     bg: '#F5EDE8',
+    label: 'Chuyển khoản ngân hàng',
   },
   momo: {
     icon: <Smartphone size={28} color="#A50064" />,
     color: '#A50064',
     bg: '#FFF0F5',
+    label: 'Ví MoMo',
   },
   zalopay: {
     icon: <Wallet size={28} color="#0068FF" />,
     color: '#0068FF',
     bg: '#F0F5FF',
+    label: 'ZaloPay',
   },
   cod: {
     icon: <CheckCircle size={28} color="#6BAF5C" />,
     color: '#6BAF5C',
     bg: '#F0FFF4',
+    label: 'COD',
   },
-  };
+};
 
-  interface BankInfo {
-  name: string;
-  shortName: string;
-  bin: string;
-  schemes: string[]; // deep link URL schemes to try
-  }
+// Known bank deep links for common Vietnamese banking apps
+const BANK_DEEP_LINKS: Record<string, string[]> = {
+  'Vietcombank': ['vcbdigibank://'],
+  'MB Bank': ['mbbank://'],
+  'Techcombank': ['tcbdigibank://'],
+  'BIDV': ['bidvsmartbanking://'],
+  'VietinBank': ['vietinbank://'],
+  'ACB': ['acbapp://'],
+  'VPBank': ['vpbankonline://'],
+  'TPBank': ['tpbank://'],
+  'Sacombank': ['sacombank://'],
+  'Agribank': ['agribank://'],
+  'HDBank': ['hdbank://'],
+  'SHB': ['shbmobile://'],
+  'MSB': ['msbmobile://'],
+  'OCB': ['ocbomni://'],
+  'VIB': ['vibmobile://'],
+};
 
-  const BANK_LIST: BankInfo[] = [
-  { name: 'Vietcombank', shortName: 'VCB', bin: '970436', schemes: ['vcbdigibank://', 'https://www.vietcombank.com.vn'] },
-  { name: 'MB Bank', shortName: 'MB', bin: '970422', schemes: ['mbbank://', 'https://www.mbbank.com.vn'] },
-  { name: 'Techcombank', shortName: 'TCB', bin: '970407', schemes: ['tcbdigibank://', 'https://www.techcombank.com.vn'] },
-  { name: 'BIDV', shortName: 'BIDV', bin: '970418', schemes: ['bidvsmartbanking://', 'https://www.bidv.com.vn'] },
-  { name: 'VietinBank', shortName: 'CTG', bin: '970415', schemes: ['vietinbank://', 'https://www.vietinbank.vn'] },
-  { name: 'ACB', shortName: 'ACB', bin: '970416', schemes: ['acbapp://', 'https://www.acb.com.vn'] },
-  { name: 'VPBank', shortName: 'VPB', bin: '970432', schemes: ['vpbankonline://', 'https://www.vpbank.com.vn'] },
-  { name: 'TPBank', shortName: 'TPB', bin: '970423', schemes: ['tpbank://', 'https://tpb.vn'] },
-  { name: 'Sacombank', shortName: 'STB', bin: '970403', schemes: ['sacombank://', 'https://www.sacombank.com.vn'] },
-  { name: 'Agribank', shortName: 'AGB', bin: '970405', schemes: ['agribank://', 'https://www.agribank.com.vn'] },
-  { name: 'HDBank', shortName: 'HDB', bin: '970437', schemes: ['hdbank://', 'https://www.hdbank.com.vn'] },
-  { name: 'SHB', shortName: 'SHB', bin: '970443', schemes: ['shbmobile://', 'https://www.shb.com.vn'] },
-  { name: 'MSB', shortName: 'MSB', bin: '970426', schemes: ['msbmobile://', 'https://www.msb.com.vn'] },
-  { name: 'OCB', shortName: 'OCB', bin: '970448', schemes: ['ocbomni://', 'https://www.ocb.com.vn'] },
-  { name: 'VIB', shortName: 'VIB', bin: '970441', schemes: ['vibmobile://', 'https://www.vib.com.vn'] },
-  ];
+function buildVietQRDeepLink(bankBin: string, accountNo: string, accountName: string, amount: number, content: string): string {
+  // VietQR universal deep link - opens banking app with pre-filled transfer info
+  // Falls back to VietQR web page if no bank app installed
+  return `https://qr.vietqr.io/${bankBin}-${accountNo}?amount=${amount}&addInfo=${encodeURIComponent(content)}&accountName=${encodeURIComponent(accountName)}`;
+}
 
-  export default function PaymentScreen() {
+export default function PaymentScreen() {
   const { orderId: paramOrderId } = useLocalSearchParams<{ orderId: string }>();
   const router = useRouter();
   const { orders, updateOrderStatus } = useOrders();
@@ -98,10 +98,7 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [showBankModal, setShowBankModal] = useState(false);
-  const [showBankListModal, setShowBankListModal] = useState(false);
-  const [bankSearch, setBankSearch] = useState('');
-  const [selectedBankName, setSelectedBankName] = useState('');
+  const [bankOpened, setBankOpened] = useState(false);
 
   const paymentMethod: PaymentMethod | undefined = enabledMethods.find(
     (m) => m.title === order?.paymentMethod,
@@ -111,13 +108,29 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   const transferPrefix = paymentMethod?.transfer_prefix ?? 'CUONLEN';
   const transferContent = `${transferPrefix}-${orderShortId}`;
 
-  const bankInfo = BANK_LIST.find((b) => b.name === paymentMethod?.bank_name) ?? BANK_LIST[0];
-  const bankCode = bankInfo.bin;
   const accountNo = paymentMethod?.account_number ?? '';
   const accountName = paymentMethod?.account_name ?? '';
   const orderAmount = order?.total ?? 0;
+
+  // Simple bank bin lookup - use known bank BINs
+  let bankBin = '970436'; // default VCB
+  if (paymentMethod?.bank_name) {
+    const bankBins: Record<string, string> = {
+      'Vietcombank': '970436', 'MB Bank': '970422', 'Techcombank': '970407',
+      'BIDV': '970418', 'VietinBank': '970415', 'ACB': '970416',
+      'VPBank': '970432', 'TPBank': '970423', 'Sacombank': '970403',
+      'Agribank': '970405', 'HDBank': '970437', 'SHB': '970443',
+      'MSB': '970426', 'OCB': '970448', 'VIB': '970441',
+    };
+    bankBin = bankBins[paymentMethod.bank_name] ?? bankBin;
+  }
+
   const vietqrImageUrl = accountNo
-    ? `https://img.vietqr.io/image/${bankCode}-${accountNo}-compact.png?accountName=${encodeURIComponent(accountName)}&amount=${orderAmount}&addInfo=${encodeURIComponent(transferContent)}`
+    ? `https://img.vietqr.io/image/${bankBin}-${accountNo}-compact.png?accountName=${encodeURIComponent(accountName)}&amount=${orderAmount}&addInfo=${encodeURIComponent(transferContent)}`
+    : '';
+
+  const vietqrDeepLink = accountNo
+    ? buildVietQRDeepLink(bankBin, accountNo, accountName, orderAmount, transferContent)
     : '';
 
   const handleCopy = async (text: string, field: string) => {
@@ -126,35 +139,45 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const handleOpenBankApp = () => {
-    // Open bank selection list instead of trying a single deep link
-    setShowBankListModal(true);
-  };
+  const handleCopyAllAndOpenBank = async () => {
+    // Copy all transfer info at once
+    const transferInfo = [
+      `Ngân hàng: ${paymentMethod?.bank_name ?? ''}`,
+      `STK: ${accountNo}`,
+      `Chủ TK: ${accountName}`,
+      `Số tiền: ${formatVND(orderAmount)}`,
+      `Nội dung: ${transferContent}`,
+    ].join('\n');
 
-  const handleSelectBank = async (bank: BankInfo) => {
-    setShowBankListModal(false);
-    setSelectedBankName(bank.name);
+    await Clipboard.setStringAsync(transferInfo);
+    setBankOpened(true);
 
-    // Try opening the bank app with a 1.5s timeout
-    let opened = false;
-
-    for (const scheme of bank.schemes) {
-      if (opened) break;
-      try {
-        const supported = await Linking.canOpenURL(scheme);
-        if (supported) {
-          const openPromise = Linking.openURL(scheme);
-          const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 1500));
-          await Promise.race([openPromise, timeoutPromise]);
-          opened = true;
+    // Try opening bank app via deep link first
+    if (paymentMethod?.bank_name) {
+      const schemes = BANK_DEEP_LINKS[paymentMethod.bank_name];
+      if (schemes) {
+        for (const scheme of schemes) {
+          try {
+            const canOpen = await Linking.canOpenURL(scheme);
+            if (canOpen) {
+              await Linking.openURL(scheme);
+              return;
+            }
+          } catch {
+            // continue
+          }
         }
-      } catch {
-        // continue to next scheme
       }
     }
 
-    // Always show the QR modal with instructions (even if opened successfully, as a guide)
-    setShowBankModal(true);
+    // Fallback: try to open VietQR universal link
+    if (vietqrDeepLink) {
+      try {
+        await Linking.openURL(vietqrDeepLink);
+      } catch {
+        // nothing we can do, info is already copied
+      }
+    }
   };
 
   const handleConfirmTransfer = async () => {
@@ -164,11 +187,10 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
 
     updateOrderStatus(order.id, 'awaiting_confirmation');
 
-    // Small delay for UX
     setTimeout(() => {
       setConfirming(false);
       setConfirmed(true);
-    }, 800);
+    }, 600);
   };
 
   useEffect(() => {
@@ -241,7 +263,7 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
   // ── Payment screen ──
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -256,19 +278,15 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Order Code Card */}
+        {/* Order info card */}
         <View style={styles.section}>
-          <View style={styles.codeCard}>
-            <Text style={styles.codeLabel}>Mã đơn hàng</Text>
-            <Text style={styles.codeValue}>{order.id}</Text>
-          </View>
-        </View>
-
-        {/* Amount Card */}
-        <View style={styles.section}>
-          <View style={styles.amountCard}>
-            <Text style={styles.amountLabel}>Số tiền cần thanh toán</Text>
-            <Text style={styles.amountValue}>{formatVND(order.total)}</Text>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoCardLabel}>Mã đơn</Text>
+            <Text style={styles.infoCardCode}>{order.id}</Text>
+            <View style={styles.infoCardAmountRow}>
+              <Text style={styles.infoCardAmountLabel}>Số tiền</Text>
+              <Text style={styles.infoCardAmount}>{formatVND(order.total)}</Text>
+            </View>
             <View style={[styles.typeBadge, { backgroundColor: typeInfo.bg }]}>
               {typeInfo.icon}
               <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
@@ -278,141 +296,131 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
           </View>
         </View>
 
-        {/* QR Card */}
-        <View style={styles.section}>
-          <View style={styles.qrCard}>
-            {paymentMethod?.type === 'bank_transfer' && vietqrImageUrl ? (
+        {/* 1-tap transfer button */}
+        {paymentMethod?.type === 'bank_transfer' && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.transferBtn}
+              onPress={handleCopyAllAndOpenBank}
+              activeOpacity={0.85}>
+              <Building2 size={24} color={COLORS.white} />
+              <View style={styles.transferBtnContent}>
+                <Text style={styles.transferBtnTitle}>Chuyển khoản ngay</Text>
+                <Text style={styles.transferBtnSub}>
+                  Mở app ngân hàng • Thông tin đã được sao chép
+                </Text>
+              </View>
+              <Send size={20} color={COLORS.white} />
+            </TouchableOpacity>
+
+            {bankOpened && (
+              <View style={styles.copiedBanner}>
+                <CheckCheck size={16} color={COLORS.success} />
+                <Text style={styles.copiedBannerText}>
+                  Đã sao chép toàn bộ thông tin. Dán vào app ngân hàng để chuyển khoản.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* MoMo / ZaloPay */}
+        {(paymentMethod?.type === 'momo' || paymentMethod?.type === 'zalopay') && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.transferBtn}
+              onPress={handleCopyAllAndOpenBank}
+              activeOpacity={0.85}>
+              {typeInfo.icon}
+              <View style={styles.transferBtnContent}>
+                <Text style={styles.transferBtnTitle}>Mở {typeInfo.label}</Text>
+                <Text style={styles.transferBtnSub}>
+                  Số tiền và nội dung đã được sao chép
+                </Text>
+              </View>
+              <Send size={20} color={COLORS.white} />
+            </TouchableOpacity>
+
+            {bankOpened && (
+              <View style={styles.copiedBanner}>
+                <CheckCheck size={16} color={COLORS.success} />
+                <Text style={styles.copiedBannerText}>
+                  Đã sao chép. Mở app {typeInfo.label} và dán thông tin để thanh toán.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* QR Code */}
+        {vietqrImageUrl ? (
+          <View style={styles.section}>
+            <View style={styles.qrCard}>
+              <Text style={styles.qrCardTitle}>Quét mã để thanh toán</Text>
               <Image
                 source={{ uri: vietqrImageUrl }}
                 style={styles.qrImage}
                 resizeMode="contain"
               />
-            ) : paymentMethod?.qr_image ? (
-              <Image
-                source={{ uri: paymentMethod.qr_image }}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={styles.qrPlaceholder}>
-                {typeInfo.icon}
-                <Text style={[styles.qrPlaceholderText, { color: typeInfo.color }]}>
-                  QR thanh toán
-                </Text>
-                <Text style={styles.qrSubtext}>Quét mã để thanh toán</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Bank Info Card (for bank_transfer) */}
-        {paymentMethod?.type === 'bank_transfer' && (
-          <View style={styles.section}>
-            <View style={styles.bankCard}>
-              <Text style={styles.bankCardTitle}>Thông tin tài khoản</Text>
-
-              {paymentMethod.bank_name && (
-                <InfoRow label="Ngân hàng" value={paymentMethod.bank_name} />
+              {paymentMethod?.type === 'bank_transfer' && (
+                <Text style={styles.qrHint}>Hoặc mở app ngân hàng và quét mã này</Text>
               )}
-              {paymentMethod.account_name && (
-                <InfoRow label="Chủ tài khoản" value={paymentMethod.account_name} />
-              )}
-              {paymentMethod.account_number && (
-                <InfoRow
-                  label="Số tài khoản"
-                  value={paymentMethod.account_number}
-                  copyable
-                  copied={copiedField === 'account'}
-                  onCopy={() => handleCopy(paymentMethod.account_number!, 'account')}
-                />
-              )}
-              <InfoRow
-                label="Nội dung CK"
-                value={transferContent}
-                copyable
-                copied={copiedField === 'content'}
-                onCopy={() => handleCopy(transferContent, 'content')}
-                highlight
-              />
             </View>
           </View>
-        )}
+        ) : null}
 
-        {/* Action Buttons */}
+        {/* Transfer details */}
         <View style={styles.section}>
-          <View style={styles.actionGrid}>
-            {/* Bank app button */}
-            {paymentMethod?.type === 'bank_transfer' && (
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={handleOpenBankApp}>
-                <ExternalLink size={20} color={COLORS.primary} />
-                <Text style={styles.actionBtnText}>Mở app ngân hàng bất kỳ</Text>
-              </TouchableOpacity>
-            )}
+          <View style={styles.detailCard}>
+            <Text style={styles.detailCardTitle}>Thông tin chuyển khoản</Text>
 
-            {/* Copy account number */}
-            {paymentMethod?.account_number && (
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => handleCopy(paymentMethod.account_number!, 'account')}>
-                {copiedField === 'account' ? (
-                  <CheckCheck size={20} color={COLORS.success} />
-                ) : (
-                  <Copy size={20} color={COLORS.primary} />
-                )}
-                <Text style={styles.actionBtnText}>Sao chép{'\n'}STK</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Copy transfer content */}
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => handleCopy(transferContent, 'content')}>
-              {copiedField === 'content' ? (
-                <CheckCheck size={20} color={COLORS.success} />
-              ) : (
-                <Copy size={20} color={COLORS.primary} />
-              )}
-              <Text style={styles.actionBtnText}>Sao chép{'\n'}nội dung CK</Text>
-            </TouchableOpacity>
-
-            {/* Download QR */}
-            {paymentMethod?.qr_image && (
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => Linking.openURL(paymentMethod.qr_image!)}>
-                <Download size={20} color={COLORS.primary} />
-                <Text style={styles.actionBtnText}>Tải mã{'\n'}QR</Text>
-              </TouchableOpacity>
-            )}
+            {paymentMethod?.bank_name ? (
+              <DetailRow label="Ngân hàng" value={paymentMethod.bank_name} />
+            ) : null}
+            {accountName ? (
+              <DetailRow label="Chủ tài khoản" value={accountName} />
+            ) : null}
+            {accountNo ? (
+              <DetailRow
+                label="Số tài khoản"
+                value={accountNo}
+                copyable
+                copied={copiedField === 'account'}
+                onCopy={() => handleCopy(accountNo, 'account')}
+              />
+            ) : null}
+            <DetailRow
+              label="Số tiền"
+              value={formatVND(orderAmount)}
+              highlight
+            />
+            <DetailRow
+              label="Nội dung CK"
+              value={transferContent}
+              copyable
+              copied={copiedField === 'content'}
+              onCopy={() => handleCopy(transferContent, 'content')}
+              highlight
+              mono
+            />
           </View>
         </View>
 
         {/* Instructions */}
         <View style={styles.section}>
           <View style={styles.noteBox}>
-            <Text style={styles.noteTitle}>Hướng dẫn thanh toán</Text>
-            {paymentMethod?.type === 'bank_transfer' ? (
-              <Text style={styles.noteText}>
-                1. Mở app ngân hàng bất kỳ và quét mã QR{'\n'}
-                2. Nhập số tài khoản và số tiền chính xác{'\n'}
-                3. Nhập đúng nội dung chuyển khoản{'\n'}
-                4. Xác nhận và hoàn tất chuyển khoản{'\n'}
-                5. Quay lại đây và nhấn "Tôi đã chuyển khoản"
-              </Text>
-            ) : (
-              <Text style={styles.noteText}>
-                1. Mở app {paymentMethod?.title}{'\n'}
-                2. Quét mã QR bên trên{'\n'}
-                3. Xác nhận số tiền và thanh toán{'\n'}
-                4. Quay lại đây và nhấn "Tôi đã chuyển khoản"
-              </Text>
-            )}
+            <Text style={styles.noteTitle}>📋 Hướng dẫn</Text>
+            <Text style={styles.noteText}>
+              1. Bấm <Text style={styles.noteBold}>"Chuyển khoản ngay"</Text> → thông tin tự động sao chép{'\n'}
+              2. Mở app ngân hàng, dán thông tin hoặc quét mã QR{'\n'}
+              3. Kiểm tra <Text style={styles.noteBold}>số tiền</Text> và <Text style={styles.noteBold}>nội dung CK</Text> chính xác{'\n'}
+              4. Xác nhận chuyển khoản{'\n'}
+              5. Quay lại đây → bấm <Text style={styles.noteBold}>"Tôi đã chuyển khoản"</Text>
+            </Text>
           </View>
         </View>
 
-        {/* Confirm Transfer Button */}
+        {/* Confirm button */}
         <View style={styles.section}>
           <TouchableOpacity
             style={[styles.confirmBtn, confirming && styles.confirmBtnDisabled]}
@@ -435,8 +443,6 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
             <Text style={styles.laterBtnText}>Để sau, xem đơn hàng</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={{ height: 60 }} />
       </ScrollView>
 
       {/* Confirmation Modal */}
@@ -446,10 +452,10 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
             <Send size={40} color={COLORS.primary} />
             <Text style={styles.modalTitle}>Xác nhận thanh toán</Text>
             <Text style={styles.modalText}>
-              Bạn đã chuyển khoản đúng số tiền{'\n'}
-              <Text style={styles.modalAmount}>{formatVND(order.total)}</Text>
-              {'\n'}và nội dung{'\n'}
-              <Text style={styles.modalContent}>{transferContent}</Text>
+              Bạn đã chuyển khoản đúng số tiền{' '}
+              <Text style={styles.modalHighlight}>{formatVND(orderAmount)}</Text>
+              {'\n'}với nội dung{' '}
+              <Text style={styles.modalHighlight}>{transferContent}</Text>
               {'\n'}chưa?
             </Text>
 
@@ -469,160 +475,18 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
           </View>
         </View>
       </Modal>
-
-      {/* Bank QR Fallback Modal */}
-      <Modal visible={showBankModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.bankModalCard}>
-            <Text style={styles.bankModalTitle}>Mở app ngân hàng của bạn</Text>
-            <Text style={styles.bankModalSubtext}>
-              Vui lòng mở app {selectedBankName || 'ngân hàng'}, chọn Quét QR và quét mã bên dưới để thanh toán.
-            </Text>
-
-            {/* QR in modal */}
-            <View style={styles.bankModalQrWrap}>
-              {paymentMethod?.type === 'bank_transfer' && vietqrImageUrl ? (
-                <Image
-                  source={{ uri: vietqrImageUrl }}
-                  style={styles.bankModalQr}
-                  resizeMode="contain"
-                />
-              ) : (
-                <View style={[styles.qrPlaceholder, { width: 180, height: 180 }]}>
-                  {typeInfo.icon}
-                  <Text style={[styles.qrPlaceholderText, { color: typeInfo.color }]}>
-                    QR thanh toán
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Amount */}
-            <Text style={styles.bankModalAmount}>{formatVND(order.total)}</Text>
-
-            {/* Info rows */}
-            <View style={styles.bankModalInfo}>
-              {paymentMethod?.account_number && (
-                <View style={styles.bankModalRow}>
-                  <Text style={styles.bankModalLabel}>Số tài khoản</Text>
-                  <Text style={styles.bankModalValue} selectable>{paymentMethod.account_number}</Text>
-                </View>
-              )}
-              <View style={styles.bankModalRow}>
-                <Text style={styles.bankModalLabel}>Nội dung CK</Text>
-                <Text style={[styles.bankModalValue, styles.bankModalHighlight]} selectable>
-                  {transferContent}
-                </Text>
-              </View>
-            </View>
-
-            {/* Action buttons in modal */}
-            <View style={styles.bankModalActions}>
-              {paymentMethod?.account_number && (
-                <TouchableOpacity
-                  style={styles.bankModalActionBtn}
-                  onPress={() => handleCopy(paymentMethod.account_number!, 'account')}>
-                  {copiedField === 'account' ? (
-                    <CheckCheck size={18} color={COLORS.success} />
-                  ) : (
-                    <Copy size={18} color={COLORS.primary} />
-                  )}
-                  <Text style={styles.bankModalActionText}>Sao chép STK</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.bankModalActionBtn}
-                onPress={() => handleCopy(transferContent, 'content')}>
-                {copiedField === 'content' ? (
-                  <CheckCheck size={18} color={COLORS.success} />
-                ) : (
-                  <Copy size={18} color={COLORS.primary} />
-                )}
-                <Text style={styles.bankModalActionText}>Sao chép nội dung CK</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={styles.bankModalCloseBtn}
-              onPress={() => setShowBankModal(false)}>
-              <Text style={styles.bankModalCloseText}>Đóng</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Bank List Modal */}
-      <Modal visible={showBankListModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.bankListCard}>
-            {/* Header */}
-            <View style={styles.bankListHeader}>
-              <Text style={styles.bankListTitle}>Chọn ngân hàng của bạn</Text>
-              <TouchableOpacity onPress={() => { setShowBankListModal(false); setBankSearch(''); }}>
-                <X size={24} color={COLORS.mediumText} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Search */}
-            <View style={styles.bankSearchWrap}>
-              <Search size={18} color={COLORS.lightText} />
-              <TextInput
-                style={styles.bankSearchInput}
-                placeholder="Tìm ngân hàng..."
-                placeholderTextColor={COLORS.lightText}
-                value={bankSearch}
-                onChangeText={setBankSearch}
-                autoFocus
-              />
-            </View>
-
-            {/* Bank list */}
-            <ScrollView style={styles.bankScroll} showsVerticalScrollIndicator={false}>
-              {BANK_LIST.filter(
-                (b) =>
-                  !bankSearch ||
-                  b.name.toLowerCase().includes(bankSearch.toLowerCase()) ||
-                  b.shortName.toLowerCase().includes(bankSearch.toLowerCase()),
-              ).map((bank) => (
-                <TouchableOpacity
-                  key={bank.bin}
-                  style={styles.bankListItem}
-                  onPress={() => handleSelectBank(bank)}
-                  activeOpacity={0.6}>
-                  <View style={styles.bankListIcon}>
-                    <Building2 size={22} color={COLORS.primary} />
-                  </View>
-                  <View style={styles.bankListInfo}>
-                    <Text style={styles.bankListName}>{bank.name}</Text>
-                    <Text style={styles.bankListShort}>{bank.shortName}</Text>
-                  </View>
-                  <ExternalLink size={16} color={COLORS.lightText} />
-                </TouchableOpacity>
-              ))}
-              </ScrollView>
-
-              {/* Note */}
-              <View style={styles.bankListNote}>
-              <Text style={styles.bankListNoteText}>
-                Một số ngân hàng có thể không hỗ trợ mở trực tiếp từ trình duyệt. Bạn vẫn có thể mở app ngân hàng và quét QR để thanh toán.
-              </Text>
-              </View>
-              </View>
-              </View>
-              </Modal>
-      </SafeAreaView>
+    </SafeAreaView>
   );
 }
 
-// ── Sub-components ──
-
-function InfoRow({
+function DetailRow({
   label,
   value,
   copyable,
   copied,
   onCopy,
   highlight,
+  mono,
 }: {
   label: string;
   value: string;
@@ -630,18 +494,23 @@ function InfoRow({
   copied?: boolean;
   onCopy?: () => void;
   highlight?: boolean;
+  mono?: boolean;
 }) {
   return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <View style={styles.infoValueRow}>
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <View style={styles.detailValueRow}>
         <Text
-          style={[styles.infoValue, highlight && styles.infoValueHighlight]}
+          style={[
+            styles.detailValue,
+            highlight && styles.detailValueHighlight,
+            mono && styles.detailValueMono,
+          ]}
           selectable>
           {value}
         </Text>
         {copyable && onCopy && (
-          <TouchableOpacity onPress={onCopy} style={styles.copyBtn}>
+          <TouchableOpacity onPress={onCopy} style={styles.copyBtn} hitSlop={8}>
             {copied ? (
               <CheckCheck size={16} color={COLORS.success} />
             ) : (
@@ -653,8 +522,6 @@ function InfoRow({
     </View>
   );
 }
-
-// ── Styles ──
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.cream },
@@ -673,13 +540,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xxl,
     paddingVertical: 14,
   },
-  backBtnLargeText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.white,
-  },
+  backBtnLargeText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
 
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -699,144 +561,116 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
   section: { paddingHorizontal: SPACING.lg, marginBottom: SPACING.md },
 
-  // Code card
-  codeCard: {
+  // Info card
+  infoCard: {
     backgroundColor: COLORS.warmBrown,
     borderRadius: 16,
     padding: SPACING.lg,
     alignItems: 'center',
     ...SHADOWS.medium,
   },
-  codeLabel: { fontSize: 12, color: COLORS.soft, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-  codeValue: { fontSize: 22, color: COLORS.white, fontWeight: '800', marginTop: SPACING.xs },
-
-  // Amount card
-  amountCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: SPACING.xl,
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  amountLabel: { fontSize: 13, color: COLORS.mediumText, fontWeight: '600' },
-  amountValue: { fontSize: 36, fontWeight: '900', color: COLORS.primary, marginTop: SPACING.xs, fontStyle: 'italic' },
+  infoCardLabel: { fontSize: 11, color: COLORS.soft, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  infoCardCode: { fontSize: 20, color: COLORS.white, fontWeight: '800', marginTop: 2 },
+  infoCardAmountRow: { marginTop: SPACING.md, alignItems: 'center' },
+  infoCardAmountLabel: { fontSize: 11, color: COLORS.soft, fontWeight: '600' },
+  infoCardAmount: { fontSize: 32, fontWeight: '900', color: COLORS.white, fontStyle: 'italic' },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
     borderRadius: 20,
     marginTop: SPACING.md,
   },
-  typeBadgeText: { fontSize: 14, fontWeight: '700' },
+  typeBadgeText: { fontSize: 13, fontWeight: '700' },
 
-  // QR card
+  // Transfer button
+  transferBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.success,
+    borderRadius: 20,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+    ...SHADOWS.medium,
+  },
+  transferBtnContent: { flex: 1 },
+  transferBtnTitle: { fontSize: 18, fontWeight: '900', fontStyle: 'italic', color: COLORS.white },
+  transferBtnSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
+  copiedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: '#F0FFF4',
+    borderRadius: 12,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.success,
+  },
+  copiedBannerText: { fontSize: 13, color: '#2D6A2E', flex: 1, lineHeight: 18 },
+
+  // QR
   qrCard: {
     backgroundColor: COLORS.white,
     borderRadius: 20,
-    padding: SPACING.xxl,
+    padding: SPACING.xl,
     alignItems: 'center',
-    ...SHADOWS.medium,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    ...SHADOWS.small,
   },
-  qrImage: {
-    width: 220,
-    height: 220,
-    borderRadius: 16,
-  },
-  qrPlaceholder: {
-    width: 200,
-    height: 200,
-    borderRadius: 16,
-    backgroundColor: COLORS.softBeige,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-    gap: SPACING.xs,
-  },
-  qrPlaceholderText: { fontSize: 16, fontWeight: '700' },
-  qrSubtext: { fontSize: 12, color: COLORS.mediumText, textAlign: 'center' },
+  qrCardTitle: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: SPACING.md },
+  qrImage: { width: 200, height: 200, borderRadius: 12 },
+  qrHint: { fontSize: 12, color: COLORS.lightText, marginTop: SPACING.md, textAlign: 'center' },
 
-  // Bank card
-  bankCard: {
+  // Detail card
+  detailCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: SPACING.lg,
     ...SHADOWS.small,
-    gap: SPACING.xs,
   },
-  bankCardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.darkText,
-    marginBottom: SPACING.sm,
-  },
-  infoRow: {
+  detailCardTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: SPACING.md },
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
+    paddingVertical: SPACING.xs + 2,
   },
-  infoLabel: { fontSize: 13, color: COLORS.mediumText, fontWeight: '600' },
-  infoValueRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
-  infoValue: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
-  infoValueHighlight: {
+  detailLabel: { fontSize: 13, color: COLORS.mediumText, fontWeight: '600' },
+  detailValueRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, flexShrink: 1 },
+  detailValue: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+  detailValueHighlight: {
     color: COLORS.primary,
-    fontSize: 15,
+    fontWeight: '800',
+  },
+  detailValueMono: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
     backgroundColor: COLORS.softBeige,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
   },
   copyBtn: { padding: 4 },
 
-  // Action grid
-  actionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-  },
-  actionBtn: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: SPACING.md,
-    alignItems: 'center',
-    gap: SPACING.xs,
-    ...SHADOWS.small,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  actionBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.darkText,
-    textAlign: 'center',
-  },
-
-  // Note box
+  // Note
   noteBox: {
     backgroundColor: COLORS.lightPurple,
     borderRadius: 14,
     padding: SPACING.lg,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.primary,
   },
-  noteTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary, marginBottom: SPACING.sm },
+  noteTitle: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: SPACING.sm },
   noteText: { fontSize: 13, color: COLORS.mediumText, lineHeight: 22 },
+  noteBold: { fontWeight: '700', color: COLORS.primary },
 
-  // Confirm button
+  // Confirm
   confirmBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    backgroundColor: COLORS.success,
+    backgroundColor: COLORS.primary,
     borderRadius: 20,
     paddingVertical: 18,
     ...SHADOWS.medium,
@@ -868,14 +702,8 @@ const styles = StyleSheet.create({
     ...SHADOWS.large,
   },
   modalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
-  modalText: {
-    fontSize: 15,
-    color: COLORS.mediumText,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  modalAmount: { fontWeight: '800', color: COLORS.primary, fontSize: 18 },
-  modalContent: { fontWeight: '700', color: COLORS.primary, backgroundColor: COLORS.softBeige, paddingHorizontal: 8, borderRadius: 4 },
+  modalText: { fontSize: 15, color: COLORS.mediumText, textAlign: 'center', lineHeight: 24 },
+  modalHighlight: { fontWeight: '800', color: COLORS.primary },
   modalConfirmBtn: {
     backgroundColor: COLORS.success,
     borderRadius: 16,
@@ -885,144 +713,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.medium,
   },
-  modalConfirmBtnText: {
-    fontSize: 16,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: COLORS.white,
-  },
-  modalCancelBtn: {
-    paddingVertical: SPACING.sm,
-    width: '100%',
-    alignItems: 'center',
-  },
+  modalConfirmBtnText: { fontSize: 16, fontWeight: '900', fontStyle: 'italic', color: COLORS.white },
+  modalCancelBtn: { paddingVertical: SPACING.sm, width: '100%', alignItems: 'center' },
   modalCancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.mediumText },
 
-  // Bank QR modal
-  bankModalCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
-    padding: SPACING.xl,
-    alignItems: 'center',
-    gap: SPACING.md,
-    width: '100%',
-    maxHeight: '90%',
-    ...SHADOWS.large,
-  },
-  bankModalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText, textAlign: 'center' },
-  bankModalSubtext: { fontSize: 13, color: COLORS.mediumText, textAlign: 'center', lineHeight: 20 },
-  bankModalQrWrap: { alignItems: 'center', marginVertical: SPACING.sm },
-  bankModalQr: { width: 200, height: 200, borderRadius: 16 },
-  bankModalAmount: { fontSize: 28, fontWeight: '900', fontStyle: 'italic', color: COLORS.primary },
-  bankModalInfo: {
-    width: '100%',
-    backgroundColor: COLORS.cream,
-    borderRadius: 14,
-    padding: SPACING.md,
-    gap: SPACING.sm,
-  },
-  bankModalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  bankModalLabel: { fontSize: 13, color: COLORS.mediumText, fontWeight: '600' },
-  bankModalValue: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
-  bankModalHighlight: {
-    color: COLORS.primary,
-    backgroundColor: COLORS.softBeige,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  bankModalActions: { flexDirection: 'row', gap: SPACING.sm, width: '100%' },
-  bankModalActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.xs,
-    backgroundColor: COLORS.cream,
-    borderRadius: 12,
-    paddingVertical: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  bankModalActionText: { fontSize: 13, fontWeight: '700', color: COLORS.darkText },
-  bankModalCloseBtn: {
-    width: '100%',
-    backgroundColor: COLORS.primary,
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: SPACING.sm,
-  },
-  bankModalCloseText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
-
-  // Bank list modal
-  bankListCard: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: SPACING.xl,
-    maxHeight: '85%',
-    width: '100%',
-  },
-  bankListHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  bankListTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
-  bankSearchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.cream,
-    borderRadius: 12,
-    paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
-    gap: SPACING.sm,
-  },
-  bankSearchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: COLORS.darkText,
-    paddingVertical: SPACING.sm,
-  },
-  bankScroll: { maxHeight: 400 },
-  bankListItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    gap: SPACING.md,
-  },
-  bankListIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: COLORS.softBeige,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bankListInfo: { flex: 1 },
-  bankListName: { fontSize: 15, fontWeight: '700', color: COLORS.darkText },
-  bankListShort: { fontSize: 12, color: COLORS.lightText, marginTop: 2 },
-  bankListNote: {
-    marginTop: SPACING.md,
-    backgroundColor: COLORS.lightPurple,
-    borderRadius: 10,
-    padding: SPACING.md,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
-  },
-  bankListNoteText: { fontSize: 12, color: COLORS.mediumText, lineHeight: 18 },
-
-  // Confirmed state
-  confirmedScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
-  },
+  // Confirmed
+  confirmedScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACING.lg },
   confirmedCard: {
     backgroundColor: COLORS.white,
     borderRadius: 24,
