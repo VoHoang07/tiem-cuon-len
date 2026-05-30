@@ -28,17 +28,25 @@ export function AddressProvider({ children }: { children: ReactNode }) {
   const [addresses, setAddresses] = useState<Address[]>([]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !user.id) {
       setAddresses([]);
       return;
     }
-    supabase
-      .from('addresses')
-      .select('*')
-      .eq('userId', user.id)
-      .then(({ data, error }) => {
+
+    const loadAddresses = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('addresses')
+          .select('*')
+          .eq('userId', user.id);
+
         if (!error && data) setAddresses(data as Address[]);
-      });
+      } catch {
+        // Silent fail - no addresses loaded
+      }
+    };
+
+    loadAddresses();
   }, [user]);
 
   const userAddresses = addresses;
@@ -58,23 +66,26 @@ export function AddressProvider({ children }: { children: ReactNode }) {
 
     const newAddress: Address = { ...address, id: `addr_${Date.now()}` };
     setAddresses((prev) => [...prev, newAddress]);
+
     supabase.from('addresses').insert(newAddress).then(({ error }) => {
-      if (error) console.error('[SUPABASE] Lỗi thêm địa chỉ:', error.message);
+      if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm địa chỉ:', error.message);
     });
     return true;
   }, [addresses]);
 
   const updateAddress = useCallback((id: string, data: Partial<Address>) => {
     setAddresses((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+
     supabase.from('addresses').update(data).eq('id', id).then(({ error }) => {
-      if (error) console.error('[SUPABASE] Lỗi sửa địa chỉ:', error.message);
+      if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa địa chỉ:', error.message);
     });
   }, []);
 
   const removeAddress = useCallback((id: string) => {
     setAddresses((prev) => prev.filter((a) => a.id !== id));
+
     supabase.from('addresses').delete().eq('id', id).then(({ error }) => {
-      if (error) console.error('[SUPABASE] Lỗi xoá địa chỉ:', error.message);
+      if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá địa chỉ:', error.message);
     });
   }, []);
 
@@ -82,9 +93,14 @@ export function AddressProvider({ children }: { children: ReactNode }) {
     setAddresses((prev) =>
       prev.map((a) => ({ ...a, isDefault: a.id === id }))
     );
-    // Update in Supabase
-    supabase.from('addresses').update({ isDefault: false }).neq('id', id).eq('userId', user?.id ?? '').then(() => {});
-    supabase.from('addresses').update({ isDefault: true }).eq('id', id).then(() => {});
+
+    const userId = user?.id ?? '';
+    supabase.from('addresses').update({ isDefault: false }).neq('id', id).eq('userId', userId).then(({ error }) => {
+      if (error && __DEV__) console.error('[SUPABASE] Lỗi reset default địa chỉ:', error.message);
+    });
+    supabase.from('addresses').update({ isDefault: true }).eq('id', id).then(({ error }) => {
+      if (error && __DEV__) console.error('[SUPABASE] Lỗi set default địa chỉ:', error.message);
+    });
   }, [user]);
 
   const getDefaultAddress = useCallback(
@@ -101,7 +117,9 @@ export function AddressProvider({ children }: { children: ReactNode }) {
         const key = `${addr.userId}::${addr.fullName}::${addr.phone}::${addr.city}::${addr.district}::${addr.ward}::${addr.detailAddress}`;
         if (seen.has(key)) {
           removedCount++;
-          supabase.from('addresses').delete().eq('id', addr.id).then(() => {});
+          supabase.from('addresses').delete().eq('id', addr.id).then(({ error }) => {
+            if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá địa chỉ trùng:', error.message);
+          }, () => {});
           continue;
         }
         seen.set(key, addr);

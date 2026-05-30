@@ -77,10 +77,11 @@ export default function HomeScreen() {
     [products]
   );
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  };
+    await refetchCartFavorites();
+    setRefreshing(false);
+  }, [refetchCartFavorites]);
 
   if (isLoading) {
     return (

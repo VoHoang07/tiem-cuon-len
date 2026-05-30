@@ -49,8 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(toAuthUser(session));
       setIsLoading(false);
-    }).catch(() => {
-      // Token cũ/hết hạn – coi như chưa đăng nhập
+    }).catch((err) => {
+      if (__DEV__) console.error('[AUTH] Lỗi getSession:', err);
       setUser(null);
       setIsLoading(false);
     });

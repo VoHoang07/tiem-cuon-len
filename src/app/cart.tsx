@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
   Minus,
@@ -37,6 +37,7 @@ import {
 
 export default function CartScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart, cartHydrated } =
     useShop();
 
@@ -174,7 +175,7 @@ export default function CartScreen() {
 
       {/* Checkout Bar */}
       {cart.length > 0 && (
-        <View style={styles.checkoutBar}>
+        <View style={[styles.checkoutBar, { paddingBottom: SPACING.lg + Math.max(insets.bottom, 0) }]}>
           <View>
             <Text style={styles.totalText}>{CHECKOUT_TOTAL}</Text>
             <Text style={styles.totalAmount}>{formatVND(cartTotal)}</Text>
@@ -397,7 +398,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(0,0,0,0.06)',
     ...SHADOWS.large,
   },
   totalText: {

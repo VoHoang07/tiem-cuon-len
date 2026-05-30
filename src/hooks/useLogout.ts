@@ -13,7 +13,7 @@ export function useLogout() {
       router.replace('/login');
     };
 
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
       // window.confirm hoạt động ổn định trên web hơn Alert.alert
       if (window.confirm(PROF_LOGOUT_CONFIRM)) {
         performLogout();

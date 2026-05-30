@@ -40,7 +40,7 @@ export default function OrdersScreen() {
       const confirmed = window.confirm('Bạn có chắc muốn xoá đơn hàng này không?');
       if (!confirmed) return;
       deleteOrder(order.id).catch((err) => {
-        console.error('[DELETE FAILED]', err);
+        if (__DEV__) console.error('[DELETE FAILED]', err);
         Alert.alert('Lỗi', 'Không thể xoá đơn hàng. Vui lòng thử lại.');
       });
     } else {
@@ -54,7 +54,7 @@ export default function OrdersScreen() {
             style: 'destructive',
             onPress: () => {
               deleteOrder(order.id).catch((err) => {
-                console.error('[DELETE FAILED]', err);
+                if (__DEV__) console.error('[DELETE FAILED]', err);
                 Alert.alert('Lỗi', 'Không thể xoá đơn hàng. Vui lòng thử lại.');
               });
             },

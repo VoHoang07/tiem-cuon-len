@@ -1,4 +1,4 @@
-import { Category, Product } from '@/types/product';
+import { Category } from '@/types/product';
 import {
   GEN_CATEGORY_INTRO,
   GEN_ADJECTIVES,
@@ -14,14 +14,6 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   Accessories: ['scarf', 'shoe', 'hook', 'needle', 'hat', 'glove', 'sock'],
 };
 
-const ADJECTIVES = GEN_ADJECTIVES;
-
-const MATERIAL_PHRASES: Record<string, string> = GEN_MATERIAL_PHRASES;
-
-const CATEGORY_INTRO: Record<string, string> = GEN_CATEGORY_INTRO;
-
-const CLOSING_PHRASES = GEN_CLOSING_PHRASES;
-
 export function inferCategory(name: string): Category {
   const lower = name.toLowerCase();
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
@@ -34,12 +26,12 @@ export function inferCategory(name: string): Category {
 
 function getMaterialPhrase(material: string): string {
   return (
-    MATERIAL_PHRASES[material] ||
+    GEN_MATERIAL_PHRASES[material] ||
     `${material.toLowerCase()} chất lượng cao, tạo cảm giác thủ công ấm áp`
   );
 }
 
-function pickRandom<T>(arr: T[]): T {
+function pickRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
@@ -51,10 +43,10 @@ export function generateProductDescription(product: {
   tags: string[];
 }): string {
   const categoryIntro =
-    CATEGORY_INTRO[product.category] || 'This handmade crochet creation';
-  const adjective = pickRandom(ADJECTIVES);
+    GEN_CATEGORY_INTRO[product.category] || 'This handmade crochet creation';
+  const adjective = pickRandom(GEN_ADJECTIVES);
   const materialPhrase = getMaterialPhrase(product.material);
-  const closing = pickRandom(CLOSING_PHRASES);
+  const closing = pickRandom(GEN_CLOSING_PHRASES);
 
   const colorPhrase = product.color.toLowerCase().includes('multicolor')
     ? 'với tông màu đa sắc tươi vui'

@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet } from 'react-native';
+import { View, Animated, StyleSheet, type ViewStyle, type DimensionValue } from 'react-native';
 import { COLORS } from '@/constants/theme';
 
 interface SkeletonProps {
-  width?: number | string;
+  width?: DimensionValue;
   height?: number;
   borderRadius?: number;
-  style?: any;
+  style?: ViewStyle;
 }
 
 export function Skeleton({ width = '100%', height = 20, borderRadius = 8, style }: SkeletonProps) {
@@ -35,7 +35,7 @@ export function Skeleton({ width = '100%', height = 20, borderRadius = 8, style 
     <Animated.View
       style={[
         {
-          width: width as any,
+          width,
           height,
           borderRadius,
           backgroundColor: COLORS.border,
@@ -119,8 +119,8 @@ export function HomeSkeleton() {
 
 const styles = StyleSheet.create({
   productCard: {
-    width: 160,
-    marginRight: 12,
+    width: '47%',
+    marginRight: '3%',
     marginBottom: 16,
   },
   cardInfo: {

@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { type ComponentType } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -29,11 +29,15 @@ export default function SettingsScreen() {
   const { role, logout } = useAuth();
   const isAdmin = role === 'admin';
 
+  const comingSoon = () => {
+    Alert.alert('Tính năng đang phát triển', 'Vui lòng quay lại sau.');
+  };
+
   const sharedItems = [
     { icon: User, label: 'Chỉnh sửa Profile', onPress: () => router.push('/profile/edit') },
     { icon: Bell, label: 'Thông báo', value: 'Bật' },
     { icon: Globe, label: 'Ngôn ngữ', value: 'Tiếng Việt' },
-    { icon: Lock, label: 'Đổi mật khẩu', onPress: () => {} },
+    { icon: Lock, label: 'Đổi mật khẩu', onPress: comingSoon },
     { icon: Shield, label: 'Quyền riêng tư & bảo mật', onPress: () => router.push('/privacy') },
   ];
 
@@ -43,12 +47,12 @@ export default function SettingsScreen() {
   ];
 
   const adminItems = [
-    { icon: Store, label: 'Hồ sơ cửa hàng', onPress: () => {} },
+    { icon: Store, label: 'Hồ sơ cửa hàng', onPress: comingSoon },
     { icon: CreditCard, label: 'Phương thức thanh toán', onPress: () => router.push('/payment-methods') },
-    { icon: ClipboardList, label: 'Cài đặt trạng thái đơn hàng', onPress: () => {} },
-    { icon: Tag, label: 'Danh mục sản phẩm', onPress: () => {} },
-    { icon: Megaphone, label: 'Thông báo kinh doanh', onPress: () => {} },
-    { icon: FileText, label: 'Chính sách cửa hàng', onPress: () => {} },
+    { icon: ClipboardList, label: 'Cài đặt trạng thái đơn hàng', onPress: comingSoon },
+    { icon: Tag, label: 'Danh mục sản phẩm', onPress: comingSoon },
+    { icon: Megaphone, label: 'Thông báo kinh doanh', onPress: comingSoon },
+    { icon: FileText, label: 'Chính sách cửa hàng', onPress: comingSoon },
   ];
 
   return (
@@ -91,7 +95,14 @@ export default function SettingsScreen() {
   );
 }
 
-function Section({ title, items }: { title: string; items: any[] }) {
+interface SettingItem {
+  icon: ComponentType<{ size?: number; color?: string }>;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+}
+
+function Section({ title, items }: { title: string; items: SettingItem[] }) {
   return (
     <View style={styles.menuSection}>
       <Text style={styles.sectionHeader}>{title}</Text>
@@ -116,7 +127,7 @@ function SettingRow({
   onPress,
   isLast,
 }: {
-  icon: any;
+  icon: ComponentType<{ size?: number; color?: string }>;
   label: string;
   value?: string;
   onPress?: () => void;

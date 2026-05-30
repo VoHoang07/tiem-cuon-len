@@ -40,12 +40,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
     backgroundColor: COLORS.white,
     borderWidth: 0.5,
     borderColor: COLORS.border,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   chipSelected: {
     backgroundColor: COLORS.primary,

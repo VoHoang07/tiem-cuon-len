@@ -177,8 +177,8 @@ export default function CheckoutScreen() {
           <Text style={styles.viewOrdersBtnText}>Xem đơn hàng</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
-          <Text style={styles.homeBtnText}>Về Home</Text>
+        <TouchableOpacity style={styles.goHomeBtn} onPress={() => router.replace('/')}>
+          <Text style={styles.goHomeBtnText}>Về Home</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -205,7 +205,7 @@ export default function CheckoutScreen() {
             <TouchableOpacity
               onPress={() => {
                 if (router.canGoBack()) router.back();
-                else router.replace('/(tabs)');
+                else router.replace('/');
               }}
               style={styles.backBtn}>
               <ChevronLeft size={24} color={COLORS.darkText} />
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: COLORS.white,
   },
-  homeBtn: {
+  goHomeBtn: {
     borderRadius: 20,
     paddingHorizontal: SPACING.xxxl,
     paddingVertical: 14,
@@ -637,5 +637,5 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     alignItems: 'center',
   },
-  homeBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.primary },
+  goHomeBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.primary },
 });

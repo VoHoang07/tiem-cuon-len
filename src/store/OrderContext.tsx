@@ -48,18 +48,17 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [fetchOrders]);
 
   const addOrder = useCallback((order: Order) => {
-    console.log('[ORDER CREATED]', order);
     setOrders((prev) => [order, ...prev]);
     supabase.from('orders').insert(order).then(({ error }) => {
-      if (error) console.error('[SUPABASE] Lỗi tạo đơn:', error.message);
-    });
+      if (error && __DEV__) console.error('[SUPABASE] Lỗi tạo đơn:', error.message);
+    }, () => {});
   }, []);
 
   const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
     supabase.from('orders').update({ status }).eq('id', orderId).then(({ error }) => {
-      if (error) console.error('[SUPABASE] Lỗi cập nhật đơn:', error.message);
-    });
+      if (error && __DEV__) console.error('[SUPABASE] Lỗi cập nhật đơn:', error.message);
+    }, () => {});
   }, []);
 
   const getOrdersByUser = useCallback(
@@ -68,21 +67,16 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteOrder = useCallback(async (orderId: string) => {
-    console.log('DELETE ORDER', { id: orderId });
-
-    // Remove from local state immediately
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
 
     const { error } = await supabase.from('orders').delete().eq('id', orderId);
 
     if (error) {
-      console.error('[DELETE ERROR]', error);
-      await fetchOrders(); // restore if failed
+      if (__DEV__) console.error('[DELETE ERROR]', error);
+      await fetchOrders();
       throw error;
     }
-
-    console.log('[DELETE SUCCESS]', orderId);
-  }, [orders, fetchOrders]);
+  }, [fetchOrders]);
 
   return (
     <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, deleteOrder, getOrdersByUser, refetchOrders }}>

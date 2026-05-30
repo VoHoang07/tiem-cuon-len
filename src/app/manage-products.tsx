@@ -136,7 +136,7 @@ export default function ManageProductsScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteBtn}
-                    onPress={() => removeProduct(product.id)}>
+                    onPress={() => handleDelete(product)}>
                     <Trash2 size={18} color={COLORS.error} />
                   </TouchableOpacity>
                 </View>

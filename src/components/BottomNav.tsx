@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { useRouter, usePathname, type Href } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ShoppingCart,
   Heart,
@@ -25,6 +26,7 @@ export function BottomNav() {
   const pathname = usePathname();
   const { cartCount, favorites } = useShop();
   const { role } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const isAdmin = role === 'admin';
 
@@ -44,8 +46,18 @@ export function BottomNav() {
 
     const tabs = isAdmin ? adminTabs : customerTabs;
 
+    const handleTabPress = (route: string) => {
+      if (Platform.OS === 'web') {
+        router.push(route as Href);
+      } else {
+        router.replace(route as Href);
+      }
+    };
+
+    const tabPaddingBottom = Math.max(insets.bottom, SPACING.xs);
+
     return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: SPACING.sm + tabPaddingBottom }]}>
       <View style={styles.nav}>
         {tabs.map((tab) => {
           const { route, icon: Icon, label } = tab;
@@ -63,7 +75,8 @@ export function BottomNav() {
             <TouchableOpacity
               key={route}
               style={styles.tab}
-              onPress={() => router.replace(route as any)}>
+              onPress={() => handleTabPress(route)}
+              activeOpacity={0.6}>
               <Icon size={22} color={color} />
               {showBadge && (
                 <View style={styles.badge}>
@@ -84,7 +97,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderTopWidth: 0.5,
     borderTopColor: 'rgba(0,0,0,0.06)',
-    paddingBottom: SPACING.xl,
     paddingTop: 8,
   },
   nav: {
@@ -96,29 +108,31 @@ const styles = StyleSheet.create({
   tab: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    minWidth: 44,
+    minHeight: 44,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   tabText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '500',
     color: COLORS.lightText,
-    marginTop: 3,
+    marginTop: 4,
   },
   tabTextActive: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: COLORS.primary,
-    marginTop: 3,
+    marginTop: 4,
   },
   badge: {
     position: 'absolute',
-    top: -2,
-    right: -4,
+    top: 2,
+    right: 2,
     backgroundColor: COLORS.error,
-    borderRadius: 7,
-    minWidth: 14,
-    height: 14,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type ComponentType } from 'react';
 import {
   View,
   Text,
@@ -33,9 +33,6 @@ import { useOrders } from '@/store/OrderContext';
 import { useLogout } from '@/hooks/useLogout';
 import { BottomNav } from '@/components/BottomNav';
 import { BrandLogo } from '@/components/BrandLogo';
-
-const LOGO_IMAGE = require('../../assets/images/logo-shop.png');
-
 import {
   COLORS,
   SPACING,
@@ -63,6 +60,8 @@ import {
   PROF_CUSTOMER_CART_LABEL,
 } from '@/constants/strings';
 
+const LOGO_IMAGE = require('../../assets/images/logo-shop.png');
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { products, favorites, cart } = useShop();
@@ -70,7 +69,7 @@ export default function ProfileScreen() {
   const { orders, getOrdersByUser } = useOrders();
   const { handleLogout } = useLogout();
 
-  const userOrders = user ? getOrdersByUser(user.email) : [];
+  const userOrders = user ? getOrdersByUser(user.id) : [];
 
   const isAdmin = role === 'admin';
 
@@ -82,11 +81,11 @@ export default function ProfileScreen() {
     const avgOrderValue = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0;
 
     // Top selling product
-    const productSales: Record<string, { name: string; count: number }> = {};
+    const productSales: Record<string, { id: string; name: string; count: number }> = {};
     orders.forEach((o) => {
       o.items.forEach((item) => {
         if (!productSales[item.product.id]) {
-          productSales[item.product.id] = { name: item.product.name, count: 0 };
+          productSales[item.product.id] = { id: item.product.id, name: item.product.name, count: 0 };
         }
         productSales[item.product.id].count += item.quantity;
       });
@@ -159,7 +158,7 @@ export default function ProfileScreen() {
             {topProduct && (
               <TouchableOpacity
                 style={styles.topProductCard}
-                onPress={() => router.push(`/product/${topProduct.name}`)}
+                onPress={() => router.push(`/product/${topProduct.id}`)}
                 activeOpacity={0.7}>
                 <Text style={styles.topProductLabel}>Sản phẩm bán chạy nhất</Text>
                 <Text style={styles.topProductName}>{topProduct.name}</Text>
@@ -248,7 +247,7 @@ export default function ProfileScreen() {
   );
 }
 
-function MenuItem({ icon: Icon, label, onPress }: { icon: any; label: string; onPress?: () => void }) {
+function MenuItem({ icon: Icon, label, onPress }: { icon: ComponentType<{ size?: number; color?: string }>; label: string; onPress?: () => void }) {
   return (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuLeft}>

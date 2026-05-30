@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, type ComponentType } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Linking, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -143,7 +143,7 @@ export default function HelpScreen() {
   );
 }
 
-function ContactRow({ icon: Icon, label, value, link }: { icon: any; label: string; value: string; link?: string }) {
+function ContactRow({ icon: Icon, label, value, link }: { icon: ComponentType<{ size?: number; color?: string }>; label: string; value: string; link?: string }) {
   const handlePress = async () => {
     if (!link) return;
     try {
@@ -170,7 +170,7 @@ function ContactRow({ icon: Icon, label, value, link }: { icon: any; label: stri
   );
 }
 
-function GuideItem({ icon: Icon, label }: { icon: any; label: string }) {
+function GuideItem({ icon: Icon, label }: { icon: ComponentType<{ size?: number; color?: string }>; label: string }) {
   return (
     <View style={styles.guideItem}>
       <View style={styles.guideIcon}>

@@ -92,6 +92,30 @@ ALTER TABLE addresses ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "User quản lý địa chỉ của mình" ON addresses FOR ALL
   USING (auth.uid() = user_id);
 
--- 7. Storage bucket cho ảnh sản phẩm
+-- 7. Bảng payment_methods
+CREATE TABLE payment_methods (
+  id              TEXT PRIMARY KEY,
+  type            TEXT NOT NULL CHECK (type IN ('bank_transfer', 'momo', 'zalopay', 'cod')),
+  title           TEXT NOT NULL,
+  enabled         BOOLEAN NOT NULL DEFAULT true,
+  is_default      BOOLEAN NOT NULL DEFAULT false,
+  bank_name       TEXT,
+  account_name    TEXT,
+  account_number  TEXT,
+  qr_image        TEXT,
+  transfer_prefix TEXT,
+  phone_number    TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ
+);
+
+-- Admin toàn quyền quản lý, user chỉ đọc các method được bật
+ALTER TABLE payment_methods ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Ai cũng đọc được payment methods đã bật" ON payment_methods FOR SELECT
+  USING (enabled = true);
+CREATE POLICY "Admin quản lý payment methods" ON payment_methods FOR ALL
+  USING (auth.uid() IN (SELECT id FROM auth.users WHERE raw_user_meta_data->>'role' = 'admin'));
+
+-- 8. Storage bucket cho ảnh sản phẩm
 -- Vào Storage trong dashboard Supabase, tạo bucket tên "products"
 -- Chọn "Public bucket"

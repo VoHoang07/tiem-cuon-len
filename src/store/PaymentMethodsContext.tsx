@@ -39,7 +39,7 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       .order('created_at', { ascending: true });
 
     if (fetchError) {
-      console.error('[PAYMENT] Fetch error:', fetchError.message);
+      if (__DEV__) console.error('[PAYMENT] Fetch error:', fetchError.message);
       setError(fetchError.message);
       setMethods([]);
     } else if (data) {
@@ -64,7 +64,7 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       .single();
 
     if (insertError) {
-      console.error('[PAYMENT] Add error:', insertError.message);
+      if (__DEV__) console.error('[PAYMENT] Add error:', insertError.message);
       return;
     }
     if (data) setMethods((prev) => [...prev, data as PaymentMethod]);
@@ -79,7 +79,7 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       .eq('id', id);
 
     if (updateError) {
-      console.error('[PAYMENT] Update error:', updateError.message);
+      if (__DEV__) console.error('[PAYMENT] Update error:', updateError.message);
       return;
     }
     setMethods((prev) => prev.map((m) => (m.id === id ? { ...m, ...data } : m)));
@@ -92,7 +92,7 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       .eq('id', id);
 
     if (deleteError) {
-      console.error('[PAYMENT] Delete error:', deleteError.message);
+      if (__DEV__) console.error('[PAYMENT] Delete error:', deleteError.message);
       return;
     }
     setMethods((prev) => prev.filter((m) => m.id !== id));
@@ -112,7 +112,7 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       .eq('id', id);
 
     if (setDefaultError) {
-      console.error('[PAYMENT] Set default error:', setDefaultError.message);
+      if (__DEV__) console.error('[PAYMENT] Set default error:', setDefaultError.message);
       return;
     }
 

@@ -5,7 +5,7 @@ import {
   Image,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Heart } from 'lucide-react-native';
 import { Product } from '@/types/product';
@@ -13,9 +13,8 @@ import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
 import { formatVND } from '@/utils/formatCurrency';
 
-const { width } = Dimensions.get('window');
 const GAP = 10;
-const CARD_WIDTH = (width - SPACING.lg * 2 - GAP) / 2;
+const MAX_CARD_WIDTH = 200;
 
 interface ProductCardProps {
   product: Product;
@@ -24,22 +23,28 @@ interface ProductCardProps {
 
 export function ProductCard({ product, onPress }: ProductCardProps) {
   const { toggleFavorite, isFavorite } = useShop();
+  const { width: windowWidth } = useWindowDimensions();
   const fav = isFavorite(product.id);
+
+  const cardWidth = Math.min(
+    (windowWidth - SPACING.lg * 2 - GAP) / 2,
+    MAX_CARD_WIDTH,
+  );
 
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, { width: cardWidth }]}
       onPress={() => onPress(product)}
       activeOpacity={0.95}>
       <View style={styles.imageContainer}>
         {product.image ? (
           <Image
             source={{ uri: product.image }}
-            style={styles.productImage}
+            style={[styles.productImage, { height: cardWidth * 1.05 }]}
             resizeMode="cover"
           />
         ) : (
-          <View style={styles.imagePlaceholder}>
+          <View style={[styles.imagePlaceholder, { height: cardWidth * 1.05 }]}>
             <Text style={styles.imageEmoji}>
               {product.category === 'Bags'
                 ? '👜'
@@ -79,7 +84,6 @@ export function ProductCard({ product, onPress }: ProductCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    width: CARD_WIDTH,
     backgroundColor: COLORS.white,
     borderRadius: 14,
     marginBottom: GAP,
@@ -99,13 +103,11 @@ const styles = StyleSheet.create({
   },
   productImage: {
     width: '100%',
-    height: CARD_WIDTH * 1.05,
     borderTopLeftRadius: 14,
     borderTopRightRadius: 14,
   },
   imagePlaceholder: {
     width: '100%',
-    height: CARD_WIDTH * 1.05,
     backgroundColor: COLORS.lightPurple,
     borderTopLeftRadius: 14,
     borderTopRightRadius: 14,
