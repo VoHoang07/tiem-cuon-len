@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,7 +31,7 @@ import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { useLogout } from '@/hooks/useLogout';
 import { BottomNav } from '@/components/BottomNav';
-import { BrandLogo } from '@/components/BrandLogo';
+import { BrandAvatar } from '@/components/BrandTitle';
 import {
   COLORS,
   SPACING,
@@ -59,8 +58,6 @@ import {
   PROF_CUSTOMER_FAVORITES_LABEL,
   PROF_CUSTOMER_CART_LABEL,
 } from '@/constants/strings';
-
-const LOGO_IMAGE = require('../../assets/images/logo-shop.png');
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -98,11 +95,7 @@ export default function ProfileScreen() {
           {/* Profile Header */}
           <View style={styles.profileHeader}>
             <View style={styles.adminAvatar}>
-              <Image
-                source={LOGO_IMAGE}
-                style={styles.adminAvatarImage}
-                resizeMode="cover"
-              />
+              <BrandAvatar size={96} />
             </View>
             <Text style={styles.subtitle}>Sản phẩm len handmade bằng cả trái tim.</Text>
             <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/profile/edit')}>
@@ -199,7 +192,7 @@ export default function ProfileScreen() {
         {/* Customer Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
-            <User size={40} color={COLORS.primary} />
+            <BrandAvatar size={90} />
           </View>
           <Text style={styles.customerName}>{user?.name ?? 'Khách hàng'}</Text>
           <View style={styles.emailRow}>

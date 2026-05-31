@@ -18,6 +18,7 @@ import { CategoryChips } from '@/components/CategoryChips';
 import { SectionHeader } from '@/components/SectionHeader';
 import { BottomNav } from '@/components/BottomNav';
 import { useDebounce } from '@/hooks/useDebounce';
+import { BOTTOM_NAV_SPACER } from '@/constants/layout';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { Product, Category } from '@/types/product';
 import { CATEGORIES } from '@/constants/theme';
@@ -31,6 +32,7 @@ import {
   HOME_EMPTY_SUBTEXT,
 } from '@/constants/strings';
 import { BrandLogo } from '@/components/BrandLogo';
+import { BrandTitle, BrandAvatar } from '@/components/BrandTitle';
 import { HomeSkeleton } from '@/components/Skeleton';
 
 const { width } = Dimensions.get('window');
@@ -111,19 +113,9 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>{HOME_WELCOME}</Text>
-            <BrandLogo
-              size="md"
-              centered={false}
-              onPress={() => router.replace('/')}
-            />
+            <BrandTitle />
           </View>
-          <TouchableOpacity
-            style={styles.avatar}
-            onPress={() => router.push('/profile')}
-            activeOpacity={0.7}
-            hitSlop={8}>
-            <Text style={styles.avatarText}>CL</Text>
-          </TouchableOpacity>
+          <BrandAvatar size={42} onPress={() => router.push('/profile')} />
         </View>
 
         {/* Search Bar */}
@@ -215,7 +207,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: BOTTOM_NAV_SPACER }} />
       </ScrollView>
       <BottomNav />
     </SafeAreaView>
