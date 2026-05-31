@@ -19,6 +19,7 @@ import {
   Home,
   } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
+import { useAuth } from '@/store/AuthContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
@@ -40,8 +41,14 @@ import {
 export default function CartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { role } = useAuth();
   const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart, cartHydrated } =
     useShop();
+
+  if (role === 'admin') {
+    router.replace('/');
+    return null;
+  }
 
   const handleCheckout = () => {
     if (cart.length === 0) {

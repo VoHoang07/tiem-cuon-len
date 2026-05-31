@@ -11,6 +11,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Heart, ShoppingBag } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
+import { useAuth } from '@/store/AuthContext';
 import { ProductCard } from '@/components/ProductCard';
 import { SectionHeader } from '@/components/SectionHeader';
 import { BottomNav } from '@/components/BottomNav';
@@ -25,7 +26,13 @@ import {
 
 export default function FavoritesScreen() {
   const router = useRouter();
+  const { role } = useAuth();
   const { products, favorites, refetchCartFavorites } = useShop();
+
+  if (role === 'admin') {
+    router.replace('/');
+    return null;
+  }
 
   // Refetch cart/favorites when screen regains focus
   useFocusEffect(

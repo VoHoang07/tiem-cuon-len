@@ -57,7 +57,12 @@ export default function CheckoutScreen() {
   const isBuyNow = mode === 'buyNow';
 
   const { cart, clearCart, products } = useShop();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+
+  if (role === 'admin') {
+    router.replace('/');
+    return null;
+  }
   const { addOrder } = useOrders();
   const { userAddresses, getDefaultAddress } = useAddresses();
   const { enabledMethods, defaultMethod, loading: pmLoading } = usePaymentMethods();
