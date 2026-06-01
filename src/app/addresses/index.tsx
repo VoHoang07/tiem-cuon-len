@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -12,7 +12,6 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Plus, MapPin, Check, Trash2, Edit3, Home } from 'lucide-react-native';
 import { useAddresses } from '@/store/AddressContext';
-import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 
 export default function AddressesScreen() {
@@ -32,92 +31,98 @@ export default function AddressesScreen() {
     setTimeout(() => setRefreshing(false), 800);
   };
 
+  const renderItem = ({ item: addr }: { item: typeof userAddresses[0] }) => (
+    <View style={styles.addressCard}>
+      <View style={styles.addressHeader}>
+        <MapPin size={20} color={COLORS.primary} />
+        <View style={styles.addressActions}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => router.push(`/addresses/add?id=${addr.id}`)}>
+            <Edit3 size={16} color={COLORS.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => handleDelete(addr.id)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Trash2 size={18} color={COLORS.error} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <Text style={styles.addressName}>{addr.fullName}</Text>
+      <Text style={styles.addressPhone}>{addr.phone}</Text>
+      <Text style={styles.addressDetail}>
+        {addr.detailAddress}, {addr.ward}, {addr.district}, {addr.city}
+      </Text>
+
+      <TouchableOpacity
+        style={styles.defaultBtn}
+        onPress={() => setDefaultAddress(addr.id)}>
+        {addr.isDefault ? (
+          <Check size={18} color={COLORS.primary} />
+        ) : (
+          <View style={styles.defaultCircle} />
+        )}
+        <Text style={styles.defaultText}>
+          {addr.isDefault ? 'Địa chỉ mặc định' : 'Đặt làm mặc định'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const ListHeader = (
+    <View>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/addresses'); }} style={styles.backBtn}>
+            <ChevronLeft size={24} color={COLORS.darkText} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+            <Home size={20} color={COLORS.darkText} />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.headerTitle}>Địa chỉ giao hàng</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <TouchableOpacity
+        style={styles.addBtn}
+        onPress={() => router.push('/addresses/add')}>
+        <Plus size={20} color={COLORS.white} />
+        <Text style={styles.addBtnText}>Thêm địa chỉ mới</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const ListEmpty = (
+    <View style={styles.empty}>
+      <MapPin size={64} color={COLORS.lightText} />
+      <Text style={styles.emptyTitle}>Chưa có địa chỉ</Text>
+      <Text style={styles.emptySubtext}>Vui lòng thêm địa chỉ giao hàng</Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
-        style={styles.scroll}
+      <FlatList
+        data={userAddresses}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        contentContainerStyle={userAddresses.length === 0 ? styles.listEmpty : styles.listContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/addresses'); }} style={styles.backBtn}>
-              <ChevronLeft size={24} color={COLORS.darkText} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
-              <Home size={20} color={COLORS.darkText} />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.headerTitle}>Địa chỉ giao hàng</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => router.push('/addresses/add')}>
-          <Plus size={20} color={COLORS.white} />
-          <Text style={styles.addBtnText}>Thêm địa chỉ mới</Text>
-        </TouchableOpacity>
-
-        {userAddresses.length === 0 ? (
-          <View style={styles.empty}>
-            <MapPin size={64} color={COLORS.lightText} />
-            <Text style={styles.emptyTitle}>Chưa có địa chỉ</Text>
-            <Text style={styles.emptySubtext}>Vui lòng thêm địa chỉ giao hàng</Text>
-          </View>
-        ) : (
-          <>
-            {userAddresses.map((addr) => (
-            <View key={addr.id} style={styles.addressCard}>
-              <View style={styles.addressHeader}>
-                <MapPin size={20} color={COLORS.primary} />
-                <View style={styles.addressActions}>
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => router.push(`/addresses/add?id=${addr.id}`)}>
-                    <Edit3 size={16} color={COLORS.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => handleDelete(addr.id)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Trash2 size={18} color={COLORS.error} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <Text style={styles.addressName}>{addr.fullName}</Text>
-              <Text style={styles.addressPhone}>{addr.phone}</Text>
-              <Text style={styles.addressDetail}>
-                {addr.detailAddress}, {addr.ward}, {addr.district}, {addr.city}
-              </Text>
-
-              <TouchableOpacity
-                style={styles.defaultBtn}
-                onPress={() => setDefaultAddress(addr.id)}>
-                {addr.isDefault ? (
-                  <Check size={18} color={COLORS.primary} />
-                ) : (
-                  <View style={styles.defaultCircle} />
-                )}
-                <Text style={styles.defaultText}>
-                  {addr.isDefault ? 'Địa chỉ mặc định' : 'Đặt làm mặc định'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            ))}
-            </>
-            )}
-
-        <View style={{ height: 80 }} />
-      </ScrollView>
-      <BottomNav />
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.cream },
-  scroll: { flex: 1 },
+  listContent: { paddingBottom: 80 },
+  listEmpty: { flexGrow: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -217,4 +222,4 @@ const styles = StyleSheet.create({
     borderColor: COLORS.lightText,
   },
   defaultText: { fontSize: 14, fontWeight: '600', color: COLORS.mediumText },
-  });
+});

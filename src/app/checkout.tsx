@@ -27,7 +27,6 @@ import { useOrders } from '@/store/OrderContext';
 import { useAddresses } from '@/store/AddressContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
-import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import {
@@ -351,7 +350,6 @@ export default function CheckoutScreen() {
 
         <View style={{ height: 60 }} />
       </ScrollView>
-      <BottomNav />
     </SafeAreaView>
   );
 }

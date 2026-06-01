@@ -2,7 +2,7 @@ import React from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Swipeable } from 'react-native-gesture-handler';
 import {
   ChevronLeft,
   Minus,
@@ -17,10 +18,11 @@ import {
   Trash2,
   ShoppingBag,
   Home,
-  } from 'lucide-react-native';
+} from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import { BOTTOM_NAV_SPACER } from '@/constants/layout';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import {
@@ -36,12 +38,12 @@ import {
   CHECKOUT_TOTAL,
   CHECKOUT_ORDER_SUMMARY,
 } from '@/constants/strings';
+import type { CartItem } from '@/types/product';
 
 export default function CartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart, cartHydrated } =
-    useShop();
+  const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart, cartHydrated } = useShop();
 
   const handleCheckout = () => {
     if (cart.length === 0) {
@@ -58,129 +60,131 @@ export default function CartScreen() {
     ]);
   };
 
+  const renderRightActions = (item: CartItem) => (
+    <TouchableOpacity
+      style={styles.swipeDelete}
+      onPress={() => removeFromCart(item.product.id)}>
+      <Trash2 size={22} color={COLORS.white} />
+      <Text style={styles.swipeDeleteText}>Xóa</Text>
+    </TouchableOpacity>
+  );
+
+  const renderCartItem = ({ item }: { item: CartItem }) => (
+    <Swipeable renderRightActions={() => renderRightActions(item)}>
+      <View style={styles.cartItem}>
+        <View style={styles.itemImage}>
+          {item.product.image ? (
+            <Image
+              source={{ uri: item.product.image }}
+              style={styles.itemProductImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={styles.itemEmoji}>{getCategoryEmoji(item.product.category)}</Text>
+          )}
+        </View>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName} numberOfLines={2}>
+            {item.product.name}
+          </Text>
+          <Text style={styles.itemCategory}>
+            {item.product.category}
+          </Text>
+          <Text style={styles.itemPrice}>
+            {formatVND(item.product.price)} {CART_PER_PIECE}
+          </Text>
+        </View>
+        <View style={styles.itemActions}>
+          <View style={styles.qtyControl}>
+            <TouchableOpacity
+              style={styles.qtyBtn}
+              onPress={() => updateCartQuantity(item.product.id, item.quantity - 1)}>
+              <Minus size={14} color={COLORS.primary} />
+            </TouchableOpacity>
+            <Text style={styles.qtyText}>{item.quantity}</Text>
+            <TouchableOpacity
+              style={styles.qtyBtn}
+              onPress={() => updateCartQuantity(item.product.id, item.quantity + 1)}>
+              <Plus size={14} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.itemTotal}>
+            {formatVND(item.product.price * item.quantity)}
+          </Text>
+        </View>
+      </View>
+    </Swipeable>
+  );
+
+  const ListHeader = (
+    <View style={styles.header}>
+      <View style={styles.headerLeft}>
+        <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+          <ChevronLeft size={24} color={COLORS.darkText} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+          <Home size={20} color={COLORS.darkText} />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.headerTitle}>{CART_TITLE}</Text>
+      {cart.length > 0 ? (
+        <TouchableOpacity onPress={handleClearCart}>
+          <Text style={styles.clearText}>{CART_CLEAR_ALL}</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={{ width: 60 }} />
+      )}
+    </View>
+  );
+
+  const ListFooter = cart.length > 0 ? (
+    <View style={styles.summary}>
+      <Text style={styles.summaryTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryLabel}>Tạm tính</Text>
+        <Text style={styles.summaryValue}>{formatVND(cartTotal)}</Text>
+      </View>
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryLabel}>Phí vận chuyển</Text>
+        <Text style={styles.summaryValue}>Miễn phí</Text>
+      </View>
+      <View style={[styles.summaryRow, styles.totalRow]}>
+        <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
+        <Text style={styles.totalValue}>{formatVND(cartTotal)}</Text>
+      </View>
+    </View>
+  ) : null;
+
+  const ListEmpty = !cartHydrated ? (
+    <View style={styles.emptyCart}>
+      <ShoppingBag size={64} color={COLORS.lightText} />
+      <Text style={styles.emptyTitle}>Đang tải giỏ hàng...</Text>
+    </View>
+  ) : (
+    <View style={styles.emptyCart}>
+      <ShoppingBag size={64} color={COLORS.lightText} />
+      <Text style={styles.emptyTitle}>{CART_EMPTY_TITLE}</Text>
+      <Text style={styles.emptySubtext}>{CART_EMPTY_SUBTEXT}</Text>
+      <TouchableOpacity
+        style={styles.shopBtn}
+        onPress={() => router.replace('/')}>
+        <Text style={styles.shopBtnText}>{CART_START_SHOPPING}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
-              <ChevronLeft size={24} color={COLORS.darkText} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
-              <Home size={20} color={COLORS.darkText} />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.headerTitle}>{CART_TITLE}</Text>
-          {cart.length > 0 && (
-            <TouchableOpacity onPress={handleClearCart}>
-              <Text style={styles.clearText}>{CART_CLEAR_ALL}</Text>
-            </TouchableOpacity>
-          )}
-          {cart.length === 0 && <View style={{ width: 60 }} />}
-        </View>
-
-        {!cartHydrated ? (
-          <View style={styles.emptyCart}>
-            <ShoppingBag size={64} color={COLORS.lightText} />
-            <Text style={styles.emptyTitle}>Đang tải giỏ hàng...</Text>
-          </View>
-        ) : cart.length === 0 ? (
-          <View style={styles.emptyCart}>
-            <ShoppingBag size={64} color={COLORS.lightText} />
-            <Text style={styles.emptyTitle}>{CART_EMPTY_TITLE}</Text>
-            <Text style={styles.emptySubtext}>
-              {CART_EMPTY_SUBTEXT}
-            </Text>
-            <TouchableOpacity
-              style={styles.shopBtn}
-              onPress={() => router.replace('/')}>
-              <Text style={styles.shopBtnText}>{CART_START_SHOPPING}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {/* Cart Items */}
-            {cart.map((item) => (
-              <View key={item.product.id} style={styles.cartItem}>
-                <View style={styles.itemImage}>
-                  {item.product.image ? (
-                    <Image
-                      source={{ uri: item.product.image }}
-                      style={styles.itemProductImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Text style={styles.itemEmoji}>{getCategoryEmoji(item.product.category)}</Text>
-                  )}
-                </View>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName} numberOfLines={2}>
-                    {item.product.name}
-                  </Text>
-                  <Text style={styles.itemCategory}>
-                    {item.product.category}
-                  </Text>
-                  <Text style={styles.itemPrice}>
-                    {formatVND(item.product.price)} {CART_PER_PIECE}
-                  </Text>
-                </View>
-                <View style={styles.itemActions}>
-                  <TouchableOpacity
-                    onPress={() => removeFromCart(item.product.id)}>
-                    <Trash2 size={18} color={COLORS.error} />
-                  </TouchableOpacity>
-                  <View style={styles.qtyControl}>
-                    <TouchableOpacity
-                      style={styles.qtyBtn}
-                      onPress={() =>
-                        updateCartQuantity(
-                          item.product.id,
-                          item.quantity - 1
-                        )
-                      }>
-                      <Minus size={14} color={COLORS.primary} />
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{item.quantity}</Text>
-                    <TouchableOpacity
-                      style={styles.qtyBtn}
-                      onPress={() =>
-                        updateCartQuantity(
-                          item.product.id,
-                          item.quantity + 1
-                        )
-                      }>
-                      <Plus size={14} color={COLORS.primary} />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.itemTotal}>
-                    {formatVND(item.product.price * item.quantity)}
-                  </Text>
-                </View>
-              </View>
-            ))}
-
-            {/* Order Summary */}
-            <View style={styles.summary}>
-              <Text style={styles.summaryTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tạm tính</Text>
-                <Text style={styles.summaryValue}>{formatVND(cartTotal)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Phí vận chuyển</Text>
-                <Text style={styles.summaryValue}>Miễn phí</Text>
-              </View>
-              <View style={[styles.summaryRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
-                <Text style={styles.totalValue}>{formatVND(cartTotal)}</Text>
-              </View>
-            </View>
-
-            <View style={{ height: 120 }} />
-          </>
-        )}
-      </ScrollView>
+      <FlatList
+        data={cart}
+        keyExtractor={(item) => item.product.id}
+        renderItem={renderCartItem}
+        ListHeaderComponent={ListHeader}
+        ListFooterComponent={ListFooter}
+        ListEmptyComponent={ListEmpty}
+        contentContainerStyle={cart.length === 0 ? styles.listEmpty : styles.listContent}
+        showsVerticalScrollIndicator={false}
+      />
 
       {/* Checkout Bar */}
       {cart.length > 0 && (
@@ -196,6 +200,7 @@ export default function CartScreen() {
           </TouchableOpacity>
         </View>
       )}
+
       {cart.length === 0 && <BottomNav />}
     </SafeAreaView>
   );
@@ -206,8 +211,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.cream,
   },
-  scroll: {
-    flex: 1,
+  listContent: {
+    paddingBottom: 140,
+  },
+  listEmpty: {
+    flexGrow: 1,
   },
   header: {
     flexDirection: 'row',
@@ -282,6 +290,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontStyle: 'italic',
     color: COLORS.white,
+  },
+  swipeDelete: {
+    backgroundColor: COLORS.error,
+    borderRadius: 16,
+    marginVertical: SPACING.xs,
+    marginRight: SPACING.lg,
+    marginLeft: SPACING.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 72,
+  },
+  swipeDeleteText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 4,
   },
   cartItem: {
     backgroundColor: COLORS.white,

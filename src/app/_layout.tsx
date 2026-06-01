@@ -1,11 +1,14 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ShopProvider } from '@/store/ShopContext';
 import { AuthProvider, useAuth } from '@/store/AuthContext';
 import { OrderProvider } from '@/store/OrderContext';
 import { AddressProvider } from '@/store/AddressContext';
 import { PaymentMethodsProvider } from '@/store/PaymentMethodsContext';
+import { BottomNav } from '@/components/BottomNav';
 import { COLORS } from '@/constants/theme';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -28,48 +31,90 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function BottomNavGate() {
+  const { isAuthenticated } = useAuth();
+  const pathname = usePathname();
+
+  if (!isAuthenticated) return null;
+
+  // Screens that should NOT show bottom nav
+  const hiddenRoutes = [
+    'login',
+    'register',
+    'cart',
+    'checkout',
+    'settings',
+    'help',
+    'privacy',
+    'payment-methods',
+  ];
+
+  // Route patterns (dynamic segments)
+  const hiddenPatterns = [
+    /^product\/.+$/,
+    /^edit-product\/.+$/,
+    /^orders\/.+$/,
+    /^addresses\/add$/,
+    /^profile\/edit$/,
+    /^payment\/.+$/,
+  ];
+
+  // Normalize pathname: remove leading slash
+  const route = pathname.replace(/^\//, '');
+
+  if (hiddenRoutes.includes(route)) return null;
+  if (hiddenPatterns.some((p) => p.test(route))) return null;
+
+  return <BottomNav />;
+}
+
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <ShopProvider>
-        <OrderProvider>
-          <AddressProvider>
-            <PaymentMethodsProvider>
-              <AuthGate>
-                <StatusBar style="dark" />
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: COLORS.cream },
-                    animation: 'slide_from_right',
-                  }}>
-                  <Stack.Screen name="login" />
-                  <Stack.Screen name="register" />
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="product/[id]" />
-                  <Stack.Screen name="add-product" />
-                  <Stack.Screen name="edit-product/[id]" />
-                  <Stack.Screen name="cart" />
-                  <Stack.Screen name="favorites" />
-                  <Stack.Screen name="profile" />
-                  <Stack.Screen name="manage-products" />
-                  <Stack.Screen name="checkout" />
-                  <Stack.Screen name="orders/index" />
-                  <Stack.Screen name="orders/[id]" />
-                  <Stack.Screen name="addresses/index" />
-                  <Stack.Screen name="addresses/add" />
-                  <Stack.Screen name="profile/edit" />
-                  <Stack.Screen name="settings" />
-                  <Stack.Screen name="help" />
-                  <Stack.Screen name="privacy" />
-                  <Stack.Screen name="payment-methods" />
-                  <Stack.Screen name="payment/[orderId]" />
-                </Stack>
-              </AuthGate>
-            </PaymentMethodsProvider>
-              </AddressProvider>
-        </OrderProvider>
-      </ShopProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <ShopProvider>
+          <OrderProvider>
+            <AddressProvider>
+              <PaymentMethodsProvider>
+                <AuthGate>
+                  <StatusBar style="dark" />
+                  <View style={{ flex: 1 }}>
+                    <Stack
+                      screenOptions={{
+                        headerShown: false,
+                        contentStyle: { backgroundColor: COLORS.cream },
+                        animation: 'slide_from_right',
+                      }}>
+                      <Stack.Screen name="login" />
+                      <Stack.Screen name="register" />
+                      <Stack.Screen name="index" />
+                      <Stack.Screen name="product/[id]" />
+                      <Stack.Screen name="add-product" />
+                      <Stack.Screen name="edit-product/[id]" />
+                      <Stack.Screen name="cart" />
+                      <Stack.Screen name="favorites" />
+                      <Stack.Screen name="profile" />
+                      <Stack.Screen name="manage-products" />
+                      <Stack.Screen name="checkout" />
+                      <Stack.Screen name="orders/index" />
+                      <Stack.Screen name="orders/[id]" />
+                      <Stack.Screen name="addresses/index" />
+                      <Stack.Screen name="addresses/add" />
+                      <Stack.Screen name="profile/edit" />
+                      <Stack.Screen name="settings" />
+                      <Stack.Screen name="help" />
+                      <Stack.Screen name="privacy" />
+                      <Stack.Screen name="payment-methods" />
+                      <Stack.Screen name="payment/[orderId]" />
+                    </Stack>
+                    <BottomNavGate />
+                  </View>
+                </AuthGate>
+              </PaymentMethodsProvider>
+            </AddressProvider>
+          </OrderProvider>
+        </ShopProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

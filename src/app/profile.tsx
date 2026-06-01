@@ -235,7 +235,6 @@ export default function ProfileScreen() {
 
         <View style={{ height: 80 }} />
       </ScrollView>
-      <BottomNav />
     </SafeAreaView>
   );
 }

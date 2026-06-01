@@ -58,7 +58,6 @@ import {
   AP_SUCCESS_MSG,
   AUTH_ACCESS_DENIED,
   } from '@/constants/strings';
-import { BottomNav } from '@/components/BottomNav';
 
 export default function AddProductScreen() {
   const router = useRouter();
@@ -83,7 +82,6 @@ export default function AddProductScreen() {
         <View style={styles.accessDenied}>
           <Text style={styles.accessDeniedText}>{AUTH_ACCESS_DENIED}</Text>
         </View>
-        <BottomNav />
       </SafeAreaView>
     );
   }
@@ -402,7 +400,6 @@ export default function AddProductScreen() {
           <View style={{ height: 80 }} />
           </View>
           </ScrollView>
-          <BottomNav />
     </SafeAreaView>
   );
 }

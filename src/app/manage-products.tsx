@@ -2,7 +2,7 @@ import React from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -54,94 +54,99 @@ export default function ManageProductsScreen() {
     );
   };
 
+  const renderItem = ({ item }: { item: Product }) => (
+    <View style={styles.productItem}>
+      <View style={styles.productImageContainer}>
+        <Text style={styles.productEmoji}>
+          {getCategoryEmoji(item.category)}
+        </Text>
+      </View>
+
+      <View style={styles.productInfo}>
+        <Text style={styles.productName} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={styles.productPrice}>
+          {formatVND(item.price)}
+        </Text>
+        <View style={styles.productMeta}>
+          <Text style={styles.productStock}>
+            SL: {item.quantity}
+          </Text>
+          <Text style={styles.productCategory}>
+            {item.category}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.productActions}>
+        <TouchableOpacity
+          style={styles.editBtn}
+          onPress={() => router.push(`/edit-product/${item.id}`)}>
+          <Edit3 size={18} color={COLORS.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={() => handleDelete(item)}>
+          <Trash2 size={18} color={COLORS.error} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const ListHeader = (
+    <View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+          <ChevronLeft size={24} color={COLORS.darkText} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Quản lý sản phẩm</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      {/* Stats */}
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Package size={20} color={COLORS.primary} />
+          <Text style={styles.statNumber}>{products.length}</Text>
+          <Text style={styles.statLabel}>Tổng sản phẩm</Text>
+        </View>
+      </View>
+
+      {/* Add Product Button */}
+      <TouchableOpacity
+        style={styles.addBtn}
+        onPress={() => router.push('/add-product')}>
+        <Plus size={20} color={COLORS.white} />
+        <Text style={styles.addBtnText}>Thêm sản phẩm mới</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.sectionTitle}>Tất cả sản phẩm</Text>
+    </View>
+  );
+
+  const ListEmpty = (
+    <View style={styles.empty}>
+      <Package size={48} color={COLORS.lightText} />
+      <Text style={styles.emptyText}>Chưa có sản phẩm nào</Text>
+      <Text style={styles.emptySubtext}>
+        Nhấn "Thêm sản phẩm mới" để bắt đầu
+      </Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
-            <ChevronLeft size={24} color={COLORS.darkText} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Quản lý sản phẩm</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Package size={20} color={COLORS.primary} />
-            <Text style={styles.statNumber}>{products.length}</Text>
-            <Text style={styles.statLabel}>Tổng sản phẩm</Text>
-          </View>
-        </View>
-
-        {/* Add Product Button */}
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => router.push('/add-product')}>
-          <Plus size={20} color={COLORS.white} />
-          <Text style={styles.addBtnText}>Thêm sản phẩm mới</Text>
-        </TouchableOpacity>
-
-        {/* Product List */}
-        <View style={styles.productList}>
-          <Text style={styles.sectionTitle}>Tất cả sản phẩm</Text>
-
-          {products.length === 0 ? (
-            <View style={styles.empty}>
-              <Package size={48} color={COLORS.lightText} />
-              <Text style={styles.emptyText}>Chưa có sản phẩm nào</Text>
-              <Text style={styles.emptySubtext}>
-                Nhấn "Thêm sản phẩm mới" để bắt đầu
-              </Text>
-            </View>
-          ) : (
-            products.map((product) => (
-              <View key={product.id} style={styles.productItem}>
-                <View style={styles.productImageContainer}>
-                  <Text style={styles.productEmoji}>
-                    {getCategoryEmoji(product.category)}
-                  </Text>
-                </View>
-
-                <View style={styles.productInfo}>
-                  <Text style={styles.productName} numberOfLines={1}>
-                    {product.name}
-                  </Text>
-                  <Text style={styles.productPrice}>
-                    {formatVND(product.price)}
-                  </Text>
-                  <View style={styles.productMeta}>
-                    <Text style={styles.productStock}>
-                      SL: {product.quantity}
-                    </Text>
-                    <Text style={styles.productCategory}>
-                      {product.category}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.productActions}>
-                  <TouchableOpacity
-                    style={styles.editBtn}
-                    onPress={() =>
-                      router.push(`/edit-product/${product.id}`)
-                    }>
-                    <Edit3 size={18} color={COLORS.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => handleDelete(product)}>
-                    <Trash2 size={18} color={COLORS.error} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={{ height: SPACING.xxxl }} />
-      </ScrollView>
+      <FlatList
+        data={products}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      />
     </SafeAreaView>
   );
 }
@@ -151,8 +156,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.cream,
   },
-  scroll: {
-    flex: 1,
+  listContent: {
+    paddingBottom: SPACING.xxxl + 80,
   },
   header: {
     flexDirection: 'row',
@@ -218,14 +223,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: COLORS.white,
   },
-  productList: {
-    paddingHorizontal: SPACING.lg,
-  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.darkText,
     marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.lg,
   },
   productItem: {
     flexDirection: 'row',
@@ -234,6 +237,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+    marginHorizontal: SPACING.lg,
     ...SHADOWS.small,
   },
   productImageContainer: {
@@ -299,6 +303,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 60,
     gap: SPACING.md,
+    paddingHorizontal: SPACING.lg,
   },
   emptyText: {
     fontSize: 16,
@@ -321,4 +326,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.warmBrown,
   },
-  });
+});

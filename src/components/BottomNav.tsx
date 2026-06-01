@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname, type Href } from 'expo-router';
 import {
   ShoppingCart,
@@ -26,6 +27,7 @@ export function BottomNav() {
   const pathname = usePathname();
   const { cartCount, favorites } = useShop();
   const { role } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const isAdmin = role === 'admin';
 
@@ -54,52 +56,62 @@ export function BottomNav() {
   };
 
   return (
-    <View style={[styles.container, { height: TAB_BAR_CONTENT_HEIGHT }]}>
-      {tabs.map((tab) => {
-        const { route, icon: Icon, label } = tab;
-        const focused = pathname === route;
-        const color = focused ? COLORS.primary : COLORS.lightText;
-        const textStyle = focused ? styles.tabTextActive : styles.tabText;
+    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+      <View style={styles.inner}>
+        {tabs.map((tab) => {
+          const { route, icon: Icon, label } = tab;
+          const focused = pathname === route;
+          const color = focused ? COLORS.primary : COLORS.lightText;
+          const textStyle = focused ? styles.tabTextActive : styles.tabText;
 
-        const showBadge =
-          (label === NAV_FAVORITES && favorites.length > 0) ||
-          (label === NAV_CART && cartCount > 0);
-        const badgeCount =
-          label === NAV_FAVORITES ? favorites.length : cartCount;
+          const showBadge =
+            (label === NAV_FAVORITES && favorites.length > 0) ||
+            (label === NAV_CART && cartCount > 0);
+          const badgeCount =
+            label === NAV_FAVORITES ? favorites.length : cartCount;
 
-        return (
-          <TouchableOpacity
-            key={route}
-            style={styles.tab}
-            onPress={() => handleTabPress(route)}
-            activeOpacity={0.6}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: focused }}>
-            <View style={styles.iconWrap}>
-              <Icon size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
-              {showBadge && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {badgeCount > 99 ? '99+' : badgeCount}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text style={textStyle} numberOfLines={1}>
-              {label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+          return (
+            <TouchableOpacity
+              key={route}
+              style={styles.tab}
+              onPress={() => handleTabPress(route)}
+              activeOpacity={0.6}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: focused }}>
+              <View style={styles.iconWrap}>
+                <Icon size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+                {showBadge && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={textStyle} numberOfLines={1}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
     backgroundColor: COLORS.white,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  inner: {
+    height: TAB_BAR_CONTENT_HEIGHT,
     flexDirection: 'row',
     alignItems: 'stretch',
   },

@@ -2,11 +2,11 @@ import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
   RefreshControl,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -16,7 +16,6 @@ import { useShop } from '@/store/ShopContext';
 import { ProductCard } from '@/components/ProductCard';
 import { CategoryChips } from '@/components/CategoryChips';
 import { SectionHeader } from '@/components/SectionHeader';
-import { BottomNav } from '@/components/BottomNav';
 import { useDebounce } from '@/hooks/useDebounce';
 import { BOTTOM_NAV_SPACER } from '@/constants/layout';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
@@ -31,17 +30,17 @@ import {
   HOME_EMPTY_TITLE,
   HOME_EMPTY_SUBTEXT,
 } from '@/constants/strings';
-import { BrandLogo } from '@/components/BrandLogo';
 import { BrandTitle, BrandAvatar } from '@/components/BrandTitle';
 import { HomeSkeleton } from '@/components/Skeleton';
 
-const { width } = Dimensions.get('window');
+const NUM_COLUMNS = 2;
+const GAP = 10;
 
 export default function HomeScreen() {
   const router = useRouter();
   const { products, isLoading, refetchCartFavorites, hasMore, loadMore } = useShop();
+  const { width: windowWidth } = useWindowDimensions();
 
-  // Refetch cart/favorites when screen regains focus (back navigation, tab switch)
   useFocusEffect(
     useCallback(() => {
       refetchCartFavorites();
@@ -85,131 +84,147 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [refetchCartFavorites]);
 
-  const handleLoadMore = useCallback(() => {
+  const handleEndReached = useCallback(() => {
     if (!hasMore || isLoading) return;
     loadMore();
   }, [hasMore, isLoading, loadMore]);
 
+  const cardWidth = Math.min(
+    (windowWidth - SPACING.lg * 2 - GAP) / NUM_COLUMNS,
+    200,
+  );
+
+  const renderProductItem = ({ item }: { item: Product }) => (
+    <ProductCard product={item} onPress={(p) => router.push(`/product/${p.id}`)} />
+  );
+
+  const showFeaturedAndTrending = !search && selectedCategory === 'All';
+
+  const ListHeader = (
+    <View>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>{HOME_WELCOME}</Text>
+          <BrandTitle />
+        </View>
+        <BrandAvatar size={42} onPress={() => router.push('/profile')} />
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Search size={18} color={COLORS.lightText} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={HOME_SEARCH_PLACEHOLDER}
+          placeholderTextColor={COLORS.lightText}
+          value={searchInput}
+          onChangeText={setSearchInput}
+        />
+      </View>
+
+      {/* Category Chips */}
+      <CategoryChips
+        categories={[...CATEGORIES]}
+        selected={selectedCategory}
+        onSelect={setSelectedCategory}
+      />
+
+      {/* Featured Products */}
+      {showFeaturedAndTrending && featuredProducts.length > 0 && (
+        <View>
+          <SectionHeader title={HOME_FEATURED} />
+          <FlatList
+            horizontal
+            data={featuredProducts}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.featuredRow}
+            renderItem={({ item }) => (
+              <ProductCard product={item} onPress={(p) => router.push(`/product/${p.id}`)} />
+            )}
+          />
+        </View>
+      )}
+
+      {/* Trending */}
+      {showFeaturedAndTrending && trendingProducts.length > 0 && (
+        <View>
+          <SectionHeader title={HOME_TRENDING} />
+          <FlatList
+            horizontal
+            data={trendingProducts}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.featuredRow}
+            renderItem={({ item }) => (
+              <ProductCard product={item} onPress={(p) => router.push(`/product/${p.id}`)} />
+            )}
+          />
+        </View>
+      )}
+
+      {/* All Products Section Header */}
+      <SectionHeader
+        title={selectedCategory === 'All' ? HOME_ALL_PRODUCTS : selectedCategory}
+      />
+    </View>
+  );
+
+  const ListEmpty = (
+    <View style={styles.empty}>
+      <Text style={styles.emptyEmoji}>🧶</Text>
+      <Text style={styles.emptyText}>{HOME_EMPTY_TITLE}</Text>
+      <Text style={styles.emptySubtext}>{HOME_EMPTY_SUBTEXT}</Text>
+    </View>
+  );
+
+  const ListFooter = hasMore && filteredProducts.length > 0 ? (
+    <TouchableOpacity style={styles.loadMoreBtn} onPress={handleEndReached}>
+      <Text style={styles.loadMoreText}>Xem thêm sản phẩm</Text>
+    </TouchableOpacity>
+  ) : (
+    <View style={{ height: BOTTOM_NAV_SPACER }} />
+  );
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-          <HomeSkeleton />
-        </ScrollView>
-        <BottomNav />
+        <FlatList
+          data={[]}
+          renderItem={() => null}
+          ListHeaderComponent={
+            <View style={styles.scroll}>
+              <HomeSkeleton />
+            </View>
+          }
+          keyExtractor={() => 'loading'}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
-        style={styles.scroll}
+      <FlatList
+        data={filteredProducts}
+        keyExtractor={(item) => item.id}
+        renderItem={renderProductItem}
+        numColumns={NUM_COLUMNS}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        ListFooterComponent={ListFooter}
+        columnWrapperStyle={
+          filteredProducts.length > 0 ? styles.columnWrapper : undefined
+        }
+        contentContainerStyle={
+          filteredProducts.length === 0 ? styles.listContent : undefined
+        }
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>{HOME_WELCOME}</Text>
-            <BrandTitle />
-          </View>
-          <BrandAvatar size={42} onPress={() => router.push('/profile')} />
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <Search size={18} color={COLORS.lightText} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={HOME_SEARCH_PLACEHOLDER}
-            placeholderTextColor={COLORS.lightText}
-            value={searchInput}
-            onChangeText={setSearchInput}
-          />
-        </View>
-
-        {/* Category Chips */}
-        <CategoryChips
-          categories={[...CATEGORIES]}
-          selected={selectedCategory}
-          onSelect={setSelectedCategory}
-        />
-
-        {/* Featured Products */}
-        {!search && selectedCategory === 'All' && (
-          <>
-            <SectionHeader title={HOME_FEATURED} />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.featuredRow}>
-              {featuredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  onPress={(p) => router.push(`/product/${p.id}`)}
-                />
-              ))}
-            </ScrollView>
-          </>
-        )}
-
-        {/* Trending */}
-        {!search && selectedCategory === 'All' && (
-          <>
-            <SectionHeader title={HOME_TRENDING} />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.featuredRow}>
-              {trendingProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  onPress={(p) => router.push(`/product/${p.id}`)}
-                />
-              ))}
-            </ScrollView>
-          </>
-        )}
-
-        {/* All Products Grid */}
-        <SectionHeader
-          title={
-            selectedCategory === 'All' ? HOME_ALL_PRODUCTS : selectedCategory
-          }
-        />
-        <View style={styles.grid}>
-          {filteredProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onPress={(p) => router.push(`/product/${p.id}`)}
-            />
-          ))}
-        </View>
-
-        {filteredProducts.length === 0 && (
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🧶</Text>
-            <Text style={styles.emptyText}>{HOME_EMPTY_TITLE}</Text>
-            <Text style={styles.emptySubtext}>
-              {HOME_EMPTY_SUBTEXT}
-            </Text>
-          </View>
-        )}
-
-        {hasMore && filteredProducts.length > 0 && (
-          <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore}>
-            <Text style={styles.loadMoreText}>Xem thêm sản phẩm</Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={{ height: BOTTOM_NAV_SPACER }} />
-      </ScrollView>
-      <BottomNav />
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+      />
     </SafeAreaView>
   );
 }
@@ -221,6 +236,14 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  listContent: {
+    flexGrow: 1,
+  },
+  columnWrapper: {
+    paddingHorizontal: SPACING.lg,
+    gap: GAP,
+    marginBottom: SPACING.sm,
   },
   header: {
     flexDirection: 'row',
@@ -235,19 +258,6 @@ const styles = StyleSheet.create({
     color: COLORS.mediumText,
     fontWeight: '500',
     letterSpacing: -0.1,
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: COLORS.lightPurple,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.primary,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -269,12 +279,6 @@ const styles = StyleSheet.create({
   featuredRow: {
     paddingHorizontal: SPACING.lg,
     gap: 10,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: SPACING.lg,
-    justifyContent: 'space-between',
   },
   empty: {
     alignItems: 'center',
@@ -303,6 +307,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     borderWidth: 1.5,
     borderColor: COLORS.primary,
+    marginBottom: SPACING.xxl,
   },
   loadMoreText: {
     fontSize: 15,
