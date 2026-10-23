@@ -33,7 +33,13 @@ export function ProductCard({
   numColumns = 2,
 }: ProductCardProps) {
   const { toggleFavorite, isFavorite, addToCart } = useShop();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: rawWindowWidth } = useWindowDimensions();
+  const windowWidth =
+    rawWindowWidth > 0
+      ? rawWindowWidth
+      : typeof window !== 'undefined' && window.innerWidth > 0
+      ? window.innerWidth
+      : 1024;
   const fav = isFavorite(product.id);
   const [justAdded, setJustAdded] = useState(false);
 

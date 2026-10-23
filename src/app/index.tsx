@@ -70,7 +70,13 @@ export default function HomeScreen() {
     favorites,
   } = useShop();
   const { user, isAuthenticated } = useAuth();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: rawWindowWidth } = useWindowDimensions();
+  const windowWidth =
+    rawWindowWidth > 0
+      ? rawWindowWidth
+      : typeof window !== 'undefined' && window.innerWidth > 0
+      ? window.innerWidth
+      : 1024;
 
   const isDesktop = windowWidth >= 768;
   const isMobile = windowWidth < 640;
