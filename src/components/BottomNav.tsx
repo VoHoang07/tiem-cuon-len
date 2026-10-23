@@ -1,5 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname, type Href } from 'expo-router';
 import {
@@ -10,7 +17,7 @@ import {
   Home,
   ShoppingBag,
 } from 'lucide-react-native';
-import { COLORS } from '@/constants/theme';
+import { COLORS, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { TAB_BAR_CONTENT_HEIGHT } from '@/constants/layout';
@@ -28,7 +35,9 @@ export function BottomNav() {
   const { cartCount, favorites } = useShop();
   const { role } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
 
+  const isWideWeb = Platform.OS === 'web' && windowWidth >= 640;
   const isAdmin = role === 'admin';
 
   const adminTabs = [
@@ -56,8 +65,13 @@ export function BottomNav() {
   };
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-      <View style={styles.inner}>
+    <View
+      style={[
+        styles.outerWrapper,
+        isWideWeb ? styles.outerWrapperFloating : { paddingBottom: insets.bottom },
+      ]}
+      pointerEvents="box-none">
+      <View style={[styles.inner, isWideWeb && styles.innerFloating]}>
         {tabs.map((tab) => {
           const { route, icon: Icon, label } = tab;
           const focused = pathname === route;
@@ -73,13 +87,13 @@ export function BottomNav() {
           return (
             <TouchableOpacity
               key={route}
-              style={styles.tab}
+              style={[styles.tab, focused && isWideWeb && styles.tabActiveFloating]}
               onPress={() => handleTabPress(route)}
-              activeOpacity={0.6}
+              activeOpacity={0.7}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}>
               <View style={styles.iconWrap}>
-                <Icon size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+                <Icon size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
                 {showBadge && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>
@@ -100,7 +114,7 @@ export function BottomNav() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  outerWrapper: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -108,12 +122,30 @@ const styles = StyleSheet.create({
     zIndex: 100,
     backgroundColor: COLORS.white,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.08)',
+    borderTopColor: 'rgba(118, 83, 65, 0.12)',
+  },
+  outerWrapperFloating: {
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    bottom: 16,
+    alignItems: 'center',
   },
   inner: {
     height: TAB_BAR_CONTENT_HEIGHT,
     flexDirection: 'row',
     alignItems: 'stretch',
+  },
+  innerFloating: {
+    width: '92%',
+    maxWidth: 500,
+    height: 62,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 32,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(118, 83, 65, 0.14)',
+    ...SHADOWS.large,
   },
   tab: {
     flex: 1,
@@ -121,26 +153,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingTop: 6,
     paddingBottom: 4,
+    borderRadius: 24,
+  },
+  tabActiveFloating: {
+    backgroundColor: '#F5EDE8',
   },
   iconWrap: {
     position: 'relative',
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '500',
     color: COLORS.lightText,
-    marginTop: 3,
+    marginTop: 2,
     textAlign: 'center',
   },
   tabTextActive: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '800',
     color: COLORS.primary,
-    marginTop: 3,
+    marginTop: 2,
     textAlign: 'center',
   },
   badge: {
@@ -148,16 +184,16 @@ const styles = StyleSheet.create({
     top: -4,
     right: -10,
     backgroundColor: COLORS.error,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
+    borderRadius: 9,
+    minWidth: 17,
+    height: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
   },
   badgeText: {
     color: COLORS.white,
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 9.5,
+    fontWeight: '800',
   },
 });

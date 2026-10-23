@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +27,8 @@ import { Product } from '@/types/product';
 export default function FavoritesScreen() {
   const router = useRouter();
   const { products, favorites, refetchCartFavorites } = useShop();
+  const { width: windowWidth } = useWindowDimensions();
+  const numColumns = windowWidth >= 960 ? 4 : windowWidth >= 640 ? 3 : 2;
 
   useFocusEffect(
     useCallback(() => {
@@ -45,12 +48,14 @@ export default function FavoritesScreen() {
   const renderItem = ({ item }: { item: Product }) => (
     <ProductCard
       product={item}
+      variant="grid"
+      numColumns={numColumns}
       onPress={(p) => router.push(`/product/${p.id}`)}
     />
   );
 
   const ListHeader = (
-    <View>
+    <View style={styles.constrainedContent}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{FAV_TITLE}</Text>
         <Heart size={28} color={COLORS.primary} fill={COLORS.primary} />
@@ -80,10 +85,11 @@ export default function FavoritesScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <FlatList
+        key={`fav-${numColumns}`}
         data={favoriteProducts}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        numColumns={2}
+        numColumns={numColumns}
         ListHeaderComponent={favoriteProducts.length === 0 ? null : ListHeader}
         ListEmptyComponent={ListEmpty}
         contentContainerStyle={favoriteProducts.length === 0 ? styles.listEmpty : styles.listContent}
@@ -100,6 +106,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.cream,
   },
+  constrainedContent: {
+    width: '100%',
+    maxWidth: 1120,
+    alignSelf: 'center',
+  },
   listContent: {
     paddingBottom: BOTTOM_NAV_SPACER,
   },
@@ -107,9 +118,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   columnWrapper: {
+    width: '100%',
+    maxWidth: 1120,
+    alignSelf: 'center',
     paddingHorizontal: SPACING.lg,
-    gap: 10,
-    marginBottom: SPACING.sm,
+    gap: 14,
   },
   header: {
     flexDirection: 'row',

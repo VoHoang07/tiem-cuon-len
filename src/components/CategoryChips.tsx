@@ -1,13 +1,23 @@
 import React from 'react';
 import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Category } from '@/types/product';
-import { COLORS, SPACING } from '@/constants/theme';
+import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 
 interface CategoryChipsProps {
   categories: Category[];
   selected: Category;
   onSelect: (category: Category) => void;
 }
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  All: 'Tất cả',
+  Yarn: 'Len cuộn',
+  Crochet: 'Móc len',
+  Bags: 'Túi len',
+  Dolls: 'Thú bông',
+  Accessories: 'Phụ kiện',
+};
 
 export function CategoryChips({ categories, selected, onSelect }: CategoryChipsProps) {
   return (
@@ -17,14 +27,16 @@ export function CategoryChips({ categories, selected, onSelect }: CategoryChipsP
       contentContainerStyle={styles.container}>
       {categories.map((cat) => {
         const isSelected = selected === cat;
+        const emoji = cat === 'All' ? '✨' : getCategoryEmoji(cat);
         return (
           <TouchableOpacity
             key={cat}
             style={[styles.chip, isSelected && styles.chipSelected]}
             onPress={() => onSelect(cat)}
-            activeOpacity={0.7}>
+            activeOpacity={0.75}>
+            <Text style={styles.emoji}>{emoji}</Text>
             <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-              {cat}
+              {CATEGORY_LABELS[cat] ?? cat}
             </Text>
           </TouchableOpacity>
         );
@@ -36,30 +48,36 @@ export function CategoryChips({ categories, selected, onSelect }: CategoryChipsP
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: SPACING.lg,
-    gap: 6,
-    paddingVertical: 10,
+    gap: 8,
+    paddingVertical: 12,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 16,
+    borderRadius: 20,
     backgroundColor: COLORS.white,
-    borderWidth: 0.5,
-    borderColor: COLORS.border,
-    minHeight: 40,
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(118, 83, 65, 0.12)',
+    minHeight: 42,
   },
   chipSelected: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
+    ...SHADOWS.small,
+  },
+  emoji: {
+    fontSize: 14,
   },
   chipText: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 13.5,
+    fontWeight: '600',
     color: COLORS.mediumText,
   },
   chipTextSelected: {
     color: COLORS.white,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
