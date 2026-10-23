@@ -18,47 +18,39 @@ export function YarnRollIntro() {
   const [visible, setVisible] = useState(true);
 
   const isMobile = windowWidth < 640;
-  const trackWidth = Math.min(windowWidth * 0.84, isMobile ? 330 : 520);
-  const ballSize = isMobile ? 54 : 68;
+  // Exact width matching the "Tiệm Cuộn Len" typography so the ball rolls directly across the letters
+  const trackWidth = isMobile ? Math.min(windowWidth - 48, 270) : 360;
+  const ballSize = isMobile ? 48 : 60;
 
   // 0 -> 1 as the yarn ball rolls from left to right
   const rollProgress = useRef(new Animated.Value(0)).current;
-  // 0 -> 1 for subtitle & decorative badge fade-in after roll
+  // 0 -> 1 for subtitle fade-in
   const subtitleFade = useRef(new Animated.Value(0)).current;
   // 1 -> 0 for overlay exit
   const overlayOpacity = useRef(new Animated.Value(1)).current;
-  const overlayScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const rollAnimation = Animated.sequence([
-      Animated.delay(120),
+      Animated.delay(100),
       Animated.timing(rollProgress, {
         toValue: 1,
-        duration: 1650,
-        easing: Easing.bezier(0.25, 0.9, 0.3, 1),
+        duration: 1750,
+        easing: Easing.bezier(0.22, 0.85, 0.32, 1),
         useNativeDriver: false,
       }),
       Animated.timing(subtitleFade, {
         toValue: 1,
-        duration: 340,
+        duration: 320,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
       }),
       Animated.delay(420),
-      Animated.parallel([
-        Animated.timing(overlayOpacity, {
-          toValue: 0,
-          duration: 460,
-          easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: false,
-        }),
-        Animated.timing(overlayScale, {
-          toValue: 1.04,
-          duration: 460,
-          easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: false,
-        }),
-      ]),
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 450,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: false,
+      }),
     ]);
 
     rollAnimation.start(({ finished }) => {
@@ -68,13 +60,14 @@ export function YarnRollIntro() {
     });
 
     return () => rollAnimation.stop();
-  }, [rollProgress, subtitleFade, overlayOpacity, overlayScale]);
+  }, [rollProgress, subtitleFade, overlayOpacity]);
 
   if (!visible) return null;
 
-  const ballTranslateX = rollProgress.interpolate({
+  // Animate `left` from -ballSize/2 to trackWidth - ballSize/2 so the ball rolls across the exact text span
+  const ballLeft = rollProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, trackWidth - ballSize * 0.45],
+    outputRange: [-ballSize * 0.2, trackWidth - ballSize * 0.35],
   });
 
   const ballRotate = rollProgress.interpolate({
@@ -82,14 +75,14 @@ export function YarnRollIntro() {
     outputRange: ['0deg', '1080deg'],
   });
 
-  const ballBounceY = rollProgress.interpolate({
+  const ballBottom = rollProgress.interpolate({
     inputRange: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1],
-    outputRange: [0, -10, 0, -8, 0, -6, 0, 0],
+    outputRange: [6, 15, 6, 13, 6, 11, 6, 6],
   });
 
   const threadWidth = rollProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [12, trackWidth],
+    outputRange: [8, trackWidth],
   });
 
   const subtitleTranslateY = subtitleFade.interpolate({
@@ -103,7 +96,6 @@ export function YarnRollIntro() {
         styles.overlay,
         {
           opacity: overlayOpacity,
-          transform: [{ scale: overlayScale }],
         },
       ]}
       pointerEvents="box-none">
@@ -115,17 +107,19 @@ export function YarnRollIntro() {
         <View style={styles.bgCircleTop} />
         <View style={styles.bgCircleBottom} />
 
-        <View style={[styles.stageCard, { width: trackWidth + ballSize }]}>
+        <View style={styles.stageCard}>
           {/* Top pill badge */}
           <Animated.View style={[styles.topBadge, { opacity: rollProgress }]}>
-            <Text style={styles.topBadgeText}>✦ TIỆM ĐAN MÓC THỦ CÔNG ✦</Text>
+            <Text style={styles.topBadgeText} numberOfLines={1}>
+              ✦ TIỆM ĐAN MÓC THỦ CÔNG ✦
+            </Text>
           </Animated.View>
 
-          {/* Progressive Shop Name Reveal */}
+          {/* Progressive Shop Name Reveal synchronized with the rolling yarn ball */}
           <View style={[styles.wordRow, { width: trackWidth }]}>
             {SHOP_LETTERS.map((char, index) => {
-              const start = Math.max(0, (index / SHOP_LETTERS.length) * 0.78);
-              const end = Math.min(1, start + 0.18);
+              const start = Math.max(0, (index / SHOP_LETTERS.length) * 0.82);
+              const end = Math.min(1, start + 0.16);
 
               const letterOpacity = rollProgress.interpolate({
                 inputRange: [0, start, end, 1],
@@ -135,13 +129,7 @@ export function YarnRollIntro() {
 
               const letterTranslateY = rollProgress.interpolate({
                 inputRange: [0, start, end, 1],
-                outputRange: [18, 18, 0, 0],
-                extrapolate: 'clamp',
-              });
-
-              const letterScale = rollProgress.interpolate({
-                inputRange: [0, start, (start + end) / 2, end, 1],
-                outputRange: [0.75, 0.75, 1.08, 1, 1],
+                outputRange: [14, 14, 0, 0],
                 extrapolate: 'clamp',
               });
 
@@ -153,10 +141,7 @@ export function YarnRollIntro() {
                     isMobile && styles.shopLetterMobile,
                     {
                       opacity: letterOpacity,
-                      transform: [
-                        { translateY: letterTranslateY },
-                        { scale: letterScale },
-                      ],
+                      transform: [{ translateY: letterTranslateY }],
                     },
                   ]}>
                   {char === ' ' ? '\u00A0' : char}
@@ -165,8 +150,8 @@ export function YarnRollIntro() {
             })}
           </View>
 
-          {/* Rolling Yarn Track & Unspooling Thread */}
-          <View style={[styles.trackContainer, { width: trackWidth, height: ballSize + 16 }]}>
+          {/* Rolling Yarn Track & Unspooling Thread directly under the shop name */}
+          <View style={[styles.trackContainer, { width: trackWidth, height: ballSize + 14 }]}>
             {/* Unspooling yarn strand left behind by the rolling ball */}
             <Animated.View
               style={[
@@ -185,11 +170,9 @@ export function YarnRollIntro() {
                 {
                   width: ballSize,
                   height: ballSize,
-                  transform: [
-                    { translateX: ballTranslateX },
-                    { translateY: ballBounceY },
-                    { rotate: ballRotate },
-                  ],
+                  left: ballLeft,
+                  bottom: ballBottom,
+                  transform: [{ rotate: ballRotate }],
                 },
               ]}>
               {Platform.OS === 'web' ? (
@@ -204,7 +187,6 @@ export function YarnRollIntro() {
                       <stop offset="100%" stopColor="#6E4F37" />
                     </radialGradient>
                   </defs>
-                  {/* Main Yarn Sphere */}
                   <circle
                     cx="50"
                     cy="50"
@@ -213,7 +195,6 @@ export function YarnRollIntro() {
                     stroke="#5C4332"
                     strokeWidth="3.5"
                   />
-                  {/* Curved Yarn Strands */}
                   <path
                     d="M16 36 C 36 18, 66 20, 84 38"
                     fill="none"
@@ -256,7 +237,6 @@ export function YarnRollIntro() {
                     strokeWidth="3"
                     strokeLinecap="round"
                   />
-                  {/* Soft specular highlight */}
                   <ellipse
                     cx="35"
                     cy="28"
@@ -269,7 +249,7 @@ export function YarnRollIntro() {
                 </svg>
               ) : (
                 <View style={styles.nativeYarnBall}>
-                  <Text style={{ fontSize: isMobile ? 34 : 42 }}>🧶</Text>
+                  <Text style={{ fontSize: isMobile ? 32 : 40 }}>🧶</Text>
                 </View>
               )}
             </Animated.View>
@@ -328,40 +308,44 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   stageCard: {
+    width: '100%',
+    maxWidth: 460,
     alignItems: 'center',
     justifyContent: 'center',
   },
   topBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#EFE4D6',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 99,
     borderWidth: 1,
     borderColor: '#D8C3AD',
-    marginBottom: 18,
+    marginBottom: 16,
   },
   topBadgeText: {
     fontSize: 11,
     fontWeight: '800',
     color: '#7A5C45',
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
   },
   wordRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     flexWrap: 'nowrap',
-    marginBottom: 4,
   },
   shopLetter: {
     fontSize: 44,
     fontWeight: '900',
     color: COLORS.darkText,
-    letterSpacing: -0.6,
+    letterSpacing: -0.5,
   },
   shopLetterMobile: {
-    fontSize: 30,
-    letterSpacing: -0.4,
+    fontSize: 32,
+    letterSpacing: -0.3,
   },
   trackContainer: {
     justifyContent: 'center',
@@ -370,8 +354,8 @@ const styles = StyleSheet.create({
   },
   yarnStrand: {
     position: 'absolute',
-    left: 6,
-    bottom: 10,
+    left: 0,
+    bottom: 8,
     height: 5,
     borderRadius: 99,
     backgroundColor: '#B89576',
@@ -384,8 +368,6 @@ const styles = StyleSheet.create({
   },
   ballWrapper: {
     position: 'absolute',
-    left: 0,
-    bottom: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -396,14 +378,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   subtitleWrap: {
-    marginTop: 14,
+    marginTop: 12,
     alignItems: 'center',
   },
   subtitleText: {
     fontSize: 15,
     fontWeight: '600',
     color: '#7A5C45',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
+    textAlign: 'center',
   },
   subtitleTextMobile: {
     fontSize: 13,

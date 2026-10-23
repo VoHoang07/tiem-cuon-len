@@ -187,12 +187,14 @@ export default function HomeScreen() {
     </View>
   );
 
+  const containerMaxWidth = Math.min(windowWidth, MAX_CONTAINER_WIDTH);
+
   const ListHeader = (
-    <View style={styles.constrainedContent}>
+    <View style={[styles.constrainedContent, { width: containerMaxWidth, maxWidth: containerMaxWidth }]}>
       {/* Unified Top Navbar (Desktop has inline Search Bar; Mobile stacks Search Bar cleanly below) */}
       <View style={[styles.headerCard, isMobile && styles.headerCardMobile]}>
         <View style={styles.headerTopRow}>
-          <View style={styles.brandBlock}>
+          <View style={[styles.brandBlock, isMobile && styles.brandBlockMobile]}>
             <Text style={styles.greeting}>{HOME_WELCOME}</Text>
             <BrandTitle />
           </View>
@@ -202,10 +204,10 @@ export default function HomeScreen() {
           <View style={styles.headerActions}>
             {/* Quick Favorites Button */}
             <TouchableOpacity
-              style={styles.iconActionBtn}
+              style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
               onPress={() => router.push('/favorites')}
               activeOpacity={0.75}>
-              <Heart size={19} color={COLORS.darkText} />
+              <Heart size={isMobile ? 17 : 19} color={COLORS.darkText} />
               {favorites.length > 0 && (
                 <View style={[styles.badge, styles.favBadge]}>
                   <Text style={styles.badgeText}>
@@ -217,10 +219,10 @@ export default function HomeScreen() {
 
             {/* Quick Cart Button */}
             <TouchableOpacity
-              style={styles.iconActionBtn}
+              style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
               onPress={() => router.push('/cart')}
               activeOpacity={0.75}>
-              <ShoppingCart size={19} color={COLORS.darkText} />
+              <ShoppingCart size={isMobile ? 17 : 19} color={COLORS.darkText} />
               {cartCount > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
@@ -248,8 +250,10 @@ export default function HomeScreen() {
                 style={[styles.loginPillBtn, isMobile && styles.loginPillBtnMobile]}
                 onPress={() => router.push('/login')}
                 activeOpacity={0.8}>
-                <UserIcon size={15} color="#3D2B1F" />
-                <Text style={styles.loginPillText}>Đăng nhập</Text>
+                <UserIcon size={14} color="#3D2B1F" />
+                <Text style={[styles.loginPillText, isMobile && styles.loginPillTextMobile]}>
+                  Đăng nhập
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -304,32 +308,38 @@ export default function HomeScreen() {
 
           {/* Service Highlights Bar */}
           <View style={[styles.trustBar, isMobile && styles.trustBarMobile]}>
-            <View style={styles.trustItem}>
+            <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
               <View style={styles.trustIconWrap}>
                 <Truck size={15} color="#3D2B1F" />
               </View>
-              <View>
-                <Text style={styles.trustTitle}>Giao hàng toàn quốc</Text>
+              <View style={styles.trustTextWrap}>
+                <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                  {isMobile ? 'Giao toàn quốc' : 'Giao hàng toàn quốc'}
+                </Text>
                 {!isMobile && <Text style={styles.trustSub}>Đóng gói hộp quà cẩn thận</Text>}
               </View>
             </View>
             <View style={styles.trustDivider} />
-            <View style={styles.trustItem}>
+            <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
               <View style={styles.trustIconWrap}>
                 <HeartHandshake size={15} color="#3D2B1F" />
               </View>
-              <View>
-                <Text style={styles.trustTitle}>Len cotton mềm mịn</Text>
+              <View style={styles.trustTextWrap}>
+                <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                  {isMobile ? 'Len cotton mịn' : 'Len cotton mềm mịn'}
+                </Text>
                 {!isMobile && <Text style={styles.trustSub}>An toàn & bền màu theo năm tháng</Text>}
               </View>
             </View>
             <View style={styles.trustDivider} />
-            <View style={styles.trustItem}>
+            <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
               <View style={styles.trustIconWrap}>
                 <Gift size={15} color="#3D2B1F" />
               </View>
-              <View>
-                <Text style={styles.trustTitle}>Nhận đặt theo mẫu</Text>
+              <View style={styles.trustTextWrap}>
+                <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                  {isMobile ? 'Đặt theo mẫu' : 'Nhận đặt theo mẫu'}
+                </Text>
                 {!isMobile && <Text style={styles.trustSub}>Tùy chỉnh màu sắc & kích thước</Text>}
               </View>
             </View>
@@ -426,7 +436,7 @@ export default function HomeScreen() {
   );
 
   const ListFooter = (
-    <View style={styles.footerOuter}>
+    <View style={[styles.footerOuter, { width: containerMaxWidth, maxWidth: containerMaxWidth, alignSelf: 'center' }]}>
       {hasMore && filteredProducts.length > 0 && (
         <View style={styles.constrainedContent}>
           <TouchableOpacity style={styles.loadMoreBtn} onPress={handleEndReached}>
@@ -539,6 +549,7 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: COLORS.cream,
+    overflow: 'hidden',
   },
   scroll: {
     flex: 1,
@@ -547,6 +558,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MAX_CONTAINER_WIDTH,
     alignSelf: 'center',
+    overflow: 'hidden',
   },
   listContent: {
     flexGrow: 1,
@@ -588,6 +600,10 @@ const styles = StyleSheet.create({
   brandBlock: {
     flexShrink: 0,
   },
+  brandBlockMobile: {
+    flex: 1,
+    minWidth: 0,
+  },
   greeting: {
     fontSize: 11.5,
     color: COLORS.mediumText,
@@ -597,7 +613,7 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     flexShrink: 0,
   },
   iconActionBtn: {
@@ -610,6 +626,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2D2C0',
     ...SHADOWS.small,
+  },
+  iconActionBtnMobile: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   badge: {
     position: 'absolute',
@@ -662,13 +683,16 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   loginPillBtnMobile: {
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
     paddingVertical: 8,
   },
   loginPillText: {
     fontSize: 13,
     fontWeight: '800',
     color: '#3D2B1F',
+  },
+  loginPillTextMobile: {
+    fontSize: 12,
   },
   mobileSearchWrap: {
     marginTop: 10,
@@ -883,21 +907,30 @@ const styles = StyleSheet.create({
     borderColor: '#E5D6C5',
   },
   trustBarMobile: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 10,
     borderRadius: 15,
   },
   trustItem: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
+  trustItemMobile: {
+    flexDirection: 'column',
+    gap: 4,
+  },
+  trustTextWrap: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
   trustIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     backgroundColor: '#D8C3AD',
     alignItems: 'center',
     justifyContent: 'center',
@@ -906,6 +939,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#3D2B1F',
+  },
+  trustTitleMobile: {
+    fontSize: 11,
+    textAlign: 'center',
   },
   trustSub: {
     fontSize: 11,
