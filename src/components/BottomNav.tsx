@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,8 +36,13 @@ export function BottomNav() {
   const { role } = useAuth();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  const [mounted, setMounted] = useState(false);
 
-  const isWideWeb = Platform.OS === 'web' && windowWidth >= 640;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isWideWeb = mounted && Platform.OS === 'web' && windowWidth >= 640;
   const isAdmin = role === 'admin';
 
   const adminTabs = [
