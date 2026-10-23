@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
   Animated,
 } from 'react-native';
-import { Heart, Plus } from 'lucide-react-native';
+import { Heart, Plus, Check } from 'lucide-react-native';
 import { Product } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
@@ -35,25 +35,29 @@ export function ProductCard({
   const { toggleFavorite, isFavorite, addToCart } = useShop();
   const { width: windowWidth } = useWindowDimensions();
   const fav = isFavorite(product.id);
+  const [justAdded, setJustAdded] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScale = useRef(new Animated.Value(1)).current;
 
+  const isDesktop = windowWidth >= 768;
   const containerWidth = Math.min(windowWidth, MAX_CONTAINER_WIDTH);
-  const availableWidth = containerWidth - SPACING.lg * 2 - GAP * (numColumns - 1);
+  const horizontalPad = windowWidth < 640 ? 12 : SPACING.lg;
+  const gapSize = windowWidth < 640 ? 10 : GAP;
+  const availableWidth = containerWidth - horizontalPad * 2 - gapSize * (numColumns - 1);
   const gridCardWidth = Math.floor(availableWidth / numColumns);
 
   const cardWidth =
     variant === 'carousel'
-      ? windowWidth >= 768
-        ? 230
-        : 185
+      ? isDesktop
+        ? 236
+        : 176
       : gridCardWidth;
 
   const imageHeight =
     variant === 'carousel'
-      ? Math.round(cardWidth * 0.98)
-      : Math.min(Math.round(cardWidth * 0.98), 240);
+      ? Math.round(cardWidth * 0.92)
+      : Math.min(Math.round(cardWidth * 0.94), 232);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -90,6 +94,8 @@ export function ProductCard({
 
   const handleQuickAdd = () => {
     addToCart(product, 1);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 950);
   };
 
   return (
@@ -157,13 +163,28 @@ export function ProductCard({
           </View>
 
           <View style={styles.priceRow}>
-            <Text style={styles.price}>{formatVND(product.price)}</Text>
+            <Text style={[styles.price, !isDesktop && styles.priceMobile]}>
+              {formatVND(product.price)}
+            </Text>
             <TouchableOpacity
-              style={styles.quickAddBtn}
+              style={[
+                styles.quickAddBtn,
+                isDesktop && styles.quickAddBtnDesktop,
+                justAdded && styles.quickAddBtnAdded,
+              ]}
               onPress={handleQuickAdd}
               activeOpacity={0.75}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Plus size={16} color={COLORS.white} strokeWidth={2.5} />
+              {justAdded ? (
+                <Check size={15} color="#3D2B1F" strokeWidth={2.8} />
+              ) : (
+                <Plus size={15} color="#3D2B1F" strokeWidth={2.6} />
+              )}
+              {isDesktop && (
+                <Text style={styles.quickAddText}>
+                  {justAdded ? 'Đã thêm' : 'Thêm'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -278,16 +299,37 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   price: {
-    fontSize: 15.5,
+    fontSize: 16,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: '#3D2B1F',
+  },
+  priceMobile: {
+    fontSize: 14.5,
   },
   quickAddBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: COLORS.primary,
+    minWidth: 32,
+    height: 32,
+    borderRadius: 11,
+    backgroundColor: '#D8C3AD',
+    borderWidth: 1,
+    borderColor: '#C5AC92',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  quickAddBtnDesktop: {
+    paddingHorizontal: 11,
+    borderRadius: 12,
+  },
+  quickAddBtnAdded: {
+    backgroundColor: '#DCEBD6',
+    borderColor: '#A3C896',
+  },
+  quickAddText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3D2B1F',
   },
 });

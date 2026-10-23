@@ -141,7 +141,10 @@ export default function ProductDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
         {/* Image Area */}
         <View style={styles.imageArea}>
           <TouchableOpacity style={styles.backBtn} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }}>
@@ -316,30 +319,32 @@ export default function ProductDetailScreen() {
 
       {/* Bottom Action Bar — customers only */}
       {!isAdmin && (
-        <View style={styles.bottomBar}>
-          <View style={styles.quantitySelector}>
+        <View style={styles.bottomBarOuter}>
+          <View style={styles.bottomBar}>
+            <View style={styles.quantitySelector}>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+                <Minus size={18} color={COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.qtyText}>{quantity}</Text>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                onPress={() => setQuantity(Math.min(quantity + 1, product.quantity))}>
+                <Plus size={18} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
-              style={styles.qtyBtn}
-              onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-              <Minus size={18} color={COLORS.primary} />
+              style={styles.addToCartBtn}
+              onPress={handleAddToCart}>
+              <Text style={styles.addToCartText} numberOfLines={1}>{PD_ADD_TO_CART}</Text>
             </TouchableOpacity>
-            <Text style={styles.qtyText}>{quantity}</Text>
             <TouchableOpacity
-              style={styles.qtyBtn}
-              onPress={() => setQuantity(Math.min(quantity + 1, product.quantity))}>
-              <Plus size={18} color={COLORS.primary} />
+              style={styles.buyNowBtn}
+              onPress={handleBuyNow}>
+              <Text style={styles.buyNowText} numberOfLines={1}>{PD_BUY_NOW}</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.addToCartBtn}
-            onPress={handleAddToCart}>
-            <Text style={styles.addToCartText} numberOfLines={1}>{PD_ADD_TO_CART}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.buyNowBtn}
-            onPress={handleBuyNow}>
-            <Text style={styles.buyNowText} numberOfLines={1}>{PD_BUY_NOW}</Text>
-          </TouchableOpacity>
         </View>
       )}
     </SafeAreaView>
@@ -362,6 +367,11 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  scrollContent: {
+    width: '100%',
+    maxWidth: 840,
+    alignSelf: 'center',
   },
   notFound: {
     flex: 1,
@@ -548,12 +558,17 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
     lineHeight: 18,
   },
-  bottomBar: {
+  bottomBarOuter: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: COLORS.white,
+    alignItems: 'center',
+  },
+  bottomBar: {
+    width: '100%',
+    maxWidth: 840,
+    backgroundColor: '#FFFDF9',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.md,
@@ -562,6 +577,8 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
     ...SHADOWS.large,
   },
   quantitySelector: {

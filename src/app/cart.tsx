@@ -25,7 +25,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { BOTTOM_NAV_SPACER } from '@/constants/layout';
 import { formatVND } from '@/utils/formatCurrency';
-import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
+import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   CART_TITLE,
   CART_CLEAR_ALL,
@@ -97,7 +97,7 @@ export default function CartScreen() {
             {item.product.name}
           </Text>
           <Text style={styles.itemCategory}>
-            {item.product.category}
+            {getCategoryLabel(item.product.category)}
           </Text>
           <Text style={styles.itemPrice}>
             {formatVND(item.product.price)} {CART_PER_PIECE}
@@ -221,9 +221,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cream,
   },
   listContent: {
+    width: '100%',
+    maxWidth: 840,
+    alignSelf: 'center',
     paddingBottom: 140,
   },
   listEmpty: {
+    width: '100%',
+    maxWidth: 840,
+    alignSelf: 'center',
     flexGrow: 1,
   },
   header: {
@@ -442,14 +448,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: COLORS.white,
+    width: '100%',
+    maxWidth: 840,
+    alignSelf: 'center',
+    backgroundColor: '#FFFDF9',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.lg,
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(0,0,0,0.06)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
     ...SHADOWS.large,
   },
   totalText: {

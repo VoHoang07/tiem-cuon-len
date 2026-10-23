@@ -5,6 +5,7 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
   RefreshControl,
@@ -14,11 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Search,
   ShoppingCart,
+  Heart,
   Sparkles,
   User as UserIcon,
   X,
   Gift,
   HeartHandshake,
+  Truck,
+  SlidersHorizontal,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
@@ -33,7 +37,6 @@ import {
   HOME_WELCOME,
   HOME_SEARCH_PLACEHOLDER,
   HOME_FEATURED,
-  HOME_TRENDING,
   HOME_ALL_PRODUCTS,
   HOME_EMPTY_TITLE,
   HOME_EMPTY_SUBTEXT,
@@ -46,6 +49,15 @@ import { getCategoryLabel } from '@/utils/getCategoryEmoji';
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
 
+type SortOption = 'popular' | 'price_asc' | 'price_desc' | 'rating';
+
+const SORT_OPTIONS: { key: SortOption; label: string }[] = [
+  { key: 'popular', label: 'Phổ biến' },
+  { key: 'price_asc', label: 'Giá thấp → cao' },
+  { key: 'price_desc', label: 'Giá cao → thấp' },
+  { key: 'rating', label: 'Đánh giá cao' },
+];
+
 export default function HomeScreen() {
   const router = useRouter();
   const {
@@ -55,10 +67,13 @@ export default function HomeScreen() {
     hasMore,
     loadMore,
     cartCount,
+    favorites,
   } = useShop();
   const { user, isAuthenticated } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
 
+  const isDesktop = windowWidth >= 768;
+  const isMobile = windowWidth < 640;
   const numColumns = windowWidth >= 960 ? 4 : windowWidth >= 640 ? 3 : 2;
 
   useFocusEffect(
@@ -68,36 +83,54 @@ export default function HomeScreen() {
   );
 
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
+  const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [searchInput, setSearchInput] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const search = useDebounce(searchInput, 300);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Deduplicate products by normalized name so identical DB entries don't repeat
+  const uniqueProducts = useMemo(() => {
+    const seen = new Set<string>();
+    return products.filter((p) => {
+      const key = p.name.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
-    let filtered = products;
+    let list = [...uniqueProducts];
     if (selectedCategory !== 'All') {
-      filtered = filtered.filter((p) => p.category === selectedCategory);
+      list = list.filter((p) => p.category === selectedCategory);
     }
     if (search.trim()) {
       const q = search.toLowerCase();
-      filtered = filtered.filter(
+      list = list.filter(
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.material.toLowerCase().includes(q) ||
           p.tags.some((t) => t.toLowerCase().includes(q))
       );
     }
-    return filtered;
-  }, [products, selectedCategory, search]);
+    if (sortBy === 'price_asc') {
+      list.sort((a, b) => a.price - b.price);
+    } else if (sortBy === 'price_desc') {
+      list.sort((a, b) => b.price - a.price);
+    } else if (sortBy === 'rating') {
+      list.sort((a, b) => b.rating - a.rating);
+    }
+    return list;
+  }, [uniqueProducts, selectedCategory, search, sortBy]);
 
   const featuredProducts = useMemo(
-    () => products.filter((p) => p.rating >= 4.8).slice(0, 6),
-    [products]
-  );
-
-  const trendingProducts = useMemo(
-    () => [...products].sort((a, b) => b.rating - a.rating).slice(0, 6),
-    [products]
+    () =>
+      [...uniqueProducts]
+        .filter((p) => p.rating >= 4.8)
+        .sort((a, b) => b.rating - a.rating)
+        .slice(0, 5),
+    [uniqueProducts]
   );
 
   const onRefresh = useCallback(async () => {
@@ -120,149 +153,206 @@ export default function HomeScreen() {
     />
   );
 
-  const showFeaturedAndTrending = !search && selectedCategory === 'All';
+  const showHeroAndFeatured = !search && selectedCategory === 'All';
+
+  const SearchBarBlock = (
+    <View
+      style={[
+        styles.searchContainer,
+        isDesktop ? styles.searchContainerDesktop : styles.searchContainerMobile,
+        searchFocused && styles.searchContainerFocused,
+      ]}>
+      <View style={styles.searchIconBadge}>
+        <Search
+          size={17}
+          color={searchFocused ? COLORS.darkText : COLORS.mediumText}
+        />
+      </View>
+      <TextInput
+        style={styles.searchInput}
+        placeholder={HOME_SEARCH_PLACEHOLDER}
+        placeholderTextColor={COLORS.lightText}
+        value={searchInput}
+        onChangeText={setSearchInput}
+        onFocus={() => setSearchFocused(true)}
+        onBlur={() => setSearchFocused(false)}
+      />
+      {searchInput.length > 0 && (
+        <TouchableOpacity
+          style={styles.clearSearchBtn}
+          onPress={() => setSearchInput('')}>
+          <X size={15} color={COLORS.mediumText} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   const ListHeader = (
     <View style={styles.constrainedContent}>
-      {/* Top Navbar */}
-      <View style={styles.header}>
-        <View style={styles.brandBlock}>
-          <Text style={styles.greeting}>{HOME_WELCOME}</Text>
-          <BrandTitle />
-        </View>
+      {/* Unified Top Navbar (Desktop has inline Search Bar; Mobile stacks Search Bar cleanly below) */}
+      <View style={[styles.headerCard, isMobile && styles.headerCardMobile]}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.brandBlock}>
+            <Text style={styles.greeting}>{HOME_WELCOME}</Text>
+            <BrandTitle />
+          </View>
 
-        <View style={styles.headerActions}>
-          {/* Quick Cart Button */}
-          <TouchableOpacity
-            style={styles.cartIconBtn}
-            onPress={() => router.push('/cart')}
-            activeOpacity={0.75}>
-            <ShoppingCart size={20} color={COLORS.darkText} />
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>
-                  {cartCount > 99 ? '99+' : cartCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {isDesktop && SearchBarBlock}
 
-          {/* Login or Profile Button */}
-          {isAuthenticated ? (
+          <View style={styles.headerActions}>
+            {/* Quick Favorites Button */}
             <TouchableOpacity
-              style={styles.userPill}
-              onPress={() => router.push('/profile')}
-              activeOpacity={0.8}>
-              <BrandAvatar size={34} />
-              {windowWidth >= 480 && (
-                <Text style={styles.userPillName} numberOfLines={1}>
-                  {user?.name || 'Tài khoản'}
-                </Text>
+              style={styles.iconActionBtn}
+              onPress={() => router.push('/favorites')}
+              activeOpacity={0.75}>
+              <Heart size={19} color={COLORS.darkText} />
+              {favorites.length > 0 && (
+                <View style={[styles.badge, styles.favBadge]}>
+                  <Text style={styles.badgeText}>
+                    {favorites.length > 99 ? '99+' : favorites.length}
+                  </Text>
+                </View>
               )}
             </TouchableOpacity>
-          ) : (
+
+            {/* Quick Cart Button */}
             <TouchableOpacity
-              style={styles.loginPillBtn}
-              onPress={() => router.push('/login')}
-              activeOpacity={0.8}>
-              <UserIcon size={15} color="#3D2B1F" />
-              <Text style={styles.loginPillText}>Đăng nhập</Text>
+              style={styles.iconActionBtn}
+              onPress={() => router.push('/cart')}
+              activeOpacity={0.75}>
+              <ShoppingCart size={19} color={COLORS.darkText} />
+              {cartCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {cartCount > 99 ? '99+' : cartCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
-          )}
+
+            {/* Login or Profile Button */}
+            {isAuthenticated ? (
+              <TouchableOpacity
+                style={styles.userPill}
+                onPress={() => router.push('/profile')}
+                activeOpacity={0.8}>
+                <BrandAvatar size={32} />
+                {!isMobile && (
+                  <Text style={styles.userPillName} numberOfLines={1}>
+                    {user?.name || 'Tài khoản'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.loginPillBtn, isMobile && styles.loginPillBtnMobile]}
+                onPress={() => router.push('/login')}
+                activeOpacity={0.8}>
+                <UserIcon size={15} color="#3D2B1F" />
+                <Text style={styles.loginPillText}>Đăng nhập</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
+
+        {!isDesktop && <View style={styles.mobileSearchWrap}>{SearchBarBlock}</View>}
       </View>
 
-      {/* Hero Banner */}
-      {showFeaturedAndTrending && (
-        <View style={styles.heroBanner}>
-          <View style={styles.heroContent}>
-            <View style={styles.heroBadge}>
-              <Sparkles size={13} color={COLORS.primary} />
-              <Text style={styles.heroBadgeText}>BỘ SƯU TẬP THỦ CÔNG MỚI</Text>
-            </View>
-            <Text style={styles.heroTitle}>
-              Đan từng mũi ấm áp,{'\n'}gửi trọn yêu thương 🧶
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              Móc khoá, hoa len, túi xách & quà tặng đan móc thủ công tỉ mỉ từ sợi len cotton cao cấp.
-            </Text>
-            <View style={styles.heroPillsRow}>
-              <View style={styles.heroFeaturePill}>
-                <HeartHandshake size={13} color={COLORS.primary} />
-                <Text style={styles.heroFeatureText}>100% Thủ công</Text>
+      {/* Hero Banner & Service Strip */}
+      {showHeroAndFeatured && (
+        <View style={[styles.heroSection, isMobile && styles.heroSectionMobile]}>
+          <View style={[styles.heroBanner, isMobile && styles.heroBannerMobile]}>
+            <View style={styles.heroContent}>
+              <View style={styles.heroBadge}>
+                <Sparkles size={12} color={COLORS.primary} />
+                <Text style={styles.heroBadgeText}>BỘ SƯU TẬP THỦ CÔNG MỚI</Text>
               </View>
-              <View style={styles.heroFeaturePill}>
-                <Gift size={13} color={COLORS.primary} />
-                <Text style={styles.heroFeatureText}>Quà tặng xinh xắn</Text>
+              <Text style={[styles.heroTitle, isMobile && styles.heroTitleMobile]}>
+                Đan từng mũi ấm áp,{'\n'}gửi trọn yêu thương 🧶
+              </Text>
+              <Text style={[styles.heroSubtitle, isMobile && styles.heroSubtitleMobile]}>
+                Móc khoá, hoa len, túi xách & quà tặng đan móc tỉ mỉ từ sợi len cotton cao cấp.
+              </Text>
+              <View style={styles.heroPillsRow}>
+                <View style={styles.heroFeaturePill}>
+                  <HeartHandshake size={13} color={COLORS.primary} />
+                  <Text style={styles.heroFeatureText}>100% Thủ công</Text>
+                </View>
+                <View style={styles.heroFeaturePill}>
+                  <Gift size={13} color={COLORS.primary} />
+                  <Text style={styles.heroFeatureText}>Gói quà miễn phí</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.heroVisual}>
+              <View style={[styles.heroCircleOuter, isMobile && styles.heroCircleOuterMobile]}>
+                <View style={[styles.heroCircleInner, isMobile && styles.heroCircleInnerMobile]}>
+                  <Text style={[styles.heroMainEmoji, isMobile && styles.heroMainEmojiMobile]}>
+                    🧸
+                  </Text>
+                </View>
+                <View style={styles.heroFloatTagTop}>
+                  <Text style={styles.heroFloatEmoji}>🌷</Text>
+                </View>
+                <View style={styles.heroFloatTagBottom}>
+                  <Text style={styles.heroFloatEmoji}>🍒</Text>
+                </View>
               </View>
             </View>
           </View>
-          <View style={styles.heroVisual}>
-            <View style={styles.heroCircleOuter}>
-              <View style={styles.heroCircleInner}>
-                <Text style={styles.heroMainEmoji}>🧸</Text>
+
+          {/* Service Highlights Bar */}
+          <View style={[styles.trustBar, isMobile && styles.trustBarMobile]}>
+            <View style={styles.trustItem}>
+              <View style={styles.trustIconWrap}>
+                <Truck size={15} color="#3D2B1F" />
               </View>
-              <View style={styles.heroFloatTagTop}>
-                <Text style={styles.heroFloatEmoji}>🌷</Text>
+              <View>
+                <Text style={styles.trustTitle}>Giao hàng toàn quốc</Text>
+                {!isMobile && <Text style={styles.trustSub}>Đóng gói hộp quà cẩn thận</Text>}
               </View>
-              <View style={styles.heroFloatTagBottom}>
-                <Text style={styles.heroFloatEmoji}>🍒</Text>
+            </View>
+            <View style={styles.trustDivider} />
+            <View style={styles.trustItem}>
+              <View style={styles.trustIconWrap}>
+                <HeartHandshake size={15} color="#3D2B1F" />
+              </View>
+              <View>
+                <Text style={styles.trustTitle}>Len cotton mềm mịn</Text>
+                {!isMobile && <Text style={styles.trustSub}>An toàn & bền màu theo năm tháng</Text>}
+              </View>
+            </View>
+            <View style={styles.trustDivider} />
+            <View style={styles.trustItem}>
+              <View style={styles.trustIconWrap}>
+                <Gift size={15} color="#3D2B1F" />
+              </View>
+              <View>
+                <Text style={styles.trustTitle}>Nhận đặt theo mẫu</Text>
+                {!isMobile && <Text style={styles.trustSub}>Tùy chỉnh màu sắc & kích thước</Text>}
               </View>
             </View>
           </View>
         </View>
       )}
 
-      {/* Search Bar */}
-      <View
-        style={[
-          styles.searchContainer,
-          searchFocused && styles.searchContainerFocused,
-        ]}>
-        <View style={styles.searchIconBadge}>
-          <Search
-            size={18}
-            color={searchFocused ? COLORS.primary : COLORS.lightText}
-          />
-        </View>
-        <TextInput
-          style={styles.searchInput}
-          placeholder={HOME_SEARCH_PLACEHOLDER}
-          placeholderTextColor={COLORS.lightText}
-          value={searchInput}
-          onChangeText={setSearchInput}
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => setSearchFocused(false)}
-        />
-        {searchInput.length > 0 && (
-          <TouchableOpacity
-            style={styles.clearSearchBtn}
-            onPress={() => setSearchInput('')}>
-            <X size={16} color={COLORS.mediumText} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Category Chips */}
-      <CategoryChips
-        categories={[...CATEGORIES]}
-        selected={selectedCategory}
-        onSelect={setSelectedCategory}
-      />
-
-      {/* Featured Products */}
-      {showFeaturedAndTrending && featuredProducts.length > 0 && (
-        <View>
+      {/* Curated Featured Row (Single clean carousel, no duplicate second carousel) */}
+      {showHeroAndFeatured && featuredProducts.length > 0 && (
+        <View style={styles.featuredSection}>
           <SectionHeader
             title={HOME_FEATURED}
-            subtitle="Được khách hàng yêu thích & đánh giá cao nhất"
+            subtitle="Những mẫu len thủ công được yêu thích nhất tại tiệm"
           />
           <FlatList
             horizontal
             data={featuredProducts}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => `featured-${item.id}`}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.featuredRow}
+            contentContainerStyle={[
+              styles.featuredRow,
+              isMobile && styles.featuredRowMobile,
+            ]}
             renderItem={({ item }) => (
               <ProductCard
                 product={item}
@@ -274,35 +364,45 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Trending */}
-      {showFeaturedAndTrending && trendingProducts.length > 0 && (
-        <View>
-          <SectionHeader
-            title={HOME_TRENDING}
-            subtitle="Mẫu móc len handmade đang hot tuần này"
-          />
-          <FlatList
-            horizontal
-            data={trendingProducts}
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.featuredRow}
-            renderItem={({ item }) => (
-              <ProductCard
-                product={item}
-                variant="carousel"
-                onPress={(p) => router.push(`/product/${p.id}`)}
-              />
-            )}
-          />
-        </View>
-      )}
+      {/* Main Catalog Filter & Sort Toolbar */}
+      <View style={styles.catalogToolbar}>
+        <SectionHeader
+          title={selectedCategory === 'All' ? HOME_ALL_PRODUCTS : getCategoryLabel(selectedCategory)}
+          subtitle={`${filteredProducts.length} sản phẩm sẵn sàng giao ngay`}
+        />
 
-      {/* All Products Section Header */}
-      <SectionHeader
-        title={selectedCategory === 'All' ? HOME_ALL_PRODUCTS : getCategoryLabel(selectedCategory)}
-        subtitle={`${filteredProducts.length} sản phẩm hiện có`}
-      />
+        {/* Category Filter Chips */}
+        <CategoryChips
+          categories={[...CATEGORIES]}
+          selected={selectedCategory}
+          onSelect={setSelectedCategory}
+        />
+
+        {/* Quick Sort Bar */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.sortRow, isMobile && styles.sortRowMobile]}>
+          <View style={styles.sortLabelPill}>
+            <SlidersHorizontal size={13} color={COLORS.mediumText} />
+            <Text style={styles.sortLabelText}>Sắp xếp:</Text>
+          </View>
+          {SORT_OPTIONS.map((opt) => {
+            const active = sortBy === opt.key;
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.sortChip, active && styles.sortChipActive]}
+                onPress={() => setSortBy(opt.key)}
+                activeOpacity={0.75}>
+                <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
     </View>
   );
 
@@ -311,6 +411,17 @@ export default function HomeScreen() {
       <Text style={styles.emptyEmoji}>🧶</Text>
       <Text style={styles.emptyText}>{HOME_EMPTY_TITLE}</Text>
       <Text style={styles.emptySubtext}>{HOME_EMPTY_SUBTEXT}</Text>
+      {(selectedCategory !== 'All' || searchInput.length > 0) && (
+        <TouchableOpacity
+          style={styles.resetFilterBtn}
+          onPress={() => {
+            setSelectedCategory('All');
+            setSearchInput('');
+            setSortBy('popular');
+          }}>
+          <Text style={styles.resetFilterText}>Xem lại tất cả sản phẩm</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -323,7 +434,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       )}
-      <View style={styles.tearFooterWrapper}>
+      <View style={[styles.tearFooterWrapper, isMobile && styles.tearFooterWrapperMobile]}>
         <PushpinTearFooter
           brand="Tiệm Cuộn Len."
           name="len thủ công việt nam"
@@ -333,6 +444,7 @@ export default function HomeScreen() {
           sheetInk="#3D2B1F"
           paperInk="#4A3525"
           seed={23}
+          height={isMobile ? 560 : 660}
           email="lienhe@tiemcuonlen.vn"
           newsletter={{
             label: "Nhận thông báo mẫu len thủ công mới mỗi tuần",
@@ -405,7 +517,9 @@ export default function HomeScreen() {
         ListEmptyComponent={ListEmpty}
         ListFooterComponent={ListFooter}
         columnWrapperStyle={
-          filteredProducts.length > 0 ? styles.columnWrapper : undefined
+          filteredProducts.length > 0
+            ? [styles.columnWrapper, isMobile && styles.columnWrapperMobile]
+            : undefined
         }
         contentContainerStyle={
           filteredProducts.length === 0 ? styles.listContent : undefined
@@ -444,19 +558,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     gap: GAP,
   },
-  header: {
+  columnWrapperMobile: {
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  headerCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 22,
+    backgroundColor: '#F3ECE2',
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
+  },
+  headerCardMobile: {
+    marginHorizontal: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 18,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.sm,
+    gap: 14,
   },
   brandBlock: {
-    flex: 1,
+    flexShrink: 0,
   },
   greeting: {
-    fontSize: 12.5,
+    fontSize: 11.5,
     color: COLORS.mediumText,
     fontWeight: '600',
     letterSpacing: 0.1,
@@ -464,20 +597,21 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    flexShrink: 0,
   },
-  cartIconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: COLORS.white,
+  iconActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFDF9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(118, 83, 65, 0.12)',
+    borderColor: '#E2D2C0',
     ...SHADOWS.small,
   },
-  cartBadge: {
+  badge: {
     position: 'absolute',
     top: -3,
     right: -4,
@@ -489,7 +623,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
-  cartBadgeText: {
+  favBadge: {
+    backgroundColor: '#8C684C',
+  },
+  badgeText: {
     color: COLORS.white,
     fontSize: 10,
     fontWeight: '800',
@@ -498,12 +635,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFDF9',
     padding: 4,
     paddingRight: 10,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(118, 83, 65, 0.12)',
+    borderColor: '#E2D2C0',
     ...SHADOWS.small,
   },
   userPillName: {
@@ -519,35 +656,95 @@ const styles = StyleSheet.create({
     backgroundColor: '#D8C3AD',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 22,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#C4AA90',
     ...SHADOWS.small,
+  },
+  loginPillBtnMobile: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
   },
   loginPillText: {
     fontSize: 13,
     fontWeight: '800',
     color: '#3D2B1F',
   },
+  mobileSearchWrap: {
+    marginTop: 10,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: '#E2D2C0',
+  },
+  searchContainerDesktop: {
+    flex: 1,
+    maxWidth: 420,
+  },
+  searchContainerMobile: {
+    width: '100%',
+  },
+  searchContainerFocused: {
+    borderColor: '#8C684C',
+  },
+  searchIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.darkText,
+    paddingVertical: 7,
+  },
+  clearSearchBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroSection: {
+    marginHorizontal: SPACING.lg,
+    marginTop: 4,
+    marginBottom: 8,
+    gap: 10,
+  },
+  heroSectionMobile: {
+    marginHorizontal: 12,
+  },
   heroBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#D8C3AD',
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.md,
     borderRadius: 24,
-    padding: SPACING.xl,
+    padding: 22,
     borderWidth: 1,
     borderColor: '#C9B199',
     overflow: 'hidden',
-    ...SHADOWS.medium,
+    ...SHADOWS.small,
+  },
+  heroBannerMobile: {
+    padding: 16,
+    borderRadius: 20,
   },
   heroContent: {
     flex: 1,
-    paddingRight: SPACING.md,
-    gap: 8,
+    paddingRight: 12,
+    gap: 7,
   },
   heroBadge: {
     flexDirection: 'row',
@@ -562,22 +759,30 @@ const styles = StyleSheet.create({
     borderColor: '#E6D7C5',
   },
   heroBadgeText: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '800',
     color: '#5C4332',
     letterSpacing: 0.6,
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 23,
     fontWeight: '900',
     color: '#3D2B1F',
-    lineHeight: 28,
+    lineHeight: 29,
     letterSpacing: -0.3,
   },
+  heroTitleMobile: {
+    fontSize: 18.5,
+    lineHeight: 24,
+  },
   heroSubtitle: {
-    fontSize: 13,
+    fontSize: 13.5,
     color: '#5C4332',
-    lineHeight: 18,
+    lineHeight: 19,
+  },
+  heroSubtitleMobile: {
+    fontSize: 12,
+    lineHeight: 17,
   },
   heroPillsRow: {
     flexDirection: 'row',
@@ -614,6 +819,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
+  heroCircleOuterMobile: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+  },
   heroCircleInner: {
     width: 72,
     height: 72,
@@ -623,16 +833,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...SHADOWS.small,
   },
+  heroCircleInnerMobile: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+  },
   heroMainEmoji: {
     fontSize: 36,
+  },
+  heroMainEmojiMobile: {
+    fontSize: 28,
   },
   heroFloatTagTop: {
     position: 'absolute',
     top: -4,
     right: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
@@ -642,58 +860,119 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -2,
     left: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
   },
   heroFloatEmoji: {
-    fontSize: 14,
+    fontSize: 13,
   },
-  searchContainer: {
+  trustBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    marginHorizontal: SPACING.lg,
-    borderRadius: 16,
+    justifyContent: 'space-between',
+    backgroundColor: '#F3ECE2',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
+  },
+  trustBarMobile: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(118, 83, 65, 0.12)',
-    ...SHADOWS.small,
+    paddingVertical: 10,
+    borderRadius: 15,
   },
-  searchContainerFocused: {
-    borderColor: COLORS.primary,
-  },
-  searchIconBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: COLORS.cream,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchInput: {
+  trustItem: {
     flex: 1,
-    fontSize: 14.5,
-    color: COLORS.darkText,
-    paddingVertical: 8,
-  },
-  clearSearchBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.cream,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+  },
+  trustIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#D8C3AD',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trustTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  trustSub: {
+    fontSize: 11,
+    color: '#7A5C45',
+    marginTop: 1,
+  },
+  trustDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#DFCBB5',
+    marginHorizontal: 6,
+  },
+  featuredSection: {
+    marginTop: 2,
   },
   featuredRow: {
     paddingHorizontal: SPACING.lg,
     gap: GAP,
+  },
+  featuredRowMobile: {
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  catalogToolbar: {
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  sortRow: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 10,
+    gap: 8,
+    alignItems: 'center',
+  },
+  sortRowMobile: {
+    paddingHorizontal: 12,
+  },
+  sortLabelPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingRight: 4,
+  },
+  sortLabelText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: COLORS.mediumText,
+  },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
+  },
+  sortChipActive: {
+    backgroundColor: '#3D2B1F',
+    borderColor: '#3D2B1F',
+  },
+  sortChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.mediumText,
+  },
+  sortChipTextActive: {
+    color: '#FAF5EE',
+    fontWeight: '700',
   },
   empty: {
     alignItems: 'center',
@@ -712,6 +991,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.lightText,
     marginTop: SPACING.xs,
+  },
+  resetFilterBtn: {
+    marginTop: 14,
+    backgroundColor: '#D8C3AD',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 16,
+  },
+  resetFilterText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#3D2B1F',
   },
   loadMoreBtn: {
     backgroundColor: '#F3ECE2',
@@ -741,5 +1032,9 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     borderRadius: 28,
     overflow: 'hidden',
+  },
+  tearFooterWrapperMobile: {
+    paddingHorizontal: 12,
+    borderRadius: 22,
   },
 });

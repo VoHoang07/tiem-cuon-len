@@ -9,6 +9,7 @@ import { OrderProvider } from '@/store/OrderContext';
 import { AddressProvider } from '@/store/AddressContext';
 import { PaymentMethodsProvider } from '@/store/PaymentMethodsContext';
 import { BottomNav } from '@/components/BottomNav';
+import { YarnRollIntro } from '@/components/YarnRollIntro';
 import { COLORS } from '@/constants/theme';
 
 const PROTECTED_ROUTES = new Set([
@@ -134,6 +135,7 @@ export default function RootLayout() {
                       <Stack.Screen name="payment/[orderId]" />
                     </Stack>
                     <BottomNavGate />
+                    <YarnRollIntro />
                   </View>
                 </AuthGate>
               </PaymentMethodsProvider>
