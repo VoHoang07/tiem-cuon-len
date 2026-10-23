@@ -409,11 +409,11 @@ const CSS =
   ".tpf-toast{position:absolute;top:calc(100% + .5em);right:0;font-size:max(11px,1.6cqmin);letter-spacing:.04em;white-space:nowrap;padding:.35em .8em;border-radius:99px;background:var(--tpf-on-sheet);color:var(--tpf-sheet);opacity:0;transform:translateY(-4px);transition:opacity .25s,transform .35s var(--ease);pointer-events:none}" +
   ".tpf-toast.on{opacity:1;transform:none}" +
   ".tpf-news{left:50%;top:15%;width:max-content;transform:translateX(-50%);display:grid;justify-items:center;gap:max(10px,1.6cqmin);font-size:var(--fs)}" +
-  ".tpf-pill{position:relative;display:flex;align-items:center;width:max(260px,40cqmin);height:max(40px,5.6cqmin);padding:0 .35em 0 1.2em;border-radius:99px;background:var(--tpf-on-sheet);color:var(--tpf-sheet);transition:box-shadow .3s var(--ease)}" +
-  ".tpf-pill:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--tpf-on-sheet) 35%,transparent)}" +
+  ".tpf-pill{position:relative;display:flex;align-items:center;width:max(260px,40cqmin);height:max(40px,5.6cqmin);padding:0 .35em 0 1.2em;border-radius:99px;background:var(--tpf-paper);color:var(--tpf-on-sheet);border:1px solid color-mix(in srgb,var(--tpf-on-sheet) 18%,transparent);box-shadow:0 4px 14px rgba(61,43,31,.08);transition:box-shadow .3s var(--ease)}" +
+  ".tpf-pill:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--tpf-on-sheet) 25%,transparent)}" +
   ".tpf-pill input{flex:1;min-width:0;height:100%;font-size:max(13px,2cqmin);transition:opacity .3s}" +
   ".tpf-pill input::placeholder{color:currentColor;opacity:.55}" +
-  ".tpf-knob{display:grid;place-items:center;flex:none;height:calc(100% - .6em);aspect-ratio:1;border-radius:50%;background:var(--tpf-sheet);color:var(--tpf-on-sheet);box-shadow:inset 0 0 0 .22em color-mix(in srgb,var(--tpf-on-sheet) 30%,var(--tpf-sheet));transition:transform .45s cubic-bezier(.5,1.7,.4,1)}" +
+  ".tpf-knob{display:grid;place-items:center;flex:none;height:calc(100% - .6em);aspect-ratio:1;border-radius:50%;background:var(--tpf-sheet);color:var(--tpf-on-sheet);box-shadow:inset 0 0 0 .22em color-mix(in srgb,var(--tpf-on-sheet) 22%,var(--tpf-sheet));transition:transform .45s cubic-bezier(.5,1.7,.4,1)}" +
   ".tpf-knob:hover{transform:translateX(2px) scale(1.06)}" +
   ".tpf-knob .tpf-ico{width:52%;height:52%}" +
   ".tpf-pill[data-sent=true] input{opacity:0}" +
@@ -465,7 +465,7 @@ const CSS =
   ".tpf-bub b{font-weight:500;max-width:0;opacity:0;white-space:nowrap;transition:max-width .5s var(--ease),opacity .3s}" +
   ".tpf-bub:hover,.tpf-bub:focus-visible{padding:0 .8em}" +
   ".tpf-bub:hover b,.tpf-bub:focus-visible b{max-width:10em;opacity:1}" +
-  ".tpf-word{display:block;overflow:hidden;padding:0 .04em .14em;font-size:max(38px,min(10.5cqmin,13.5cqw));font-weight:600;letter-spacing:-.045em;line-height:1.05;white-space:nowrap}" +
+  ".tpf-word{display:block;overflow:hidden;padding:0 .04em .14em;font-size:max(28px,min(7.4cqmin,8.6cqw));font-weight:700;letter-spacing:-.04em;line-height:1.08;white-space:nowrap}" +
   ".tpf-word span{display:block;position:relative;transition:transform 1s var(--ease) .5s}" +
   ".tpf-word span::after{content:'';position:absolute;left:.02em;right:.04em;bottom:-.02em;height:max(2px,.045em);background:currentColor;transform-origin:0 50%;transition:transform .9s var(--ease) 1.05s,height .3s var(--ease)}" +
   ".tpf:not(.s3) .tpf-word span{transform:translateY(125%);transition-delay:0s}" +
@@ -1100,7 +1100,7 @@ export default function PushpinTearFooter({
       </div>
 
       {sideLinks.slice(0, 2).map((l, i) => (
-        <A key={i} href={l.href} className={"tpf-z tpf-side tpf-ink tpf-p " + (i ? "r" : "l")} label={l.label} style={{ ...H(1 + i), left: i ? "71.5%" : "29.5%" }} onInternalNavigate={handleInternalNavigate}>
+        <A key={i} href={l.href} className={"tpf-z tpf-side tpf-ink tpf-p " + (i ? "r" : "l")} label={l.label} style={{ ...H(1 + i), left: i ? "83%" : "17%" }} onInternalNavigate={handleInternalNavigate}>
           <span>{l.label}</span>
           <Icon name={l.icon} />
         </A>
