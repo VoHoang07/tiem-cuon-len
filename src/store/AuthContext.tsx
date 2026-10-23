@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password,
       });
@@ -99,6 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         if (__DEV__) console.log('[LOGIN ERROR]', error);
         return { success: false, error: 'Email hoặc mật khẩu không đúng.' };
+      }
+      if (data.session) {
+        setUser(toAuthUser(data.session));
       }
       return { success: true };
     } catch (err: unknown) {
@@ -113,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
         password,
         options: {
@@ -127,6 +130,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: 'Email này đã được sử dụng.' };
         }
         return { success: false, error: error.message };
+      }
+      if (data.session) {
+        setUser(toAuthUser(data.session));
+      } else if (data.user) {
+        const { data: signInData } = await supabase.auth.signInWithPassword({
+          email: email.toLowerCase().trim(),
+          password,
+        });
+        if (signInData.session) {
+          setUser(toAuthUser(signInData.session));
+        }
       }
       return { success: true };
     } catch (err: unknown) {

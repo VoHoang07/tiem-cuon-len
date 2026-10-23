@@ -194,11 +194,26 @@ export default function ProfileScreen() {
           <View style={styles.avatar}>
             <BrandAvatar size={90} />
           </View>
-          <Text style={styles.customerName}>{user?.name ?? 'Khách hàng'}</Text>
-          <View style={styles.emailRow}>
-            <Mail size={14} color={COLORS.mediumText} />
-            <Text style={styles.customerEmail}>{user?.email ?? ''}</Text>
-          </View>
+          <Text style={styles.customerName}>{user?.name || 'Khách hàng'}</Text>
+          {user ? (
+            <View style={styles.emailRow}>
+              <Mail size={14} color={COLORS.mediumText} />
+              <Text style={styles.customerEmail}>{user.email}</Text>
+            </View>
+          ) : (
+            <View style={styles.guestAuthRow}>
+              <TouchableOpacity
+                style={styles.guestLoginBtn}
+                onPress={() => router.push('/login')}>
+                <Text style={styles.guestLoginText}>Đăng nhập</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.guestRegisterBtn}
+                onPress={() => router.push('/register')}>
+                <Text style={styles.guestRegisterText}>Đăng ký</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <Text style={styles.customerSubtitle}>{PROF_CUSTOMER_SUBTITLE}</Text>
         </View>
 
@@ -228,10 +243,12 @@ export default function ProfileScreen() {
         </View>
 
         {/* Logout */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <LogOut size={20} color={COLORS.error} />
-          <Text style={styles.logoutText}>{PROF_LOGOUT}</Text>
-        </TouchableOpacity>
+        {user && (
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <LogOut size={20} color={COLORS.error} />
+            <Text style={styles.logoutText}>{PROF_LOGOUT}</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: 80 }} />
       </ScrollView>
@@ -303,6 +320,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.xs,
     marginTop: SPACING.xs,
+  },
+  guestAuthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  guestLoginBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm,
+    ...SHADOWS.small,
+  },
+  guestLoginText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  guestRegisterBtn: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm,
+  },
+  guestRegisterText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   customerEmail: {
     fontSize: 14,

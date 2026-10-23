@@ -20,6 +20,7 @@ import {
   Home,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
+import { useAuth } from '@/store/AuthContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { BOTTOM_NAV_SPACER } from '@/constants/layout';
@@ -44,10 +45,18 @@ export default function CartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart, cartHydrated } = useShop();
+  const { isAuthenticated } = useAuth();
 
   const handleCheckout = () => {
     if (cart.length === 0) {
       Alert.alert(CART_EMPTY_ALERT_TITLE, CART_EMPTY_ALERT_MSG);
+      return;
+    }
+    if (!isAuthenticated) {
+      router.push({
+        pathname: '/login',
+        params: { redirect: '/checkout' },
+      });
       return;
     }
     router.push('/checkout');

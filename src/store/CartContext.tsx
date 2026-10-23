@@ -65,10 +65,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const fetchCart = useCallback(async () => {
     if (!user) return;
 
+    let guestCart: CartItem[] = [];
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const rawGuest = window.localStorage.getItem('cart_guest');
+        if (rawGuest) {
+          const parsed = JSON.parse(rawGuest);
+          if (Array.isArray(parsed)) guestCart = parsed as CartItem[];
+          window.localStorage.removeItem('cart_guest');
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const { data } = await supabase
       .from('cart_items')
       .select('productId, quantity')
       .eq('userId', user.id);
+
+    let baseItems: CartItem[] = [];
 
     if (data && data.length > 0) {
       const cartRows = data as { productId: string; quantity: number }[];
@@ -81,27 +97,53 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const productMap = new Map((products ?? []).map((p) => [p.id, p]));
 
-      const items: CartItem[] = cartRows
+      baseItems = cartRows
         .map((ci) => {
           const product = productMap.get(ci.productId);
           if (!product) return null;
           return { product: product as Product, quantity: ci.quantity };
         })
         .filter((ci): ci is CartItem => ci !== null && ci.quantity > 0);
-      setCart(items);
-      persistCart(items);
     } else {
       const localCart = hydrateCartFromStorage();
       if (localCart && localCart.length > 0) {
-        setCart(localCart);
+        baseItems = localCart;
       }
     }
 
+    if (guestCart.length > 0) {
+      const mergedMap = new Map<string, CartItem>();
+      for (const item of baseItems) {
+        mergedMap.set(item.product.id, { ...item });
+      }
+      for (const gItem of guestCart) {
+        const existing = mergedMap.get(gItem.product.id);
+        if (existing) {
+          existing.quantity += gItem.quantity;
+        } else {
+          mergedMap.set(gItem.product.id, { ...gItem });
+        }
+      }
+      baseItems = Array.from(mergedMap.values());
+
+      for (const item of baseItems) {
+        supabase
+          .from('cart_items')
+          .upsert(
+            { userId: user.id, productId: item.product.id, quantity: item.quantity },
+            { onConflict: 'userId,productId' },
+          )
+          .then(() => {}, () => {});
+      }
+    }
+
+    setCart(baseItems);
+    persistCart(baseItems);
     setCartHydrated(true);
   }, [user, persistCart, hydrateCartFromStorage]);
 
   useEffect(() => {
-    if (prevOwnerId.current && prevOwnerId.current !== cartOwnerId) {
+    if (prevOwnerId.current && prevOwnerId.current !== cartOwnerId && prevOwnerId.current !== 'guest') {
       setCart([]);
       setCartHydrated(false);
     }

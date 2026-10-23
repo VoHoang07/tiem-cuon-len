@@ -23,6 +23,20 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          const raw = window.localStorage.getItem('favorites_guest');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              setFavorites(parsed as string[]);
+              return;
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
       setFavorites([]);
       return;
     }
@@ -36,19 +50,31 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const toggleFavorite = useCallback((productId: string) => {
-    if (!user) return;
     setFavorites((prev) => {
       const exists = prev.includes(productId);
+      const next = exists ? prev.filter((id) => id !== productId) : [...prev, productId];
+
+      if (!user) {
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem('favorites_guest', JSON.stringify(next));
+          }
+        } catch {
+          // ignore
+        }
+        return next;
+      }
+
       if (exists) {
         supabase.from('favorites').delete().eq('userId', user.id).eq('productId', productId).then(({ error }) => {
           if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá favorite:', error.message);
         }, () => {});
-        return prev.filter((id) => id !== productId);
+      } else {
+        supabase.from('favorites').insert({ userId: user.id, productId }).then(({ error }) => {
+          if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm favorite:', error.message);
+        }, () => {});
       }
-      supabase.from('favorites').insert({ userId: user.id, productId }).then(({ error }) => {
-        if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm favorite:', error.message);
-      }, () => {});
-      return [...prev, productId];
+      return next;
     });
   }, [user]);
 

@@ -1,4 +1,4 @@
-import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname, useGlobalSearchParams, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { View } from 'react-native';
@@ -11,31 +11,57 @@ import { PaymentMethodsProvider } from '@/store/PaymentMethodsContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS } from '@/constants/theme';
 
+const PROTECTED_ROUTES = new Set([
+  'checkout',
+  'payment',
+  'orders',
+  'addresses',
+  'add-product',
+  'edit-product',
+  'manage-products',
+  'payment-methods',
+]);
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams<{
+    redirect?: string;
+    mode?: string;
+    productId?: string;
+    quantity?: string;
+  }>();
 
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = segments[0] === 'login' || segments[0] === 'register';
+    const firstSegment = (segments[0] as string) ?? '';
+    const inAuthGroup = firstSegment === 'login' || firstSegment === 'register';
+    const isProfileEdit = firstSegment === 'profile' && (segments as string[])[1] === 'edit';
+    const isProtected = PROTECTED_ROUTES.has(firstSegment) || isProfileEdit;
 
-    if (!isAuthenticated && !inAuthGroup) {
-      router.replace('/login');
+    if (!isAuthenticated && isProtected) {
+      let targetPath = pathname || '/checkout';
+      if (firstSegment === 'checkout' && params.mode === 'buyNow' && params.productId) {
+        targetPath = `/checkout?mode=buyNow&productId=${encodeURIComponent(params.productId)}&quantity=${encodeURIComponent(params.quantity ?? '1')}`;
+      }
+      router.replace({
+        pathname: '/login',
+        params: { redirect: targetPath },
+      });
     } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/');
+      const target = params.redirect || '/';
+      router.replace(target as Href);
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, segments, pathname, params.redirect, params.mode, params.productId, params.quantity]);
 
   return <>{children}</>;
 }
 
 function BottomNavGate() {
-  const { isAuthenticated } = useAuth();
   const pathname = usePathname();
-
-  if (!isAuthenticated) return null;
 
   // Screens that should NOT show bottom nav
   const hiddenRoutes = [

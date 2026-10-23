@@ -10,15 +10,16 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { User, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { User, Mail, Lock, Eye, EyeOff, ChevronLeft, Home } from 'lucide-react-native';
 import { useAuth } from '@/store/AuthContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { BrandLogo } from '@/components/BrandLogo';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const { register } = useAuth();
 
   const [name, setName] = useState('');
@@ -28,6 +29,8 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const isCheckoutRedirect = Boolean(redirect && redirect.startsWith('/checkout'));
 
   const handleRegister = async () => {
     setError('');
@@ -54,7 +57,7 @@ export default function RegisterScreen() {
     setSubmitting(false);
 
     if (result.success) {
-      router.replace('/');
+      router.replace((redirect || '/') as Href);
     } else {
       setError(result.error ?? 'Đăng ký thất bại.');
     }
@@ -71,9 +74,30 @@ export default function RegisterScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
+          <View style={styles.topNav}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace('/');
+              }}>
+              <ChevronLeft size={22} color={COLORS.darkText} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.homeBtn}
+              onPress={() => router.replace('/')}>
+              <Home size={18} color={COLORS.darkText} />
+              <Text style={styles.homeBtnText}>Xem sản phẩm</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.headerSection}>
             <BrandLogo size="xl" variant="circular" />
-            <Text style={styles.subtitle}>Tạo tài khoản mới</Text>
+            <Text style={styles.subtitle}>
+              {isCheckoutRedirect
+                ? 'Đăng ký tài khoản để tiếp tục thanh toán'
+                : 'Tạo tài khoản mới'}
+            </Text>
           </View>
 
           <View style={styles.formSection}>
@@ -178,7 +202,14 @@ export default function RegisterScreen() {
           {/* Login link */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Đã có tài khoản? </Text>
-            <TouchableOpacity onPress={() => router.replace('/login')}>
+            <TouchableOpacity
+              onPress={() =>
+                router.replace(
+                  redirect
+                    ? { pathname: '/login', params: { redirect } }
+                    : '/login'
+                )
+              }>
               <Text style={styles.footerLink}>Đăng nhập</Text>
             </TouchableOpacity>
           </View>
@@ -195,6 +226,37 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  topNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.lg,
+    marginTop: SPACING.md,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.small,
+  },
+  homeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.small,
+  },
+  homeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.darkText,
   },
   scrollContent: {
     flexGrow: 1,

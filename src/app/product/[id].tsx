@@ -38,7 +38,7 @@ export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { products, toggleFavorite, isFavorite, addToCart, addReview, removeProduct } = useShop();
-  const { user, role } = useAuth();
+  const { user, role, isAuthenticated } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -96,6 +96,20 @@ export default function ProductDetailScreen() {
   };
 
   const handleBuyNow = () => {
+    if (quantity > product.quantity) {
+      Alert.alert('Không đủ hàng', `Chỉ còn ${product.quantity} sản phẩm trong kho.`);
+      return;
+    }
+
+    if (!isAuthenticated) {
+      const target = `/checkout?mode=buyNow&productId=${encodeURIComponent(product.id)}&quantity=${quantity}`;
+      router.push({
+        pathname: '/login',
+        params: { redirect: target },
+      });
+      return;
+    }
+
     // Navigate to checkout with buyNow params — do NOT add to cart
     router.push({
       pathname: '/checkout',

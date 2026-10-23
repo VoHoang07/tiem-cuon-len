@@ -10,7 +10,7 @@ export function useLogout() {
   const handleLogout = () => {
     const performLogout = async () => {
       await logout();
-      router.replace('/login');
+      router.replace('/');
     };
 
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
