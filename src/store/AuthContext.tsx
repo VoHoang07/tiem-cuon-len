@@ -51,6 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setIsLoading(false);
+    }, 3000);
 
     const init = async () => {
       try {
@@ -65,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
         }
       } finally {
+        clearTimeout(safetyTimer);
         if (!cancelled) setIsLoading(false);
       }
     };
@@ -81,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, []);

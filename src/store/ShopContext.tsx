@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
 import type { Product, CartItem, Review } from '@/types/product';
 import { ProductProvider, useProducts } from '@/store/ProductContext';
 import { CartProvider, useCart } from '@/store/CartContext';
@@ -46,34 +46,59 @@ function ShopBridge({ children }: { children: ReactNode }) {
   const { cart, cartHydrated, cartTotal, cartCount, addToCart, removeFromCart, updateCartQuantity, clearCart, refetchCart } = useCart();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
-  const refetchCartFavorites = async () => {
+  const refetchCartFavorites = useCallback(async () => {
     await Promise.all([refetchCart(), refetchProducts()]);
-  };
+  }, [refetchCart, refetchProducts]);
+
+  const value = useMemo(
+    () => ({
+      products,
+      cart,
+      favorites,
+      isLoading,
+      cartHydrated,
+      hasMore,
+      addProduct,
+      updateProduct,
+      removeProduct,
+      addReview,
+      addToCart,
+      removeFromCart,
+      updateCartQuantity,
+      clearCart,
+      toggleFavorite,
+      isFavorite,
+      cartTotal,
+      cartCount,
+      loadMore,
+      refetchCartFavorites,
+    }),
+    [
+      products,
+      cart,
+      favorites,
+      isLoading,
+      cartHydrated,
+      hasMore,
+      addProduct,
+      updateProduct,
+      removeProduct,
+      addReview,
+      addToCart,
+      removeFromCart,
+      updateCartQuantity,
+      clearCart,
+      toggleFavorite,
+      isFavorite,
+      cartTotal,
+      cartCount,
+      loadMore,
+      refetchCartFavorites,
+    ]
+  );
 
   return (
-    <ShopContext.Provider
-      value={{
-        products,
-        cart,
-        favorites,
-        isLoading,
-        cartHydrated,
-        hasMore,
-        addProduct,
-        updateProduct,
-        removeProduct,
-        addReview,
-        addToCart,
-        removeFromCart,
-        updateCartQuantity,
-        clearCart,
-        toggleFavorite,
-        isFavorite,
-        cartTotal,
-        cartCount,
-        loadMore,
-        refetchCartFavorites,
-      }}>
+    <ShopContext.Provider value={value}>
       {children}
     </ShopContext.Provider>
   );

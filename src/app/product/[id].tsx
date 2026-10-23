@@ -167,7 +167,7 @@ export default function ProductDetailScreen() {
           )}
           {product.image ? (
             <Image
-              source={{ uri: product.image }}
+              source={typeof product.image === 'string' ? { uri: product.image } : (product.image as any)}
               style={styles.productImage}
               resizeMode="cover"
             />

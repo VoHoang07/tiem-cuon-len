@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -82,8 +82,13 @@ export default function HomeScreen() {
   const isMobile = windowWidth < 640;
   const numColumns = windowWidth >= 960 ? 4 : windowWidth >= 640 ? 3 : 2;
 
+  const hasFocusedOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
       refetchCartFavorites();
     }, [refetchCartFavorites])
   );

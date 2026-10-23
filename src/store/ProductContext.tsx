@@ -7,9 +7,38 @@ import {
   type ReactNode,
 } from 'react';
 import { Product, Review } from '@/types/product';
-import { supabase } from '@/services/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
+import { MOCK_PRODUCTS } from '@/data/products';
 
 const PAGE_SIZE = 20;
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v2';
+
+function loadCachedProducts(): Product[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(PRODUCTS_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as Product[];
+        }
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return MOCK_PRODUCTS;
+}
+
+function saveCachedProducts(items: Product[]) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && items.length > 0) {
+      window.localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(items));
+    }
+  } catch {
+    // ignore quota errors (e.g. large base64 images)
+  }
+}
 
 interface ProductContextType {
   products: Product[];
@@ -26,41 +55,84 @@ interface ProductContextType {
 const ProductContext = createContext<ProductContextType | null>(null);
 
 export function ProductProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [products, setProducts] = useState<Product[]>(() => loadCachedProducts());
+  const [loaded, setLoaded] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
 
-  const fetchProducts = useCallback(async (pageNum: number = 0) => {
+  const fetchProducts = useCallback(async (pageNum: number = 0): Promise<Product[] | null> => {
     const from = pageNum * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('createdAt', { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      if (__DEV__) console.error('[SUPABASE] Lỗi load sản phẩm:', error.message);
-      return [];
+    // Fast public REST fetch with 4.5s timeout so auth locks or slow connections never hang the UI
+    if (supabaseUrl && supabaseAnonKey) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 4500) : null;
+      try {
+        const endpoint = `${supabaseUrl}/rest/v1/products?select=*&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}`;
+        const res = await fetch(endpoint, {
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+          },
+          signal: controller?.signal,
+        });
+        if (timer) clearTimeout(timer);
+        if (res.ok) {
+          const data = (await res.json()) as Product[];
+          if (Array.isArray(data)) {
+            setHasMore(data.length === PAGE_SIZE);
+            return data;
+          }
+        }
+      } catch {
+        if (timer) clearTimeout(timer);
+      }
     }
 
-    setHasMore((data || []).length === PAGE_SIZE);
-    return (data as Product[]) || [];
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('createdAt', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        if (__DEV__) console.error('[SUPABASE] Lỗi load sản phẩm:', error.message);
+        return null;
+      }
+
+      const rows = (data as Product[]) || [];
+      setHasMore(rows.length === PAGE_SIZE);
+      return rows;
+    } catch {
+      return null;
+    }
   }, []);
 
   useEffect(() => {
-    fetchProducts(0).then((data) => {
-      setProducts(data);
-      setLoaded(true);
-    });
+    let cancelled = false;
+    fetchProducts(0)
+      .then((data) => {
+        if (cancelled) return;
+        if (data && data.length > 0) {
+          setProducts(data);
+          saveCachedProducts(data);
+        }
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [fetchProducts]);
 
   const loadMore = useCallback(async () => {
     const nextPage = page + 1;
     const data = await fetchProducts(nextPage);
-    if (data.length > 0) {
+    if (data && data.length > 0) {
       setProducts((prev) => [...prev, ...data]);
       setPage(nextPage);
     }
@@ -69,11 +141,18 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const refetchProducts = useCallback(async () => {
     setPage(0);
     const data = await fetchProducts(0);
-    setProducts(data);
+    if (data && data.length > 0) {
+      setProducts(data);
+      saveCachedProducts(data);
+    }
   }, [fetchProducts]);
 
   const addProduct = useCallback((product: Product) => {
-    setProducts((prev) => [product, ...prev]);
+    setProducts((prev) => {
+      const next = [product, ...prev];
+      saveCachedProducts(next);
+      return next;
+    });
     const { isFavorite, ...dbProduct } = product;
     supabase.from('products').insert(dbProduct).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm sản phẩm:', error.message);
@@ -81,7 +160,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateProduct = useCallback((id: string, product: Product) => {
-    setProducts((prev) => prev.map((p) => (p.id === id ? product : p)));
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === id ? product : p));
+      saveCachedProducts(next);
+      return next;
+    });
     const { isFavorite, ...dbProduct } = product;
     supabase.from('products').update(dbProduct).eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa sản phẩm:', error.message);
@@ -89,7 +172,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeProduct = useCallback((id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setProducts((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      saveCachedProducts(next);
+      return next;
+    });
     supabase.from('products').delete().eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá sản phẩm:', error.message);
     }, () => {});

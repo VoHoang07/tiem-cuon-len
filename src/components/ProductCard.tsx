@@ -118,7 +118,7 @@ export function ProductCard({
         <View style={styles.imageContainer}>
           {product.image ? (
             <Image
-              source={{ uri: product.image }}
+              source={typeof product.image === 'string' ? { uri: product.image } : (product.image as any)}
               style={[styles.productImage, { height: imageHeight }]}
               resizeMode="cover"
             />

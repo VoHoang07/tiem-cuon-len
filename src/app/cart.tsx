@@ -84,7 +84,7 @@ export default function CartScreen() {
         <View style={styles.itemImage}>
           {item.product.image ? (
             <Image
-              source={{ uri: item.product.image }}
+              source={typeof item.product.image === 'string' ? { uri: item.product.image } : (item.product.image as any)}
               style={styles.itemProductImage}
               resizeMode="cover"
             />
