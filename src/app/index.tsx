@@ -40,6 +40,8 @@ import {
 } from '@/constants/strings';
 import { BrandTitle, BrandAvatar } from '@/components/BrandTitle';
 import { HomeSkeleton } from '@/components/Skeleton';
+import PushpinTearFooter from '@/components/ui/pushpin-tear-footer';
+import { getCategoryLabel } from '@/utils/getCategoryEmoji';
 
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
@@ -163,7 +165,7 @@ export default function HomeScreen() {
               style={styles.loginPillBtn}
               onPress={() => router.push('/login')}
               activeOpacity={0.8}>
-              <UserIcon size={15} color={COLORS.white} />
+              <UserIcon size={15} color="#3D2B1F" />
               <Text style={styles.loginPillText}>Đăng nhập</Text>
             </TouchableOpacity>
           )}
@@ -175,14 +177,14 @@ export default function HomeScreen() {
         <View style={styles.heroBanner}>
           <View style={styles.heroContent}>
             <View style={styles.heroBadge}>
-              <Sparkles size={13} color="#FCEBD9" />
-              <Text style={styles.heroBadgeText}>BỘ SƯU TẬP HANDMADE MỚI</Text>
+              <Sparkles size={13} color={COLORS.primary} />
+              <Text style={styles.heroBadgeText}>BỘ SƯU TẬP THỦ CÔNG MỚI</Text>
             </View>
             <Text style={styles.heroTitle}>
               Đan từng mũi ấm áp,{'\n'}gửi trọn yêu thương 🧶
             </Text>
             <Text style={styles.heroSubtitle}>
-              Móc khoá, hoa len, túi xách & quà tặng thủ công tỉ mỉ từ sợi len cotton cao cấp.
+              Móc khoá, hoa len, túi xách & quà tặng đan móc thủ công tỉ mỉ từ sợi len cotton cao cấp.
             </Text>
             <View style={styles.heroPillsRow}>
               <View style={styles.heroFeaturePill}>
@@ -298,7 +300,7 @@ export default function HomeScreen() {
 
       {/* All Products Section Header */}
       <SectionHeader
-        title={selectedCategory === 'All' ? HOME_ALL_PRODUCTS : selectedCategory}
+        title={selectedCategory === 'All' ? HOME_ALL_PRODUCTS : getCategoryLabel(selectedCategory)}
         subtitle={`${filteredProducts.length} sản phẩm hiện có`}
       />
     </View>
@@ -312,17 +314,74 @@ export default function HomeScreen() {
     </View>
   );
 
-  const ListFooter =
-    hasMore && filteredProducts.length > 0 ? (
-      <View style={styles.constrainedContent}>
-        <TouchableOpacity style={styles.loadMoreBtn} onPress={handleEndReached}>
-          <Text style={styles.loadMoreText}>Xem thêm sản phẩm</Text>
-        </TouchableOpacity>
-        <View style={{ height: BOTTOM_NAV_SPACER }} />
+  const ListFooter = (
+    <View style={styles.footerOuter}>
+      {hasMore && filteredProducts.length > 0 && (
+        <View style={styles.constrainedContent}>
+          <TouchableOpacity style={styles.loadMoreBtn} onPress={handleEndReached}>
+            <Text style={styles.loadMoreText}>Xem thêm sản phẩm</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      <View style={styles.tearFooterWrapper}>
+        <PushpinTearFooter
+          brand="Tiệm Cuộn Len."
+          name="len thủ công việt nam"
+          logoHref="/"
+          sheet="#D8C3AD"
+          paper="#FAF5EE"
+          sheetInk="#3D2B1F"
+          paperInk="#4A3525"
+          seed={23}
+          email="lienhe@tiemcuonlen.vn"
+          newsletter={{
+            label: "Nhận thông báo mẫu len thủ công mới mỗi tuần",
+            placeholder: "nhập email của bạn...",
+          }}
+          status={{
+            label: "Đang nhận đặt đan móc mẫu len theo yêu cầu",
+            href: "/",
+          }}
+          mark="TCL / 2026"
+          timeZone="Asia/Ho_Chi_Minh"
+          timeLabel="VN"
+          socials={[
+            { icon: "ig", label: "Instagram", href: "https://instagram.com" },
+            { icon: "chat", label: "Trợ giúp", href: "/help" },
+          ]}
+          columns={[
+            {
+              title: "cửa tiệm",
+              links: [
+                { label: "Móc len thủ công", href: "/" },
+                { label: "Túi xách & Ví len", href: "/" },
+                { label: "Thú bông & Búp bê", href: "/" },
+              ],
+              cta: { label: "mua sắm.", href: "/" },
+            },
+            {
+              title: "khách hàng",
+              links: [
+                { label: "Giỏ hàng của bạn", href: "/cart" },
+                { label: "Sản phẩm yêu thích", href: "/favorites" },
+                { label: "Tra cứu đơn hàng", href: "/orders" },
+              ],
+              cta: { label: "liên hệ.", href: "mailto:lienhe@tiemcuonlen.vn" },
+            },
+          ]}
+          sideLinks={[
+            { icon: "shield", label: "bảo mật", href: "/privacy" },
+            { icon: "doc", label: "trợ giúp", href: "/help" },
+          ]}
+          chat={{ label: "tư vấn ngay", href: "/help" }}
+          copyright="© 2026 Tiệm Cuộn Len"
+          credit="đan móc thủ công bằng cả trái tim"
+          handle={{ label: "@tiemcuonlen", href: "/" }}
+        />
       </View>
-    ) : (
-      <View style={{ height: BOTTOM_NAV_SPACER + 20 }} />
-    );
+      <View style={{ height: BOTTOM_NAV_SPACER }} />
+    </View>
+  );
 
   if (isLoading) {
     return (
@@ -457,27 +516,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#D8C3AD',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#C4AA90',
     ...SHADOWS.small,
   },
   loginPillText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.white,
+    fontWeight: '800',
+    color: '#3D2B1F',
   },
   heroBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#D8C3AD',
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.sm,
     marginBottom: SPACING.md,
     borderRadius: 24,
     padding: SPACING.xl,
+    borderWidth: 1,
+    borderColor: '#C9B199',
     overflow: 'hidden',
     ...SHADOWS.medium,
   },
@@ -491,27 +554,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    backgroundColor: '#FAF5EE',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E6D7C5',
   },
   heroBadgeText: {
     fontSize: 10.5,
     fontWeight: '800',
-    color: '#FCEBD9',
+    color: '#5C4332',
     letterSpacing: 0.6,
   },
   heroTitle: {
     fontSize: 22,
     fontWeight: '900',
-    color: COLORS.white,
+    color: '#3D2B1F',
     lineHeight: 28,
     letterSpacing: -0.3,
   },
   heroSubtitle: {
     fontSize: 13,
-    color: '#F2E5DC',
+    color: '#5C4332',
     lineHeight: 18,
   },
   heroPillsRow: {
@@ -524,15 +589,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: COLORS.cream,
+    backgroundColor: '#FAF5EE',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E6D7C5',
   },
   heroFeatureText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: '#3D2B1F',
   },
   heroVisual: {
     alignItems: 'center',
@@ -542,7 +609,7 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    backgroundColor: 'rgba(250, 245, 238, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -551,7 +618,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#FAF3EE',
+    backgroundColor: '#FAF5EE',
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
@@ -647,19 +714,32 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   loadMoreBtn: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F3ECE2',
     marginHorizontal: SPACING.lg,
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: SPACING.md,
     borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    marginBottom: SPACING.xxl,
+    borderColor: '#D8C3AD',
+    marginBottom: SPACING.xl,
   },
   loadMoreText: {
     fontSize: 15,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: '#3D2B1F',
+  },
+  footerOuter: {
+    width: '100%',
+    marginTop: SPACING.xl,
+  },
+  tearFooterWrapper: {
+    width: '100%',
+    maxWidth: MAX_CONTAINER_WIDTH,
+    alignSelf: 'center',
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    borderRadius: 28,
+    overflow: 'hidden',
   },
 });

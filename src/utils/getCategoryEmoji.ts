@@ -12,3 +12,22 @@ export function getCategoryEmoji(category: string): string {
       return '🧶';
   }
 }
+
+export function getCategoryLabel(category: string): string {
+  switch (category) {
+    case 'All':
+      return 'Tất cả';
+    case 'Yarn':
+      return 'Len cuộn';
+    case 'Crochet':
+      return 'Móc len';
+    case 'Bags':
+      return 'Túi len';
+    case 'Dolls':
+      return 'Thú bông';
+    case 'Accessories':
+      return 'Phụ kiện';
+    default:
+      return category;
+  }
+}

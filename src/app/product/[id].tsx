@@ -17,7 +17,7 @@ import { useAuth } from '@/store/AuthContext';
 import { Product, Review } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
-import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
+import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   PD_NOT_FOUND,
   PD_GO_BACK,
@@ -180,7 +180,7 @@ export default function ProductDetailScreen() {
           <View style={styles.titleRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{product.name}</Text>
-              <Text style={styles.category}>{product.category}</Text>
+              <Text style={styles.category}>{getCategoryLabel(product.category)}</Text>
             </View>
             <Text style={styles.price}>{formatVND(product.price)}</Text>
           </View>

@@ -58,14 +58,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F3ECE2',
     borderWidth: 1,
-    borderColor: 'rgba(118, 83, 65, 0.12)',
+    borderColor: '#E2D2C0',
     minHeight: 42,
   },
   chipSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: '#D8C3AD',
+    borderColor: '#B89B82',
     ...SHADOWS.small,
   },
   emoji: {
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     color: COLORS.mediumText,
   },
   chipTextSelected: {
-    color: COLORS.white,
-    fontWeight: '700',
+    color: '#3D2B1F',
+    fontWeight: '800',
   },
 });

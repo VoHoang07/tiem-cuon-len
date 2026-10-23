@@ -14,7 +14,7 @@ import { Product } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
 import { formatVND } from '@/utils/formatCurrency';
-import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
+import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
@@ -121,7 +121,7 @@ export function ProductCard({
           {/* Category Pill */}
           <View style={styles.categoryTag}>
             <Text style={styles.categoryTagText}>
-              {getCategoryEmoji(product.category)} {product.category}
+              {getCategoryEmoji(product.category)} {getCategoryLabel(product.category)}
             </Text>
           </View>
 
@@ -177,16 +177,16 @@ const styles = StyleSheet.create({
     marginBottom: GAP,
   },
   card: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFDF9',
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(118, 83, 65, 0.08)',
+    borderColor: '#E8DACB',
     ...SHADOWS.small,
   },
   imageContainer: {
     position: 'relative',
-    backgroundColor: '#F6EFEA',
+    backgroundColor: '#F3ECE2',
     overflow: 'hidden',
   },
   productImage: {
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   },
   imagePlaceholder: {
     width: '100%',
-    backgroundColor: COLORS.lightPurple,
+    backgroundColor: '#F3ECE2',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -205,10 +205,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    backgroundColor: 'rgba(250, 246, 240, 0.94)',
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 195, 173, 0.5)',
   },
   categoryTagText: {
     fontSize: 10.5,

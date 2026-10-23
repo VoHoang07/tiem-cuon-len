@@ -1,54 +1,54 @@
 export const COLORS = {
-  // Primary brown palette
-  primary: '#765341',
-  primaryDark: '#5C3D2E',
-  primaryLight: '#8B6C5C',
-  secondary: '#8B6C5C',
-  accent: '#A08679',
+  // Primary beige & warm caramel palette (Màu be chủ đạo phối be nhạt)
+  primary: '#8C684C',
+  primaryDark: '#6E4F37',
+  primaryLight: '#A9876B',
+  secondary: '#B89B82',
+  accent: '#C9B199',
 
-  // Soft warm tones
-  soft: '#BCA89F',
-  background: '#D8CBC4',
-  cream: '#F5EDE8',
-  softBeige: '#EDE4DD',
-  warmBrown: '#3B2A22',
-  pastelPink: '#E8D5D0',
+  // Beige & Light Beige tones
+  soft: '#D8C3AD',
+  background: '#E6D7C5',
+  cream: '#FAF6F0',
+  softBeige: '#F2EAE0',
+  warmBrown: '#3D2B1F',
+  pastelPink: '#EFE3D6',
 
-  // Legacy compat - mapped to brown palette
-  softPurple: '#BCA89F',
-  lightPurple: '#F5EDE8',
-  cardBg: '#FFFAF7',
+  // Legacy compat - mapped to beige palette
+  softPurple: '#D8C3AD',
+  lightPurple: '#F5EDE2',
+  cardBg: '#FFFDF9',
 
   // Text
-  darkText: '#3B2A22',
-  mediumText: '#8B6C5C',
-  lightText: '#A08679',
+  darkText: '#3D2B1F',
+  mediumText: '#7A5C45',
+  lightText: '#9E826B',
 
   // Basics
   white: '#FFFFFF',
   black: '#000000',
-  error: '#E04B4B',
+  error: '#D9534F',
   success: '#6BAF5C',
-  border: '#D8CBC4',
-  shadow: 'rgba(59, 42, 34, 0.15)',
+  border: '#E5D6C5',
+  shadow: 'rgba(61, 43, 31, 0.12)',
   starYellow: '#E8A840',
-  overlay: 'rgba(59, 42, 34, 0.4)',
+  overlay: 'rgba(61, 43, 31, 0.35)',
 };
 
 export const Colors = {
   light: {
-    text: '#3B2A22',
-    background: '#D8CBC4',
-    backgroundElement: '#EDE4DD',
-    backgroundSelected: '#D8CBC4',
-    textSecondary: '#8B6C5C',
+    text: '#3D2B1F',
+    background: '#FAF6F0',
+    backgroundElement: '#F2EAE0',
+    backgroundSelected: '#D8C3AD',
+    textSecondary: '#7A5C45',
   },
   dark: {
-    text: '#D8CBC4',
-    background: '#3B2A22',
+    text: '#F2EAE0',
+    background: '#3D2B1F',
     backgroundElement: '#2A1F1A',
-    backgroundSelected: '#3D2D26',
-    textSecondary: '#A08679',
+    backgroundSelected: '#4A3525',
+    textSecondary: '#C9B199',
   },
 } as const;
 

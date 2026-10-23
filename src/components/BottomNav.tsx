@@ -80,7 +80,7 @@ export function BottomNav() {
         {tabs.map((tab) => {
           const { route, icon: Icon, label } = tab;
           const focused = pathname === route;
-          const color = focused ? COLORS.primary : COLORS.lightText;
+          const color = focused ? '#3D2B1F' : COLORS.lightText;
           const textStyle = focused ? styles.tabTextActive : styles.tabText;
 
           const showBadge =
@@ -144,12 +144,12 @@ const styles = StyleSheet.create({
     width: '92%',
     maxWidth: 500,
     height: 62,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    backgroundColor: 'rgba(250, 246, 240, 0.96)',
     borderRadius: 32,
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: 'rgba(118, 83, 65, 0.14)',
+    borderColor: '#DFCBB5',
     ...SHADOWS.large,
   },
   tab: {
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   tabActiveFloating: {
-    backgroundColor: '#F5EDE8',
+    backgroundColor: '#D8C3AD',
   },
   iconWrap: {
     position: 'relative',
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   tabTextActive: {
     fontSize: 10.5,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: '#3D2B1F',
     marginTop: 2,
     textAlign: 'center',
   },

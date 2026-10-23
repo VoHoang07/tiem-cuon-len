@@ -4,7 +4,7 @@
 
 // ── Home Screen ──────────────────────────────────
 export const HOME_WELCOME = 'Chào mừng đến với';
-export const HOME_SEARCH_PLACEHOLDER = 'Search sản phẩm handmade...';
+export const HOME_SEARCH_PLACEHOLDER = 'Tìm kiếm sản phẩm len thủ công...';
 export const HOME_FEATURED = 'Sản phẩm nổi bật';
 export const HOME_TRENDING = 'Đang thịnh hành';
 export const HOME_ALL_PRODUCTS = 'Tất cả sản phẩm';
@@ -21,8 +21,8 @@ export const PD_MATERIAL = 'Chất liệu';
 export const PD_COLOR = 'Màu sắc';
 export const PD_STOCK = 'Số lượng';
 export const PD_STOCK_AVAILABLE = 'còn hàng';
-export const PD_TAGS = 'Tags';
-export const PD_REVIEWS = 'Reviews';
+export const PD_TAGS = 'Thẻ phân loại';
+export const PD_REVIEWS = 'Đánh giá';
 export const PD_ADD_TO_CART = 'Thêm vào giỏ hàng';
 
 // ── Add Product ──────────────────────────────────
@@ -105,7 +105,7 @@ export const FAV_BROWSE = 'Khám phá sản phẩm';
 export const FAV_SAVED_ITEMS = 'sản phẩm đã lưu';
 
 // ── Profile ──────────────────────────────────────
-export const PROF_EDIT_PROFILE = 'Chỉnh sửa Profile';
+export const PROF_EDIT_PROFILE = 'Chỉnh sửa hồ sơ';
 export const PROF_PRODUCTS = 'Sản phẩm';
 export const PROF_FAVORITES = 'Yêu thích';
 export const PROF_ORDERS = 'Đơn hàng';
@@ -139,11 +139,11 @@ export const PROF_CUSTOMER_FAVORITES_LABEL = 'Yêu thích';
 export const PROF_CUSTOMER_CART_LABEL = 'Trong giỏ hàng';
 
 // ── Bottom Nav ───────────────────────────────────
-export const NAV_HOME = 'Home';
+export const NAV_HOME = 'Trang chủ';
 export const NAV_FAVORITES = 'Yêu thích';
 export const NAV_ADD = 'Thêm';
 export const NAV_CART = 'Giỏ hàng';
-export const NAV_PROFILE = 'Profile';
+export const NAV_PROFILE = 'Hồ sơ';
 
 // ── Product Card ─────────────────────────────────
 export const CARD_RATING_FORMAT = '★ ';
