@@ -28,10 +28,10 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     }
     supabase
       .from('favorites')
-      .select('product_id')
+      .select('productId')
       .eq('userId', user.id)
       .then(({ data }) => {
-        if (data) setFavorites((data as { product_id: string }[]).map((f) => f.product_id));
+        if (data) setFavorites((data as { productId: string }[]).map((f) => f.productId));
       }, () => {});
   }, [user]);
 

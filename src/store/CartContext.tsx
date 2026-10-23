@@ -67,12 +67,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     const { data } = await supabase
       .from('cart_items')
-      .select('product_id, quantity')
+      .select('productId, quantity')
       .eq('userId', user.id);
 
     if (data && data.length > 0) {
-      const cartRows = data as { product_id: string; quantity: number }[];
-      const productIds = [...new Set(cartRows.map((r) => r.product_id))];
+      const cartRows = data as { productId: string; quantity: number }[];
+      const productIds = [...new Set(cartRows.map((r) => r.productId))];
 
       const { data: products } = await supabase
         .from('products')
@@ -83,7 +83,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const items: CartItem[] = cartRows
         .map((ci) => {
-          const product = productMap.get(ci.product_id);
+          const product = productMap.get(ci.productId);
           if (!product) return null;
           return { product: product as Product, quantity: ci.quantity };
         })

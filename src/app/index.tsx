@@ -190,16 +190,9 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <FlatList
-          data={[]}
-          renderItem={() => null}
-          ListHeaderComponent={
-            <View style={styles.scroll}>
-              <HomeSkeleton />
-            </View>
-          }
-          keyExtractor={() => 'loading'}
-        />
+        <View style={styles.scroll}>
+          <HomeSkeleton />
+        </View>
       </SafeAreaView>
     );
   }
