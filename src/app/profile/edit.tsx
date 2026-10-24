@@ -41,8 +41,8 @@ export default function EditProfileScreen() {
             <Home size={20} color={COLORS.darkText} />
           </TouchableOpacity>
         </View>
-        <Text style={styles.headerTitle}>Chỉnh sửa Profile</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Chỉnh sửa hồ sơ</Text>
+        <View style={{ width: 80 }} />
       </View>
 
       <View style={styles.form}>
@@ -87,6 +87,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -116,7 +119,14 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
-  form: { paddingHorizontal: SPACING.lg, alignItems: 'center', paddingTop: SPACING.xxl },
+  form: {
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    paddingTop: SPACING.xxl,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
   avatar: {
     width: 90,
     height: 90,

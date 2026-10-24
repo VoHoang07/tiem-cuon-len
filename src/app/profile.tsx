@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  User,
   Package,
   ShoppingBag,
   Heart,
@@ -24,13 +23,14 @@ import {
   DollarSign,
   BarChart3,
   PlusCircle,
+  Edit3,
+  Sparkles,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { useLogout } from '@/hooks/useLogout';
-import { BottomNav } from '@/components/BottomNav';
 import { BrandAvatar } from '@/components/BrandTitle';
 import {
   COLORS,
@@ -41,7 +41,6 @@ import { formatVND } from '@/utils/formatCurrency';
 import {
   PROF_EDIT_PROFILE,
   PROF_PRODUCTS,
-  PROF_FAVORITES,
   PROF_ORDERS,
   PROF_MANAGE_PRODUCTS,
   PROF_PREVIOUS_ORDERS,
@@ -67,7 +66,6 @@ export default function ProfileScreen() {
   const { handleLogout } = useLogout();
 
   const userOrders = user ? getOrdersByUser(user.id) : [];
-
   const isAdmin = role === 'admin';
 
   // ─── ADMIN PROFILE ──────────────────────────
@@ -91,80 +89,221 @@ export default function ProfileScreen() {
 
     return (
       <SafeAreaView style={styles.safe}>
-        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-          {/* Profile Header */}
-          <View style={styles.profileHeader}>
-            <View style={styles.adminAvatar}>
-              <BrandAvatar size={96} />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.container}>
+            {/* Admin Profile Header Card */}
+            <View style={styles.profileHeaderCard}>
+              <View style={styles.roleBadge}>
+                <Sparkles size={12} color="#5C4332" />
+                <Text style={styles.roleBadgeText}>QUẢN TRỊ VIÊN TIỆM LEN</Text>
+              </View>
+              <View style={styles.adminAvatar}>
+                <BrandAvatar size={88} />
+              </View>
+              <Text style={styles.customerName}>{user?.name || 'Quản trị viên'}</Text>
+              {user?.email ? (
+                <View style={styles.emailRow}>
+                  <Mail size={14} color={COLORS.mediumText} />
+                  <Text style={styles.customerEmail}>{user.email}</Text>
+                </View>
+              ) : null}
+              <Text style={styles.subtitle}>Quản lý kho sản phẩm, đơn hàng & vận hành Tiệm Cuộn Len</Text>
+              <View style={styles.headerActionRow}>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() => router.push('/profile/edit')}
+                  activeOpacity={0.8}>
+                  <Edit3 size={14} color="#3D2B1F" />
+                  <Text style={styles.editBtnText}>{PROF_EDIT_PROFILE}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAddHeaderBtn}
+                  onPress={() => router.push('/add-product')}
+                  activeOpacity={0.8}>
+                  <PlusCircle size={14} color={COLORS.white} />
+                  <Text style={styles.quickAddHeaderText}>Thêm sản phẩm</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text style={styles.subtitle}>Sản phẩm len handmade bằng cả trái tim.</Text>
-            <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/profile/edit')}>
-              <Text style={styles.editBtnText}>{PROF_EDIT_PROFILE}</Text>
+
+            {/* Quick Stats */}
+            <View style={styles.statsRow}>
+              {[
+                { label: PROF_PRODUCTS, value: products.length, icon: Package, onPress: () => router.push('/manage-products') },
+                { label: PROF_ORDERS, value: orders.length, icon: ShoppingBag, onPress: () => router.push('/orders') },
+                { label: 'Doanh thu', value: formatVND(totalRevenue), icon: DollarSign, onPress: () => router.push('/orders') },
+              ].map((stat) => (
+                <TouchableOpacity key={stat.label} style={styles.statCard} onPress={stat.onPress} activeOpacity={0.75}>
+                  <View style={styles.statIconWrap}>
+                    <stat.icon size={20} color="#3D2B1F" />
+                  </View>
+                  <Text style={stat.label === 'Doanh thu' ? styles.statValueSmall : styles.statValue}>
+                    {stat.value}
+                  </Text>
+                  <Text style={styles.statLabel}>{stat.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Business Dashboard */}
+            <View style={styles.dashboardSection}>
+              <View style={styles.dashboardHeader}>
+                <BarChart3 size={20} color={COLORS.primary} />
+                <Text style={styles.dashboardTitle}>Tổng quan kinh doanh</Text>
+              </View>
+
+              <View style={styles.dashboardGrid}>
+                <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.75}>
+                  <DollarSign size={20} color={COLORS.success} />
+                  <Text style={styles.dashboardValue}>{formatVND(totalRevenue)}</Text>
+                  <Text style={styles.dashboardLabel}>Tổng doanh thu</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.75}>
+                  <TrendingUp size={20} color={COLORS.primary} />
+                  <Text style={styles.dashboardValue}>{formatVND(avgOrderValue)}</Text>
+                  <Text style={styles.dashboardLabel}>Trung bình / đơn</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.75}>
+                  <Package size={20} color={COLORS.starYellow} />
+                  <Text style={styles.dashboardValue}>{completedOrders}</Text>
+                  <Text style={styles.dashboardLabel}>Đơn hoàn thành</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.75}>
+                  <ShoppingBag size={20} color="#E8A840" />
+                  <Text style={styles.dashboardValue}>{processingOrders}</Text>
+                  <Text style={styles.dashboardLabel}>Đơn chờ xử lý</Text>
+                </TouchableOpacity>
+              </View>
+
+              {topProduct && (
+                <TouchableOpacity
+                  style={styles.topProductCard}
+                  onPress={() => router.push(`/product/${topProduct.id}`)}
+                  activeOpacity={0.75}>
+                  <Text style={styles.topProductLabel}>🔥 Sản phẩm bán chạy nhất</Text>
+                  <Text style={styles.topProductName}>{topProduct.name}</Text>
+                  <Text style={styles.topProductCount}>Đã bán: {topProduct.count} sản phẩm</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Admin Menu Items */}
+            <View style={styles.menuSection}>
+              <MenuItem icon={Package} label={PROF_MANAGE_PRODUCTS} badge={`${products.length} SP`} onPress={() => router.push('/manage-products')} />
+              <MenuItem icon={PlusCircle} label="Thêm sản phẩm mới" onPress={() => router.push('/add-product')} />
+              <MenuItem
+                icon={ShoppingBag}
+                label={PROF_PREVIOUS_ORDERS}
+                badge={processingOrders > 0 ? `${processingOrders} mới` : undefined}
+                onPress={() => router.push('/orders')}
+              />
+              <MenuItem icon={CreditCard} label="Cấu hình phương thức thanh toán" onPress={() => router.push('/payment-methods')} />
+              <MenuItem icon={Settings} label={PROF_SETTINGS} onPress={() => router.push('/settings')} />
+              <MenuItem icon={HelpCircle} label={PROF_HELP} onPress={() => router.push('/help')} />
+              <MenuItem icon={Shield} label={PROF_PRIVACY} onPress={() => router.push('/privacy')} />
+            </View>
+
+            {/* Logout */}
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+              <LogOut size={20} color={COLORS.error} />
+              <Text style={styles.logoutText}>{PROF_LOGOUT}</Text>
             </TouchableOpacity>
+
+            <View style={{ height: 100 }} />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ─── CUSTOMER / CLIENT PROFILE ───────────────────────
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.container}>
+          {/* Customer Profile Header Card */}
+          <View style={styles.profileHeaderCard}>
+            <View style={styles.roleBadge}>
+              <Sparkles size={12} color="#5C4332" />
+              <Text style={styles.roleBadgeText}>
+                {user ? 'KHÁCH HÀNG THÂN THIẾT' : 'KHÁCH THĂM TIỆM'}
+              </Text>
+            </View>
+            <View style={styles.avatar}>
+              <BrandAvatar size={86} />
+            </View>
+            <Text style={styles.customerName}>{user?.name || 'Khách hàng'}</Text>
+            {user ? (
+              <>
+                <View style={styles.emailRow}>
+                  <Mail size={14} color={COLORS.mediumText} />
+                  <Text style={styles.customerEmail}>{user.email}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.editBtn, { marginTop: 12 }]}
+                  onPress={() => router.push('/profile/edit')}
+                  activeOpacity={0.8}>
+                  <Edit3 size={14} color="#3D2B1F" />
+                  <Text style={styles.editBtnText}>{PROF_EDIT_PROFILE}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.guestAuthRow}>
+                <TouchableOpacity
+                  style={styles.guestLoginBtn}
+                  onPress={() => router.push('/login')}
+                  activeOpacity={0.85}>
+                  <Text style={styles.guestLoginText}>Đăng nhập</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.guestRegisterBtn}
+                  onPress={() => router.push('/register')}
+                  activeOpacity={0.85}>
+                  <Text style={styles.guestRegisterText}>Đăng ký tài khoản</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <Text style={styles.customerSubtitle}>{PROF_CUSTOMER_SUBTITLE}</Text>
           </View>
 
           {/* Stats */}
           <View style={styles.statsRow}>
             {[
-              { label: PROF_PRODUCTS, value: products.length, icon: Package, onPress: () => router.push('/manage-products') },
-              { label: PROF_ORDERS, value: orders.length, icon: ShoppingBag, onPress: () => router.push('/orders') },
-              { label: 'Doanh thu', value: formatVND(totalRevenue), icon: DollarSign, onPress: () => router.push('/orders') },
+              { label: PROF_CUSTOMER_ORDERS_LABEL, value: userOrders.length, icon: ShoppingBag, onPress: () => router.push('/orders') },
+              { label: PROF_CUSTOMER_FAVORITES_LABEL, value: favorites.length, icon: Heart, onPress: () => router.push('/favorites') },
+              { label: PROF_CUSTOMER_CART_LABEL, value: cart.reduce((sum, ci) => sum + ci.quantity, 0), icon: Package, onPress: () => router.push('/cart') },
             ].map((stat) => (
-              <TouchableOpacity key={stat.label} style={styles.statCard} onPress={stat.onPress} activeOpacity={0.7}>
-                <stat.icon size={24} color={COLORS.primary} />
-                <Text style={stat.label === 'Doanh thu' ? styles.statValueSmall : styles.statValue}>{stat.value}</Text>
+              <TouchableOpacity key={stat.label} style={styles.statCard} onPress={stat.onPress} activeOpacity={0.75}>
+                <View style={styles.statIconWrap}>
+                  <stat.icon size={20} color="#3D2B1F" />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
                 <Text style={styles.statLabel}>{stat.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Dashboard */}
-          <View style={styles.dashboardSection}>
-            <View style={styles.dashboardHeader}>
-              <BarChart3 size={20} color={COLORS.primary} />
-              <Text style={styles.dashboardTitle}>Tổng quan kinh doanh</Text>
-            </View>
-
-            <View style={styles.dashboardGrid}>
-              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
-                <DollarSign size={20} color={COLORS.success} />
-                <Text style={styles.dashboardValue}>{formatVND(totalRevenue)}</Text>
-                <Text style={styles.dashboardLabel}>Tổng doanh thu</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
-                <TrendingUp size={20} color={COLORS.primary} />
-                <Text style={styles.dashboardValue}>{formatVND(avgOrderValue)}</Text>
-                <Text style={styles.dashboardLabel}>TB / đơn</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
-                <Package size={20} color={COLORS.starYellow} />
-                <Text style={styles.dashboardValue}>{completedOrders}</Text>
-                <Text style={styles.dashboardLabel}>Đã hoàn thành</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.dashboardCard} onPress={() => router.push('/orders')} activeOpacity={0.7}>
-                <ShoppingBag size={20} color="#E8A840" />
-                <Text style={styles.dashboardValue}>{processingOrders}</Text>
-                <Text style={styles.dashboardLabel}>Đang xử lý</Text>
-              </TouchableOpacity>
-            </View>
-
-            {topProduct && (
-              <TouchableOpacity
-                style={styles.topProductCard}
-                onPress={() => router.push(`/product/${topProduct.id}`)}
-                activeOpacity={0.7}>
-                <Text style={styles.topProductLabel}>Sản phẩm bán chạy nhất</Text>
-                <Text style={styles.topProductName}>{topProduct.name}</Text>
-                <Text style={styles.topProductCount}>Đã bán: {topProduct.count}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Menu Items */}
+          {/* Customer Menu Items */}
           <View style={styles.menuSection}>
-            <MenuItem icon={Package} label={PROF_MANAGE_PRODUCTS} onPress={() => router.push('/manage-products')} />
-            <MenuItem icon={PlusCircle} label="Thêm sản phẩm" onPress={() => router.push('/add-product')} />
-            <MenuItem icon={ShoppingBag} label={PROF_PREVIOUS_ORDERS} onPress={() => router.push('/orders')} />
+            <MenuItem
+              icon={ShoppingBag}
+              label={PROF_CUSTOMER_MY_ORDERS}
+              badge={userOrders.length > 0 ? `${userOrders.length}` : undefined}
+              onPress={() => router.push('/orders')}
+            />
+            <MenuItem
+              icon={Heart}
+              label={PROF_FAVORITES_MENU}
+              badge={favorites.length > 0 ? `${favorites.length}` : undefined}
+              onPress={() => router.push('/favorites')}
+            />
+            <MenuItem icon={MapPin} label={PROF_CUSTOMER_ADDRESS} onPress={() => router.push('/addresses')} />
             <MenuItem icon={CreditCard} label={PROF_CUSTOMER_PAYMENT} onPress={() => router.push('/payment-methods')} />
             <MenuItem icon={Settings} label={PROF_SETTINGS} onPress={() => router.push('/settings')} />
             <MenuItem icon={HelpCircle} label={PROF_HELP} onPress={() => router.push('/help')} />
@@ -172,98 +311,47 @@ export default function ProfileScreen() {
           </View>
 
           {/* Logout */}
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <LogOut size={20} color={COLORS.error} />
-            <Text style={styles.logoutText}>{PROF_LOGOUT}</Text>
-          </TouchableOpacity>
-
-          <View style={{ height: 80 }} />
-        </ScrollView>
-        <BottomNav />
-      </SafeAreaView>
-    );
-  }
-
-  // ─── CUSTOMER PROFILE ───────────────────────
-
-  return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Customer Profile Header */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <BrandAvatar size={90} />
-          </View>
-          <Text style={styles.customerName}>{user?.name || 'Khách hàng'}</Text>
-          {user ? (
-            <View style={styles.emailRow}>
-              <Mail size={14} color={COLORS.mediumText} />
-              <Text style={styles.customerEmail}>{user.email}</Text>
-            </View>
-          ) : (
-            <View style={styles.guestAuthRow}>
-              <TouchableOpacity
-                style={styles.guestLoginBtn}
-                onPress={() => router.push('/login')}>
-                <Text style={styles.guestLoginText}>Đăng nhập</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.guestRegisterBtn}
-                onPress={() => router.push('/register')}>
-                <Text style={styles.guestRegisterText}>Đăng ký</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          <Text style={styles.customerSubtitle}>{PROF_CUSTOMER_SUBTITLE}</Text>
-        </View>
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          {[
-            { label: PROF_CUSTOMER_ORDERS_LABEL, value: userOrders.length, icon: ShoppingBag, onPress: () => router.push('/orders') },
-            { label: PROF_CUSTOMER_FAVORITES_LABEL, value: favorites.length, icon: Heart, onPress: () => router.push('/favorites') },
-            { label: PROF_CUSTOMER_CART_LABEL, value: cart.reduce((sum, ci) => sum + ci.quantity, 0), icon: Package, onPress: () => router.push('/cart') },
-          ].map((stat) => (
-            <TouchableOpacity key={stat.label} style={styles.statCard} onPress={stat.onPress} activeOpacity={0.7}>
-              <stat.icon size={24} color={COLORS.primary} />
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+          {user && (
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+              <LogOut size={20} color={COLORS.error} />
+              <Text style={styles.logoutText}>{PROF_LOGOUT}</Text>
             </TouchableOpacity>
-          ))}
+          )}
+
+          <View style={{ height: 100 }} />
         </View>
-
-        {/* Customer Menu Items */}
-        <View style={styles.menuSection}>
-          <MenuItem icon={ShoppingBag} label={PROF_CUSTOMER_MY_ORDERS} onPress={() => router.push('/orders')} />
-          <MenuItem icon={Heart} label={PROF_FAVORITES_MENU} onPress={() => router.push('/favorites')} />
-          <MenuItem icon={MapPin} label={PROF_CUSTOMER_ADDRESS} onPress={() => router.push('/addresses')} />
-          <MenuItem icon={CreditCard} label={PROF_CUSTOMER_PAYMENT} onPress={() => router.push('/payment-methods')} />
-          <MenuItem icon={Settings} label={PROF_SETTINGS} onPress={() => router.push('/settings')} />
-          <MenuItem icon={HelpCircle} label={PROF_HELP} onPress={() => router.push('/help')} />
-        </View>
-
-        {/* Logout */}
-        {user && (
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <LogOut size={20} color={COLORS.error} />
-            <Text style={styles.logoutText}>{PROF_LOGOUT}</Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={{ height: 80 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function MenuItem({ icon: Icon, label, onPress }: { icon: ComponentType<{ size?: number; color?: string }>; label: string; onPress?: () => void }) {
+function MenuItem({
+  icon: Icon,
+  label,
+  badge,
+  onPress,
+}: {
+  icon: ComponentType<{ size?: number; color?: string }>;
+  label: string;
+  badge?: string;
+  onPress?: () => void;
+}) {
   return (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.75}>
       <View style={styles.menuLeft}>
-        <Icon size={22} color={COLORS.primary} />
+        <View style={styles.menuIconWrap}>
+          <Icon size={19} color="#3D2B1F" />
+        </View>
         <Text style={styles.menuLabel}>{label}</Text>
       </View>
-      <ChevronRight size={20} color={COLORS.lightText} />
+      <View style={styles.menuRight}>
+        {badge ? (
+          <View style={styles.menuBadge}>
+            <Text style={styles.menuBadgeText}>{badge}</Text>
+          </View>
+        ) : null}
+        <ChevronRight size={19} color={COLORS.lightText} />
+      </View>
     </TouchableOpacity>
   );
 }
@@ -276,50 +364,79 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
-  profileHeader: {
+  scrollContent: {
+    paddingTop: SPACING.md,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 840,
+    alignSelf: 'center',
+  },
+  profileHeaderCard: {
     alignItems: 'center',
-    paddingVertical: SPACING.xxxl,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    paddingVertical: SPACING.xxl,
     paddingHorizontal: SPACING.lg,
+    borderRadius: 24,
+    backgroundColor: '#F3ECE2',
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    ...SHADOWS.small,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FAF5EE',
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    marginBottom: 12,
+  },
+  roleBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#5C4332',
+    letterSpacing: 0.6,
   },
   avatar: {
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: COLORS.lightPurple,
+    backgroundColor: '#FAF5EE',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: COLORS.primary,
-    marginBottom: SPACING.md,
-    ...SHADOWS.medium,
+    borderColor: '#C5AC92',
+    marginBottom: SPACING.sm,
+    ...SHADOWS.small,
   },
   adminAvatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     borderWidth: 3,
     borderColor: '#765341',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#d8cbc4',
-    marginBottom: SPACING.md,
-  },
-  adminAvatarImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    backgroundColor: '#D8C3AD',
+    marginBottom: SPACING.sm,
+    ...SHADOWS.small,
   },
   customerName: {
     fontSize: 22,
-    fontWeight: '800',
-    color: COLORS.darkText,
+    fontWeight: '900',
+    color: '#3D2B1F',
   },
   emailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
-    marginTop: SPACING.xs,
+    marginTop: 4,
   },
   guestAuthRow: {
     flexDirection: 'row',
@@ -328,116 +445,185 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   guestLoginBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 14,
+    backgroundColor: '#3D2B1F',
+    borderRadius: 16,
     paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 10,
     ...SHADOWS.small,
   },
   guestLoginText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: COLORS.white,
   },
   guestRegisterBtn: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
+    backgroundColor: '#FFFDF9',
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: COLORS.primary,
+    borderColor: '#C4AA90',
     paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 10,
   },
   guestRegisterText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.primary,
+    fontWeight: '800',
+    color: '#3D2B1F',
   },
   customerEmail: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: COLORS.mediumText,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: COLORS.mediumText,
-    marginTop: SPACING.xs,
+    marginTop: 6,
+    textAlign: 'center',
   },
   customerSubtitle: {
     fontSize: 13,
     color: COLORS.mediumText,
     marginTop: SPACING.sm,
     fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  headerActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   editBtn: {
-    marginTop: SPACING.md,
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 15,
-    paddingHorizontal: SPACING.xxl,
-    paddingVertical: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#D8C3AD',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: '#C4AA90',
   },
   editBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  quickAddHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#3D2B1F',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  quickAddHeaderText: {
+    fontSize: 13,
+    fontWeight: '800',
     color: COLORS.white,
   },
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.xxl,
+    marginBottom: SPACING.lg,
+    gap: 10,
   },
   statCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFDF9',
     alignItems: 'center',
-    padding: SPACING.lg,
-    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: 18,
     flex: 1,
-    marginHorizontal: SPACING.xs,
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
     ...SHADOWS.small,
   },
+  statIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   statValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: COLORS.darkText,
-    marginTop: SPACING.xs,
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#3D2B1F',
+    marginTop: 2,
   },
   statValueSmall: {
     fontSize: 14,
-    fontWeight: '800',
-    color: COLORS.darkText,
-    marginTop: SPACING.xs,
+    fontWeight: '900',
+    color: '#3D2B1F',
+    marginTop: 4,
   },
   statLabel: {
     fontSize: 12,
     color: COLORS.mediumText,
     marginTop: 2,
     textAlign: 'center',
+    fontWeight: '600',
   },
   menuSection: {
-    backgroundColor: COLORS.lightPurple,
+    backgroundColor: '#FFFDF9',
     marginHorizontal: SPACING.lg,
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: 'hidden',
     marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
+    ...SHADOWS.small,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.white,
+    paddingVertical: 15,
+    backgroundColor: '#FFFDF9',
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: '#F0E6D8',
   },
   menuLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.md,
+    gap: 12,
+    flex: 1,
+  },
+  menuIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   menuLabel: {
     fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.darkText,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  menuRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  menuBadge: {
+    backgroundColor: '#D8C3AD',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  menuBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#3D2B1F',
   },
   logoutBtn: {
     flexDirection: 'row',
@@ -445,22 +631,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACING.sm,
     marginHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.white,
+    paddingVertical: 15,
+    backgroundColor: '#FFFDF9',
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F2D6D3',
     ...SHADOWS.small,
   },
   logoutText: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.error,
   },
   dashboardSection: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFDF9',
     marginHorizontal: SPACING.lg,
-    borderRadius: 20,
+    borderRadius: 22,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
     ...SHADOWS.small,
   },
   dashboardHeader: {
@@ -471,54 +661,61 @@ const styles = StyleSheet.create({
   },
   dashboardTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.darkText,
+    fontWeight: '800',
+    color: '#3D2B1F',
   },
   dashboardGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.sm,
+    gap: 10,
   },
   dashboardCard: {
-    width: '47%',
-    backgroundColor: COLORS.cream,
-    borderRadius: 14,
+    width: '48%',
+    flexGrow: 1,
+    backgroundColor: '#FAF5EE',
+    borderRadius: 16,
     padding: SPACING.md,
     alignItems: 'center',
     gap: 4,
+    borderWidth: 1,
+    borderColor: '#E8DACB',
   },
   dashboardValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: COLORS.darkText,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#3D2B1F',
     marginTop: 2,
   },
   dashboardLabel: {
-    fontSize: 11,
+    fontSize: 11.5,
     color: COLORS.mediumText,
     textAlign: 'center',
+    fontWeight: '600',
   },
   topProductCard: {
-    backgroundColor: COLORS.lightPurple,
-    borderRadius: 14,
+    backgroundColor: '#F3ECE2',
+    borderRadius: 16,
     padding: SPACING.md,
     marginTop: SPACING.md,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
   },
   topProductLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: COLORS.mediumText,
     marginBottom: 2,
   },
   topProductName: {
     fontSize: 15,
-    fontWeight: '800',
-    color: COLORS.primary,
+    fontWeight: '900',
+    color: '#3D2B1F',
   },
   topProductCount: {
     fontSize: 12,
     color: COLORS.mediumText,
     marginTop: 2,
+    fontWeight: '600',
   },
 });

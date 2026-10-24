@@ -23,9 +23,14 @@ import {
   HeartHandshake,
   Truck,
   SlidersHorizontal,
+  Package,
+  ShoppingBag,
+  PlusCircle,
+  CreditCard,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
+import { useOrders } from '@/store/OrderContext';
 import { ProductCard } from '@/components/ProductCard';
 import { CategoryChips } from '@/components/CategoryChips';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -69,7 +74,13 @@ export default function HomeScreen() {
     cartCount,
     favorites,
   } = useShop();
-  const { user, isAuthenticated } = useAuth();
+  const { user, role, isAuthenticated } = useAuth();
+  const { orders } = useOrders();
+  const isAdmin = role === 'admin';
+  const pendingOrdersCount = useMemo(
+    () => orders.filter((o) => o.status === 'Đang xử lý').length,
+    [orders]
+  );
   const { width: rawWindowWidth } = useWindowDimensions();
   const windowWidth =
     rawWindowWidth > 0
@@ -213,35 +224,75 @@ export default function HomeScreen() {
           {isDesktop && SearchBarBlock}
 
           <View style={styles.headerActions}>
-            {/* Quick Favorites Button */}
-            <TouchableOpacity
-              style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
-              onPress={() => router.push('/favorites')}
-              activeOpacity={0.75}>
-              <Heart size={isMobile ? 17 : 19} color={COLORS.darkText} />
-              {favorites.length > 0 && (
-                <View style={[styles.badge, styles.favBadge]}>
-                  <Text style={styles.badgeText}>
-                    {favorites.length > 99 ? '99+' : favorites.length}
+            {isAdmin ? (
+              <>
+                {/* Admin: Add Product Quick Button */}
+                <TouchableOpacity
+                  style={[styles.loginPillBtn, isMobile && styles.loginPillBtnMobile]}
+                  onPress={() => router.push('/add-product')}
+                  activeOpacity={0.8}>
+                  <PlusCircle size={15} color="#3D2B1F" />
+                  <Text style={[styles.loginPillText, isMobile && styles.loginPillTextMobile]}>
+                    {isMobile ? 'Thêm' : '+ Thêm SP'}
                   </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+                </TouchableOpacity>
 
-            {/* Quick Cart Button */}
-            <TouchableOpacity
-              style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
-              onPress={() => router.push('/cart')}
-              activeOpacity={0.75}>
-              <ShoppingCart size={isMobile ? 17 : 19} color={COLORS.darkText} />
-              {cartCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {cartCount > 99 ? '99+' : cartCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+                {/* Admin: Manage Products Inventory Button */}
+                <TouchableOpacity
+                  style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
+                  onPress={() => router.push('/manage-products')}
+                  activeOpacity={0.75}>
+                  <Package size={isMobile ? 17 : 19} color={COLORS.darkText} />
+                </TouchableOpacity>
+
+                {/* Admin: Orders Button with Pending Badge */}
+                <TouchableOpacity
+                  style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
+                  onPress={() => router.push('/orders')}
+                  activeOpacity={0.75}>
+                  <ShoppingBag size={isMobile ? 17 : 19} color={COLORS.darkText} />
+                  {pendingOrdersCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {pendingOrdersCount > 99 ? '99+' : pendingOrdersCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {/* Client: Quick Favorites Button */}
+                <TouchableOpacity
+                  style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
+                  onPress={() => router.push('/favorites')}
+                  activeOpacity={0.75}>
+                  <Heart size={isMobile ? 17 : 19} color={COLORS.darkText} />
+                  {favorites.length > 0 && (
+                    <View style={[styles.badge, styles.favBadge]}>
+                      <Text style={styles.badgeText}>
+                        {favorites.length > 99 ? '99+' : favorites.length}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Client: Quick Cart Button */}
+                <TouchableOpacity
+                  style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
+                  onPress={() => router.push('/cart')}
+                  activeOpacity={0.75}>
+                  <ShoppingCart size={isMobile ? 17 : 19} color={COLORS.darkText} />
+                  {cartCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {cartCount > 99 ? '99+' : cartCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
 
             {/* Login or Profile Button */}
             {isAuthenticated ? (
@@ -252,7 +303,7 @@ export default function HomeScreen() {
                 <BrandAvatar size={32} />
                 {!isMobile && (
                   <Text style={styles.userPillName} numberOfLines={1}>
-                    {user?.name || 'Tài khoản'}
+                    {isAdmin ? `Quản trị • ${user?.name || 'Admin'}` : user?.name || 'Tài khoản'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -317,44 +368,93 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Service Highlights Bar */}
-          <View style={[styles.trustBar, isMobile && styles.trustBarMobile]}>
-            <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
-              <View style={styles.trustIconWrap}>
-                <Truck size={15} color="#3D2B1F" />
+          {/* Role-Adaptive Bar: Admin gets Quick Management Bar; Client gets Service Highlights Bar */}
+          {isAdmin ? (
+            <View style={[styles.trustBar, isMobile && styles.trustBarMobile]}>
+              <TouchableOpacity
+                style={[styles.trustItem, isMobile && styles.trustItemMobile]}
+                onPress={() => router.push('/manage-products')}
+                activeOpacity={0.75}>
+                <View style={styles.trustIconWrap}>
+                  <Package size={15} color="#3D2B1F" />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                    {isMobile ? `${uniqueProducts.length} Sản phẩm` : `Kho hàng (${uniqueProducts.length} SP)`}
+                  </Text>
+                  {!isMobile && <Text style={styles.trustSub}>Bấm để quản lý & sửa giá</Text>}
+                </View>
+              </TouchableOpacity>
+              <View style={styles.trustDivider} />
+              <TouchableOpacity
+                style={[styles.trustItem, isMobile && styles.trustItemMobile]}
+                onPress={() => router.push('/orders')}
+                activeOpacity={0.75}>
+                <View style={styles.trustIconWrap}>
+                  <ShoppingBag size={15} color="#3D2B1F" />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                    {isMobile ? `${orders.length} Đơn hàng` : `Đơn hàng (${pendingOrdersCount} chờ xử lý)`}
+                  </Text>
+                  {!isMobile && <Text style={styles.trustSub}>Duyệt & cập nhật giao hàng</Text>}
+                </View>
+              </TouchableOpacity>
+              <View style={styles.trustDivider} />
+              <TouchableOpacity
+                style={[styles.trustItem, isMobile && styles.trustItemMobile]}
+                onPress={() => router.push('/payment-methods')}
+                activeOpacity={0.75}>
+                <View style={styles.trustIconWrap}>
+                  <CreditCard size={15} color="#3D2B1F" />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                    {isMobile ? 'Cấu hình TT' : 'Cấu hình thanh toán'}
+                  </Text>
+                  {!isMobile && <Text style={styles.trustSub}>Ngân hàng, QR, MoMo & COD</Text>}
+                </View>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={[styles.trustBar, isMobile && styles.trustBarMobile]}>
+              <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
+                <View style={styles.trustIconWrap}>
+                  <Truck size={15} color="#3D2B1F" />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                    {isMobile ? 'Giao toàn quốc' : 'Giao hàng toàn quốc'}
+                  </Text>
+                  {!isMobile && <Text style={styles.trustSub}>Đóng gói hộp quà cẩn thận</Text>}
+                </View>
               </View>
-              <View style={styles.trustTextWrap}>
-                <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
-                  {isMobile ? 'Giao toàn quốc' : 'Giao hàng toàn quốc'}
-                </Text>
-                {!isMobile && <Text style={styles.trustSub}>Đóng gói hộp quà cẩn thận</Text>}
+              <View style={styles.trustDivider} />
+              <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
+                <View style={styles.trustIconWrap}>
+                  <HeartHandshake size={15} color="#3D2B1F" />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                    {isMobile ? 'Len cotton mịn' : 'Len cotton mềm mịn'}
+                  </Text>
+                  {!isMobile && <Text style={styles.trustSub}>An toàn & bền màu theo năm tháng</Text>}
+                </View>
+              </View>
+              <View style={styles.trustDivider} />
+              <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
+                <View style={styles.trustIconWrap}>
+                  <Gift size={15} color="#3D2B1F" />
+                </View>
+                <View style={styles.trustTextWrap}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                    {isMobile ? 'Đặt theo mẫu' : 'Nhận đặt theo mẫu'}
+                  </Text>
+                  {!isMobile && <Text style={styles.trustSub}>Tùy chỉnh màu sắc & kích thước</Text>}
+                </View>
               </View>
             </View>
-            <View style={styles.trustDivider} />
-            <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
-              <View style={styles.trustIconWrap}>
-                <HeartHandshake size={15} color="#3D2B1F" />
-              </View>
-              <View style={styles.trustTextWrap}>
-                <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
-                  {isMobile ? 'Len cotton mịn' : 'Len cotton mềm mịn'}
-                </Text>
-                {!isMobile && <Text style={styles.trustSub}>An toàn & bền màu theo năm tháng</Text>}
-              </View>
-            </View>
-            <View style={styles.trustDivider} />
-            <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
-              <View style={styles.trustIconWrap}>
-                <Gift size={15} color="#3D2B1F" />
-              </View>
-              <View style={styles.trustTextWrap}>
-                <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
-                  {isMobile ? 'Đặt theo mẫu' : 'Nhận đặt theo mẫu'}
-                </Text>
-                {!isMobile && <Text style={styles.trustSub}>Tùy chỉnh màu sắc & kích thước</Text>}
-              </View>
-            </View>
-          </View>
+          )}
         </View>
       )}
 

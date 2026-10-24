@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   Image,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import { useAuth } from '@/store/AuthContext';
 import { Product, Category, Review } from '@/types/product';
 import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
 import { generateProductDescription, inferCategory } from '@/utils/generateProductDescription';
+import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   AP_TITLE,
   AP_TAKE_PHOTO,
@@ -205,6 +207,10 @@ export default function AddProductScreen() {
 
     addProduct(newProduct);
     resetForm();
+    if (Platform.OS === 'web') {
+      router.replace('/manage-products');
+      return;
+    }
     Alert.alert(AP_SUCCESS_TITLE, AP_SUCCESS_MSG, [
       {
         text: 'OK',
@@ -223,8 +229,10 @@ export default function AddProductScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView
         style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
+        <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/manage-products'); }} style={styles.backBtn}>
@@ -316,13 +324,13 @@ export default function AddProductScreen() {
                     category === cat && styles.categoryChipSelected,
                   ]}
                   onPress={() => setCategory(cat)}>
-                  <Text
-                    style={[
-                      styles.categoryChipText,
-                      category === cat && styles.categoryChipTextSelected,
-                    ]}>
-                    {cat}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        category === cat && styles.categoryChipTextSelected,
+                      ]}>
+                      {getCategoryEmoji(cat)} {getCategoryLabel(cat)}
+                    </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -399,6 +407,7 @@ export default function AddProductScreen() {
 
           <View style={{ height: 80 }} />
           </View>
+          </View>
           </ScrollView>
     </SafeAreaView>
   );
@@ -439,6 +448,14 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 24,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 840,
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',

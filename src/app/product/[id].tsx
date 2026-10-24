@@ -122,6 +122,14 @@ export default function ProductDetailScreen() {
   };
 
   const handleDelete = () => {
+    if (typeof window !== 'undefined' && window.confirm) {
+      const ok = window.confirm(`Bạn có chắc muốn xóa "${product.name}"?`);
+      if (ok) {
+        removeProduct(product.id);
+        router.replace('/');
+      }
+      return;
+    }
     Alert.alert(
       'Xóa sản phẩm',
       `Bạn có chắc muốn xóa "${product.name}"?`,

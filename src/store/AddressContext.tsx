@@ -10,6 +10,35 @@ import { Address } from '@/types/address';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 
+const ADDRESSES_CACHE_PREFIX = 'tcl_addresses_v1_';
+
+function loadCachedAddresses(userId: string): Address[] {
+  if (!userId) return [];
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(`${ADDRESSES_CACHE_PREFIX}${userId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed as Address[];
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveCachedAddresses(userId: string, items: Address[]) {
+  if (!userId) return;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(`${ADDRESSES_CACHE_PREFIX}${userId}`, JSON.stringify(items));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 interface AddressContextType {
   addresses: Address[];
   userAddresses: Address[];
@@ -33,6 +62,11 @@ export function AddressProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const cached = loadCachedAddresses(user.id);
+    if (cached.length > 0) {
+      setAddresses(cached);
+    }
+
     const loadAddresses = async () => {
       try {
         const { data, error } = await supabase
@@ -40,9 +74,12 @@ export function AddressProvider({ children }: { children: ReactNode }) {
           .select('*')
           .eq('userId', user.id);
 
-        if (!error && data) setAddresses(data as Address[]);
+        if (!error && data && data.length > 0) {
+          setAddresses(data as Address[]);
+          saveCachedAddresses(user.id, data as Address[]);
+        }
       } catch {
-        // Silent fail - no addresses loaded
+        // Silent fail - keep cached addresses
       }
     };
 
@@ -65,42 +102,56 @@ export function AddressProvider({ children }: { children: ReactNode }) {
     if (duplicate) return false;
 
     const newAddress: Address = { ...address, id: `addr_${Date.now()}` };
-    setAddresses((prev) => [...prev, newAddress]);
+    setAddresses((prev) => {
+      const next = [...prev, newAddress];
+      saveCachedAddresses(address.userId, next);
+      return next;
+    });
 
     supabase.from('addresses').insert(newAddress).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm địa chỉ:', error.message);
-    });
+    }, () => {});
     return true;
   }, [addresses]);
 
   const updateAddress = useCallback((id: string, data: Partial<Address>) => {
-    setAddresses((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+    setAddresses((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, ...data } : a));
+      if (user?.id) saveCachedAddresses(user.id, next);
+      return next;
+    });
 
     supabase.from('addresses').update(data).eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa địa chỉ:', error.message);
-    });
-  }, []);
+    }, () => {});
+  }, [user]);
 
   const removeAddress = useCallback((id: string) => {
-    setAddresses((prev) => prev.filter((a) => a.id !== id));
+    setAddresses((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      if (user?.id) saveCachedAddresses(user.id, next);
+      return next;
+    });
 
     supabase.from('addresses').delete().eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá địa chỉ:', error.message);
-    });
-  }, []);
+    }, () => {});
+  }, [user]);
 
   const setDefaultAddress = useCallback((id: string) => {
-    setAddresses((prev) =>
-      prev.map((a) => ({ ...a, isDefault: a.id === id }))
-    );
+    setAddresses((prev) => {
+      const next = prev.map((a) => ({ ...a, isDefault: a.id === id }));
+      if (user?.id) saveCachedAddresses(user.id, next);
+      return next;
+    });
 
     const userId = user?.id ?? '';
     supabase.from('addresses').update({ isDefault: false }).neq('id', id).eq('userId', userId).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi reset default địa chỉ:', error.message);
-    });
+    }, () => {});
     supabase.from('addresses').update({ isDefault: true }).eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi set default địa chỉ:', error.message);
-    });
+    }, () => {});
   }, [user]);
 
   const getDefaultAddress = useCallback(
@@ -125,10 +176,11 @@ export function AddressProvider({ children }: { children: ReactNode }) {
         seen.set(key, addr);
         result.push(addr);
       }
+      if (user?.id) saveCachedAddresses(user.id, result);
       return result;
     });
     return removedCount;
-  }, []);
+  }, [user]);
 
   return (
     <AddressContext.Provider

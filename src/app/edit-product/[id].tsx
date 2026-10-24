@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   Image,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import { useAuth } from '@/store/AuthContext';
 import { Product, Category } from '@/types/product';
 import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
 import { generateProductDescription, inferCategory } from '@/utils/generateProductDescription';
+import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   AP_TITLE,
   AP_TAKE_PHOTO,
@@ -210,6 +212,10 @@ export default function EditProductScreen() {
     };
 
     updateProduct(existingProduct.id, updatedProduct);
+    if (Platform.OS === 'web') {
+      router.replace('/manage-products');
+      return;
+    }
     Alert.alert('Đã cập nhật', 'Sản phẩm đã được cập nhật.', [
       {
         text: 'OK',
@@ -225,8 +231,10 @@ export default function EditProductScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView
         style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
+        <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/manage-products'); }} style={styles.backBtn}>
             <ChevronLeft size={24} color={COLORS.darkText} />
@@ -237,7 +245,10 @@ export default function EditProductScreen() {
 
         {image ? (
           <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: image }} style={styles.previewImageLarge} />
+            <Image
+              source={typeof image === 'string' ? { uri: image } : (image as any)}
+              style={styles.previewImageLarge}
+            />
             <View style={styles.imageActionsRow}>
               <TouchableOpacity style={styles.imageActionBtn} onPress={takePhoto}>
                 <Camera size={18} color={COLORS.primary} />
@@ -287,7 +298,9 @@ export default function EditProductScreen() {
                   key={cat}
                   style={[styles.categoryChip, category === cat && styles.categoryChipSelected]}
                   onPress={() => setCategory(cat)}>
-                  <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextSelected]}>{cat}</Text>
+                  <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextSelected]}>
+                    {getCategoryEmoji(cat)} {getCategoryLabel(cat)}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -335,6 +348,7 @@ export default function EditProductScreen() {
 
           <View style={{ height: 80 }} />
         </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -371,6 +385,8 @@ function FormField({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.cream },
   scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 24 },
+  container: { width: '100%', maxWidth: 840, alignSelf: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

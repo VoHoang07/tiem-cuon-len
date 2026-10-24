@@ -126,6 +126,11 @@ export default function PaymentMethodsScreen() {
   };
 
   const handleDelete = (method: PaymentMethod) => {
+    if (typeof window !== 'undefined' && window.confirm) {
+      const ok = window.confirm(`Bạn có chắc muốn xóa "${method.title}"?`);
+      if (ok) deleteMethod(method.id);
+      return;
+    }
     Alert.alert('Xóa phương thức', `Bạn có chắc muốn xóa "${method.title}"?`, [
       { text: 'Hủy', style: 'cancel' },
       {
@@ -178,7 +183,10 @@ export default function PaymentMethodsScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ maxWidth: 840, width: '100%', alignSelf: 'center' }}
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity

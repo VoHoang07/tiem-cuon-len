@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -27,11 +27,22 @@ import { Product } from '@/types/product';
 export default function FavoritesScreen() {
   const router = useRouter();
   const { products, favorites, refetchCartFavorites } = useShop();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: rawWindowWidth } = useWindowDimensions();
+  const windowWidth =
+    rawWindowWidth > 0
+      ? rawWindowWidth
+      : typeof window !== 'undefined' && window.innerWidth > 0
+      ? window.innerWidth
+      : 1024;
   const numColumns = windowWidth >= 960 ? 4 : windowWidth >= 640 ? 3 : 2;
 
+  const hasFocusedOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
       refetchCartFavorites();
     }, [refetchCartFavorites])
   );

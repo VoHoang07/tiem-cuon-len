@@ -9,10 +9,12 @@ import {
   useWindowDimensions,
   Animated,
 } from 'react-native';
-import { Heart, Plus, Check } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Heart, Plus, Check, Edit3 } from 'lucide-react-native';
 import { Product } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
+import { useAuth } from '@/store/AuthContext';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 
@@ -32,7 +34,11 @@ export function ProductCard({
   variant = 'grid',
   numColumns = 2,
 }: ProductCardProps) {
+  const router = useRouter();
   const { toggleFavorite, isFavorite, addToCart } = useShop();
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+
   const { width: rawWindowWidth } = useWindowDimensions();
   const windowWidth =
     rawWindowWidth > 0
@@ -104,6 +110,10 @@ export function ProductCard({
     setTimeout(() => setJustAdded(false), 950);
   };
 
+  const handleAdminEdit = () => {
+    router.push(`/edit-product/${product.id}`);
+  };
+
   return (
     <Animated.View
       style={[
@@ -118,7 +128,11 @@ export function ProductCard({
         <View style={styles.imageContainer}>
           {product.image ? (
             <Image
-              source={typeof product.image === 'string' ? { uri: product.image } : (product.image as any)}
+              source={
+                typeof product.image === 'string'
+                  ? { uri: product.image }
+                  : (product.image as any)
+              }
               style={[styles.productImage, { height: imageHeight }]}
               resizeMode="cover"
             />
@@ -137,20 +151,30 @@ export function ProductCard({
             </Text>
           </View>
 
-          {/* Favorite Heart Button */}
-          <TouchableOpacity
-            style={[styles.favButton, fav && styles.favButtonActive]}
-            onPress={handleFavoritePress}
-            activeOpacity={0.8}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-              <Heart
-                size={16}
-                color={fav ? COLORS.error : COLORS.darkText}
-                fill={fav ? COLORS.error : 'transparent'}
-              />
-            </Animated.View>
-          </TouchableOpacity>
+          {/* Top-Right Action: Admin gets Quick Edit; Client gets Favorite Heart */}
+          {isAdmin ? (
+            <TouchableOpacity
+              style={[styles.favButton, styles.adminEditBadge]}
+              onPress={handleAdminEdit}
+              activeOpacity={0.8}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Edit3 size={15} color="#3D2B1F" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.favButton, fav && styles.favButtonActive]}
+              onPress={handleFavoritePress}
+              activeOpacity={0.8}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                <Heart
+                  size={16}
+                  color={fav ? COLORS.error : COLORS.darkText}
+                  fill={fav ? COLORS.error : 'transparent'}
+                />
+              </Animated.View>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.info}>
@@ -163,35 +187,46 @@ export function ProductCard({
               <Text style={styles.ratingStar}>★</Text>
               <Text style={styles.ratingText}>{product.rating}</Text>
             </View>
-            {product.quantity > 0 && (
-              <Text style={styles.stockText}>Còn {product.quantity}</Text>
-            )}
+            <Text style={styles.stockText}>
+              {product.quantity > 0 ? `Kho: ${product.quantity}` : 'Hết hàng'}
+            </Text>
           </View>
 
           <View style={styles.priceRow}>
             <Text style={[styles.price, !isDesktop && styles.priceMobile]}>
               {formatVND(product.price)}
             </Text>
-            <TouchableOpacity
-              style={[
-                styles.quickAddBtn,
-                isDesktop && styles.quickAddBtnDesktop,
-                justAdded && styles.quickAddBtnAdded,
-              ]}
-              onPress={handleQuickAdd}
-              activeOpacity={0.75}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              {justAdded ? (
-                <Check size={15} color="#3D2B1F" strokeWidth={2.8} />
-              ) : (
-                <Plus size={15} color="#3D2B1F" strokeWidth={2.6} />
-              )}
-              {isDesktop && (
-                <Text style={styles.quickAddText}>
-                  {justAdded ? 'Đã thêm' : 'Thêm'}
-                </Text>
-              )}
-            </TouchableOpacity>
+            {isAdmin ? (
+              <TouchableOpacity
+                style={[styles.quickAddBtn, isDesktop && styles.quickAddBtnDesktop]}
+                onPress={handleAdminEdit}
+                activeOpacity={0.75}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Edit3 size={14} color="#3D2B1F" strokeWidth={2.5} />
+                {isDesktop && <Text style={styles.quickAddText}>Sửa</Text>}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.quickAddBtn,
+                  isDesktop && styles.quickAddBtnDesktop,
+                  justAdded && styles.quickAddBtnAdded,
+                ]}
+                onPress={handleQuickAdd}
+                activeOpacity={0.75}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                {justAdded ? (
+                  <Check size={15} color="#3D2B1F" strokeWidth={2.8} />
+                ) : (
+                  <Plus size={15} color="#3D2B1F" strokeWidth={2.6} />
+                )}
+                {isDesktop && (
+                  <Text style={styles.quickAddText}>
+                    {justAdded ? 'Đã thêm' : 'Thêm'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Pressable>
@@ -255,6 +290,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
+  },
+  adminEditBadge: {
+    backgroundColor: 'rgba(216, 195, 173, 0.96)',
+    borderWidth: 1,
+    borderColor: '#C4AA90',
   },
   favButtonActive: {
     backgroundColor: '#FFF5F5',

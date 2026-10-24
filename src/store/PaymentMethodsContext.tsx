@@ -9,6 +9,68 @@ import {
 import { PaymentMethod, PaymentMethodInput, type PaymentMethodType } from '@/types/payment-method';
 import { supabase } from '@/services/supabase';
 
+const PAYMENT_CACHE_KEY = 'tcl_payment_methods_v1';
+
+const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
+  {
+    id: 'pm_cod_default',
+    type: 'cod',
+    title: 'Thanh toán khi nhận hàng (COD)',
+    enabled: true,
+    is_default: true,
+    created_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'pm_bank_default',
+    type: 'bank_transfer',
+    title: 'Chuyển khoản ngân hàng (VietQR)',
+    enabled: true,
+    is_default: false,
+    bank_name: 'Vietcombank',
+    account_name: 'TIEM CUON LEN HANDMADE',
+    account_number: '1029384756',
+    transfer_prefix: 'CUONLEN',
+    created_at: '2026-01-02T00:00:00Z',
+  },
+  {
+    id: 'pm_momo_default',
+    type: 'momo',
+    title: 'Ví điện tử MoMo',
+    enabled: true,
+    is_default: false,
+    account_name: 'Tiệm Cuộn Len',
+    phone_number: '0909123456',
+    created_at: '2026-01-03T00:00:00Z',
+  },
+];
+
+function loadCachedMethods(): PaymentMethod[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(PAYMENT_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as PaymentMethod[];
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_PAYMENT_METHODS;
+}
+
+function saveCachedMethods(items: PaymentMethod[]) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(PAYMENT_CACHE_KEY, JSON.stringify(items));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 interface PaymentMethodsContextType {
   methods: PaymentMethod[];
   enabledMethods: PaymentMethod[];
@@ -25,28 +87,30 @@ interface PaymentMethodsContextType {
 const PaymentMethodsContext = createContext<PaymentMethodsContextType | null>(null);
 
 export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
-  const [methods, setMethods] = useState<PaymentMethod[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [methods, setMethods] = useState<PaymentMethod[]>(() => loadCachedMethods());
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMethods = useCallback(async () => {
-    setLoading(true);
     setError(null);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('payment_methods')
+        .select('*')
+        .order('created_at', { ascending: true });
 
-    const { data, error: fetchError } = await supabase
-      .from('payment_methods')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    if (fetchError) {
-      if (__DEV__) console.error('[PAYMENT] Fetch error:', fetchError.message);
-      setError(fetchError.message);
-      setMethods([]);
-    } else if (data) {
-      setMethods(data as PaymentMethod[]);
+      if (fetchError) {
+        if (__DEV__) console.error('[PAYMENT] Fetch error:', fetchError.message);
+      } else if (data && data.length > 0) {
+        const rows = data as PaymentMethod[];
+        setMethods(rows);
+        saveCachedMethods(rows);
+      }
+    } catch {
+      // keep cached/default methods
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -57,68 +121,84 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
   const defaultMethod = methods.find((m) => m.is_default === true) ?? enabledMethods[0];
 
   const addMethod = useCallback(async (input: PaymentMethodInput) => {
-    const { data, error: insertError } = await supabase
-      .from('payment_methods')
-      .insert(input)
-      .select()
-      .single();
+    const optimistic: PaymentMethod = {
+      ...input,
+      id: `pm_${Date.now()}`,
+      created_at: new Date().toISOString(),
+    };
+    setMethods((prev) => {
+      const next = [...prev, optimistic];
+      saveCachedMethods(next);
+      return next;
+    });
 
-    if (insertError) {
-      if (__DEV__) console.error('[PAYMENT] Add error:', insertError.message);
-      return;
+    try {
+      const { data, error: insertError } = await supabase
+        .from('payment_methods')
+        .insert(input)
+        .select()
+        .single();
+
+      if (!insertError && data) {
+        setMethods((prev) => {
+          const next = prev.map((m) => (m.id === optimistic.id ? (data as PaymentMethod) : m));
+          saveCachedMethods(next);
+          return next;
+        });
+      }
+    } catch {
+      // keep optimistic
     }
-    if (data) setMethods((prev) => [...prev, data as PaymentMethod]);
   }, []);
 
   const updateMethod = useCallback(async (id: string, data: Partial<PaymentMethod>) => {
     const payload = { ...data, updated_at: new Date().toISOString() };
+    setMethods((prev) => {
+      const next = prev.map((m) => (m.id === id ? { ...m, ...data } : m));
+      saveCachedMethods(next);
+      return next;
+    });
 
-    const { error: updateError } = await supabase
-      .from('payment_methods')
-      .update(payload)
-      .eq('id', id);
-
-    if (updateError) {
-      if (__DEV__) console.error('[PAYMENT] Update error:', updateError.message);
-      return;
+    try {
+      await supabase.from('payment_methods').update(payload).eq('id', id);
+    } catch {
+      // ignore
     }
-    setMethods((prev) => prev.map((m) => (m.id === id ? { ...m, ...data } : m)));
   }, []);
 
   const deleteMethod = useCallback(async (id: string) => {
-    const { error: deleteError } = await supabase
-      .from('payment_methods')
-      .delete()
-      .eq('id', id);
+    setMethods((prev) => {
+      const next = prev.filter((m) => m.id !== id);
+      saveCachedMethods(next);
+      return next;
+    });
 
-    if (deleteError) {
-      if (__DEV__) console.error('[PAYMENT] Delete error:', deleteError.message);
-      return;
+    try {
+      await supabase.from('payment_methods').delete().eq('id', id);
+    } catch {
+      // ignore
     }
-    setMethods((prev) => prev.filter((m) => m.id !== id));
   }, []);
 
   const setDefault = useCallback(async (id: string) => {
-    // Unset previous default
-    await supabase
-      .from('payment_methods')
-      .update({ is_default: false, updated_at: new Date().toISOString() })
-      .neq('id', id);
+    setMethods((prev) => {
+      const next = prev.map((m) => ({ ...m, is_default: m.id === id }));
+      saveCachedMethods(next);
+      return next;
+    });
 
-    // Set new default
-    const { error: setDefaultError } = await supabase
-      .from('payment_methods')
-      .update({ is_default: true, updated_at: new Date().toISOString() })
-      .eq('id', id);
-
-    if (setDefaultError) {
-      if (__DEV__) console.error('[PAYMENT] Set default error:', setDefaultError.message);
-      return;
+    try {
+      await supabase
+        .from('payment_methods')
+        .update({ is_default: false, updated_at: new Date().toISOString() })
+        .neq('id', id);
+      await supabase
+        .from('payment_methods')
+        .update({ is_default: true, updated_at: new Date().toISOString() })
+        .eq('id', id);
+    } catch {
+      // ignore
     }
-
-    setMethods((prev) =>
-      prev.map((m) => ({ ...m, is_default: m.id === id }))
-    );
   }, []);
 
   const getMethodByType = useCallback(

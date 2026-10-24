@@ -44,6 +44,7 @@ export default function OrderDetailScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/orders'); }} style={styles.backBtn}>
             <ChevronLeft size={24} color={COLORS.darkText} />
@@ -110,7 +111,7 @@ export default function OrderDetailScreen() {
               <View style={styles.itemIcon}>
                 {item.product.image ? (
                   <Image
-                    source={{ uri: item.product.image }}
+                    source={typeof item.product.image === 'string' ? { uri: item.product.image } : (item.product.image as any)}
                     style={styles.itemProductImage}
                     resizeMode="cover"
                   />
@@ -140,6 +141,7 @@ export default function OrderDetailScreen() {
         </View>
 
         <View style={{ height: 60 }} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -148,6 +150,7 @@ export default function OrderDetailScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.cream },
   scroll: { flex: 1 },
+  container: { width: '100%', maxWidth: 840, alignSelf: 'center' },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 120 },
   notFoundText: { fontSize: 18, fontWeight: '600', color: COLORS.mediumText },
   header: {

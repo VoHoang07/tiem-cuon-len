@@ -16,10 +16,12 @@ import {
   User,
   Home,
   ShoppingBag,
+  Package,
 } from 'lucide-react-native';
 import { COLORS, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
+import { useOrders } from '@/store/OrderContext';
 import { TAB_BAR_CONTENT_HEIGHT } from '@/constants/layout';
 import {
   NAV_HOME,
@@ -34,6 +36,7 @@ export function BottomNav() {
   const pathname = usePathname();
   const { cartCount, favorites } = useShop();
   const { role } = useAuth();
+  const { orders } = useOrders();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const [mounted, setMounted] = useState(false);
@@ -44,19 +47,21 @@ export function BottomNav() {
 
   const isWideWeb = mounted && Platform.OS === 'web' && windowWidth >= 640;
   const isAdmin = role === 'admin';
+  const pendingOrdersCount = orders.filter((o) => o.status === 'Đang xử lý').length;
 
   const adminTabs = [
-    { route: '/', icon: Home, label: NAV_HOME },
-    { route: '/add-product', icon: PlusCircle, label: NAV_ADD },
-    { route: '/orders', icon: ShoppingBag, label: 'Đơn hàng' },
-    { route: '/profile', icon: User, label: NAV_PROFILE },
+    { route: '/', icon: Home, label: NAV_HOME, badge: 0 },
+    { route: '/manage-products', icon: Package, label: 'Kho SP', badge: 0 },
+    { route: '/add-product', icon: PlusCircle, label: NAV_ADD, badge: 0 },
+    { route: '/orders', icon: ShoppingBag, label: 'Đơn hàng', badge: pendingOrdersCount },
+    { route: '/profile', icon: User, label: 'Quản trị', badge: 0 },
   ];
 
   const customerTabs = [
-    { route: '/', icon: Home, label: NAV_HOME },
-    { route: '/favorites', icon: Heart, label: NAV_FAVORITES },
-    { route: '/cart', icon: ShoppingCart, label: NAV_CART },
-    { route: '/profile', icon: User, label: NAV_PROFILE },
+    { route: '/', icon: Home, label: NAV_HOME, badge: 0 },
+    { route: '/favorites', icon: Heart, label: NAV_FAVORITES, badge: favorites.length },
+    { route: '/cart', icon: ShoppingCart, label: NAV_CART, badge: cartCount },
+    { route: '/profile', icon: User, label: NAV_PROFILE, badge: 0 },
   ];
 
   const tabs = isAdmin ? adminTabs : customerTabs;
@@ -76,18 +81,17 @@ export function BottomNav() {
         isWideWeb ? styles.outerWrapperFloating : { paddingBottom: insets.bottom },
       ]}
       pointerEvents="box-none">
-      <View style={[styles.inner, isWideWeb && styles.innerFloating]}>
+      <View
+        style={[
+          styles.inner,
+          isWideWeb && styles.innerFloating,
+          isWideWeb && isAdmin && styles.innerFloatingAdmin,
+        ]}>
         {tabs.map((tab) => {
-          const { route, icon: Icon, label } = tab;
+          const { route, icon: Icon, label, badge } = tab;
           const focused = pathname === route;
           const color = focused ? '#3D2B1F' : COLORS.lightText;
           const textStyle = focused ? styles.tabTextActive : styles.tabText;
-
-          const showBadge =
-            (label === NAV_FAVORITES && favorites.length > 0) ||
-            (label === NAV_CART && cartCount > 0);
-          const badgeCount =
-            label === NAV_FAVORITES ? favorites.length : cartCount;
 
           return (
             <TouchableOpacity
@@ -98,11 +102,11 @@ export function BottomNav() {
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}>
               <View style={styles.iconWrap}>
-                <Icon size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-                {showBadge && (
+                <Icon size={21} color={color} strokeWidth={focused ? 2.5 : 2} />
+                {badge > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>
-                      {badgeCount > 99 ? '99+' : badgeCount}
+                      {badge > 99 ? '99+' : badge}
                     </Text>
                   </View>
                 )}
@@ -151,6 +155,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DFCBB5',
     ...SHADOWS.large,
+  },
+  innerFloatingAdmin: {
+    maxWidth: 580,
   },
   tab: {
     flex: 1,
