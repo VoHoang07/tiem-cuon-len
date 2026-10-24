@@ -19,7 +19,9 @@ function loadCachedAddresses(userId: string): Address[] {
       const raw = window.localStorage.getItem(`${ADDRESSES_CACHE_PREFIX}${userId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed as Address[];
+        if (Array.isArray(parsed)) {
+          return (parsed as Address[]).filter((a) => a.fullName !== '__TCL_CHAT_V2__');
+        }
       }
     }
   } catch {
@@ -72,11 +74,15 @@ export function AddressProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase
           .from('addresses')
           .select('*')
-          .eq('userId', user.id);
+          .eq('userId', user.id)
+          .neq('fullName', '__TCL_CHAT_V2__');
 
-        if (!error && data && data.length > 0) {
-          setAddresses(data as Address[]);
-          saveCachedAddresses(user.id, data as Address[]);
+        if (!error && data) {
+          const filtered = (data as Address[]).filter(
+            (a) => a.fullName !== '__TCL_CHAT_V2__'
+          );
+          setAddresses(filtered);
+          saveCachedAddresses(user.id, filtered);
         }
       } catch {
         // Silent fail - keep cached addresses
