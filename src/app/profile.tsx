@@ -25,11 +25,13 @@ import {
   PlusCircle,
   Edit3,
   Sparkles,
+  MessageCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
+import { useChat } from '@/store/ChatContext';
 import { useLogout } from '@/hooks/useLogout';
 import { BrandAvatar } from '@/components/BrandTitle';
 import {
@@ -63,6 +65,7 @@ export default function ProfileScreen() {
   const { products, favorites, cart } = useShop();
   const { user, role } = useAuth();
   const { orders, getOrdersByUser } = useOrders();
+  const { openChat, unreadCount, conversations } = useChat();
   const { handleLogout } = useLogout();
 
   const userOrders = user ? getOrdersByUser(user.id) : [];
@@ -192,6 +195,12 @@ export default function ProfileScreen() {
 
             {/* Admin Menu Items */}
             <View style={styles.menuSection}>
+              <MenuItem
+                icon={MessageCircle}
+                label="Hộp thư tin nhắn khách hàng"
+                badge={unreadCount > 0 ? `${unreadCount} chưa đọc` : `${conversations.length} hội thoại`}
+                onPress={openChat}
+              />
               <MenuItem icon={Package} label={PROF_MANAGE_PRODUCTS} badge={`${products.length} SP`} onPress={() => router.push('/manage-products')} />
               <MenuItem icon={PlusCircle} label="Thêm sản phẩm mới" onPress={() => router.push('/add-product')} />
               <MenuItem
@@ -291,6 +300,12 @@ export default function ProfileScreen() {
 
           {/* Customer Menu Items */}
           <View style={styles.menuSection}>
+            <MenuItem
+              icon={MessageCircle}
+              label="Trò chuyện & Tư vấn với Tiệm"
+              badge={unreadCount > 0 ? `${unreadCount} mới` : 'Trực tuyến'}
+              onPress={openChat}
+            />
             <MenuItem
               icon={ShoppingBag}
               label={PROF_CUSTOMER_MY_ORDERS}

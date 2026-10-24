@@ -10,11 +10,12 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Heart, Plus, Check, Edit3 } from 'lucide-react-native';
+import { Heart, Plus, Check, Edit3, MessageCircle } from 'lucide-react-native';
 import { Product } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
+import { useChat } from '@/store/ChatContext';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 
@@ -37,6 +38,7 @@ export function ProductCard({
   const router = useRouter();
   const { toggleFavorite, isFavorite, addToCart } = useShop();
   const { role } = useAuth();
+  const { openChatWithProduct } = useChat();
   const isAdmin = role === 'admin';
 
   const { width: rawWindowWidth } = useWindowDimensions();
@@ -196,37 +198,46 @@ export function ProductCard({
             <Text style={[styles.price, !isDesktop && styles.priceMobile]}>
               {formatVND(product.price)}
             </Text>
-            {isAdmin ? (
+            <View style={styles.cardActionBtnsRow}>
               <TouchableOpacity
-                style={[styles.quickAddBtn, isDesktop && styles.quickAddBtnDesktop]}
-                onPress={handleAdminEdit}
+                style={styles.pingCardBtn}
+                onPress={() => openChatWithProduct(product)}
                 activeOpacity={0.75}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <Edit3 size={14} color="#3D2B1F" strokeWidth={2.5} />
-                {isDesktop && <Text style={styles.quickAddText}>Sửa</Text>}
+                <MessageCircle size={14} color="#3D2B1F" strokeWidth={2.3} />
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[
-                  styles.quickAddBtn,
-                  isDesktop && styles.quickAddBtnDesktop,
-                  justAdded && styles.quickAddBtnAdded,
-                ]}
-                onPress={handleQuickAdd}
-                activeOpacity={0.75}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                {justAdded ? (
-                  <Check size={15} color="#3D2B1F" strokeWidth={2.8} />
-                ) : (
-                  <Plus size={15} color="#3D2B1F" strokeWidth={2.6} />
-                )}
-                {isDesktop && (
-                  <Text style={styles.quickAddText}>
-                    {justAdded ? 'Đã thêm' : 'Thêm'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
+              {isAdmin ? (
+                <TouchableOpacity
+                  style={[styles.quickAddBtn, isDesktop && styles.quickAddBtnDesktop]}
+                  onPress={handleAdminEdit}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Edit3 size={14} color="#3D2B1F" strokeWidth={2.5} />
+                  {isDesktop && <Text style={styles.quickAddText}>Sửa</Text>}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.quickAddBtn,
+                    isDesktop && styles.quickAddBtnDesktop,
+                    justAdded && styles.quickAddBtnAdded,
+                  ]}
+                  onPress={handleQuickAdd}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  {justAdded ? (
+                    <Check size={15} color="#3D2B1F" strokeWidth={2.8} />
+                  ) : (
+                    <Plus size={15} color="#3D2B1F" strokeWidth={2.6} />
+                  )}
+                  {isDesktop && (
+                    <Text style={styles.quickAddText}>
+                      {justAdded ? 'Đã thêm' : 'Thêm'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </Pressable>
@@ -351,6 +362,21 @@ const styles = StyleSheet.create({
   },
   priceMobile: {
     fontSize: 14.5,
+  },
+  cardActionBtnsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  pingCardBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    backgroundColor: '#F3ECE2',
+    borderWidth: 1,
+    borderColor: '#DFCBB5',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickAddBtn: {
     minWidth: 32,

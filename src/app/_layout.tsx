@@ -8,7 +8,9 @@ import { AuthProvider, useAuth } from '@/store/AuthContext';
 import { OrderProvider } from '@/store/OrderContext';
 import { AddressProvider } from '@/store/AddressContext';
 import { PaymentMethodsProvider } from '@/store/PaymentMethodsContext';
+import { ChatProvider } from '@/store/ChatContext';
 import { BottomNav } from '@/components/BottomNav';
+import { ShopChatWidget } from '@/components/ShopChatWidget';
 import { YarnRollIntro } from '@/components/YarnRollIntro';
 import { COLORS } from '@/constants/theme';
 
@@ -103,41 +105,44 @@ export default function RootLayout() {
           <OrderProvider>
             <AddressProvider>
               <PaymentMethodsProvider>
-                <AuthGate>
-                  <StatusBar style="dark" />
-                  <View style={{ flex: 1 }}>
-                    <Stack
-                      screenOptions={{
-                        headerShown: false,
-                        contentStyle: { backgroundColor: COLORS.cream },
-                        animation: 'slide_from_right',
-                      }}>
-                      <Stack.Screen name="login" />
-                      <Stack.Screen name="register" />
-                      <Stack.Screen name="index" />
-                      <Stack.Screen name="product/[id]" />
-                      <Stack.Screen name="add-product" />
-                      <Stack.Screen name="edit-product/[id]" />
-                      <Stack.Screen name="cart" />
-                      <Stack.Screen name="favorites" />
-                      <Stack.Screen name="profile" />
-                      <Stack.Screen name="manage-products" />
-                      <Stack.Screen name="checkout" />
-                      <Stack.Screen name="orders/index" />
-                      <Stack.Screen name="orders/[id]" />
-                      <Stack.Screen name="addresses/index" />
-                      <Stack.Screen name="addresses/add" />
-                      <Stack.Screen name="profile/edit" />
-                      <Stack.Screen name="settings" />
-                      <Stack.Screen name="help" />
-                      <Stack.Screen name="privacy" />
-                      <Stack.Screen name="payment-methods" />
-                      <Stack.Screen name="payment/[orderId]" />
-                    </Stack>
-                    <BottomNavGate />
-                    <YarnRollIntro />
-                  </View>
-                </AuthGate>
+                <ChatProvider>
+                  <AuthGate>
+                    <StatusBar style="dark" />
+                    <View style={{ flex: 1 }}>
+                      <Stack
+                        screenOptions={{
+                          headerShown: false,
+                          contentStyle: { backgroundColor: COLORS.cream },
+                          animation: 'slide_from_right',
+                        }}>
+                        <Stack.Screen name="login" />
+                        <Stack.Screen name="register" />
+                        <Stack.Screen name="index" />
+                        <Stack.Screen name="product/[id]" />
+                        <Stack.Screen name="add-product" />
+                        <Stack.Screen name="edit-product/[id]" />
+                        <Stack.Screen name="cart" />
+                        <Stack.Screen name="favorites" />
+                        <Stack.Screen name="profile" />
+                        <Stack.Screen name="manage-products" />
+                        <Stack.Screen name="checkout" />
+                        <Stack.Screen name="orders/index" />
+                        <Stack.Screen name="orders/[id]" />
+                        <Stack.Screen name="addresses/index" />
+                        <Stack.Screen name="addresses/add" />
+                        <Stack.Screen name="profile/edit" />
+                        <Stack.Screen name="settings" />
+                        <Stack.Screen name="help" />
+                        <Stack.Screen name="privacy" />
+                        <Stack.Screen name="payment-methods" />
+                        <Stack.Screen name="payment/[orderId]" />
+                      </Stack>
+                      <BottomNavGate />
+                      <ShopChatWidget />
+                      <YarnRollIntro />
+                    </View>
+                  </AuthGate>
+                </ChatProvider>
               </PaymentMethodsProvider>
             </AddressProvider>
           </OrderProvider>

@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Heart, ChevronLeft, Minus, Plus, Star, MessageSquare, Edit3, Trash2, Home } from 'lucide-react-native';
+import { Heart, ChevronLeft, Minus, Plus, Star, MessageSquare, Edit3, Trash2, Home, MessageCircle } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
+import { useChat } from '@/store/ChatContext';
 import { Product, Review } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
@@ -39,6 +40,7 @@ export default function ProductDetailScreen() {
   const router = useRouter();
   const { products, toggleFavorite, isFavorite, addToCart, addReview, removeProduct } = useShop();
   const { user, role, isAuthenticated } = useAuth();
+  const { openChatWithProduct } = useChat();
   const [quantity, setQuantity] = useState(1);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -211,8 +213,8 @@ export default function ProductDetailScreen() {
             </Text>
           </View>
 
-          {/* Admin Actions */}
-          {isAdmin && (
+          {/* Admin Actions or Client Product-Ping Chat Button */}
+          {isAdmin ? (
             <View style={styles.adminActions}>
               <TouchableOpacity
                 style={styles.adminBtn}
@@ -221,12 +223,37 @@ export default function ProductDetailScreen() {
                 <Text style={styles.adminBtnText}>Sửa</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                style={styles.adminBtn}
+                onPress={() => openChatWithProduct(product)}>
+                <MessageCircle size={16} color="#3D2B1F" />
+                <Text style={[styles.adminBtnText, { color: '#3D2B1F' }]}>
+                  Ping SP cho khách
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[styles.adminBtn, styles.adminBtnDanger]}
                 onPress={handleDelete}>
                 <Trash2 size={16} color={COLORS.error} />
                 <Text style={[styles.adminBtnText, { color: COLORS.error }]}>Xóa</Text>
               </TouchableOpacity>
             </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.pingProductBanner}
+              onPress={() => openChatWithProduct(product)}
+              activeOpacity={0.8}>
+              <View style={styles.pingProductIconWrap}>
+                <MessageCircle size={18} color="#3D2B1F" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pingProductTitle}>
+                  Hỏi thông tin / Đặt mẫu này cùng Admin
+                </Text>
+                <Text style={styles.pingProductSub}>
+                  Bấm để Ping sản phẩm này vào khung chat với Tiệm Cuộn Len
+                </Text>
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* Description */}
@@ -717,6 +744,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.sm,
     marginTop: SPACING.lg,
+    flexWrap: 'wrap',
+  },
+  pingProductBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F3ECE2',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: SPACING.lg,
+    borderWidth: 1,
+    borderColor: '#DFCBB5',
+  },
+  pingProductIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#D8C3AD',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#C4AA90',
+  },
+  pingProductTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  pingProductSub: {
+    fontSize: 11.5,
+    color: COLORS.mediumText,
+    marginTop: 2,
   },
   adminBtn: {
     flexDirection: 'row',
