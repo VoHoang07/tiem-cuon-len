@@ -48,7 +48,7 @@ import {
 } from '@/constants/strings';
 import { BrandTitle, BrandAvatar } from '@/components/BrandTitle';
 import { HomeSkeleton } from '@/components/Skeleton';
-import PushpinTearFooter from '@/components/ui/pushpin-tear-footer';
+import { BoutiqueFooter } from '@/components/BoutiqueFooter';
 import { getCategoryLabel } from '@/utils/getCategoryEmoji';
 
 const GAP = 14;
@@ -546,6 +546,14 @@ export default function HomeScreen() {
     </View>
   );
 
+  const flatListRef = useRef<FlatList<Product> | null>(null);
+  const handleScrollToTop = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
   const ListFooter = (
     <View style={[styles.footerOuter, { width: containerMaxWidth, maxWidth: containerMaxWidth, alignSelf: 'center' }]}>
       {hasMore && filteredProducts.length > 0 && (
@@ -555,63 +563,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       )}
-      <View style={[styles.tearFooterWrapper, isMobile && styles.tearFooterWrapperMobile]}>
-        <PushpinTearFooter
-          brand="Tiệm Cuộn Len."
-          name="len thủ công việt nam"
-          logoHref="/"
-          sheet="#D8C3AD"
-          paper="#FAF5EE"
-          sheetInk="#3D2B1F"
-          paperInk="#4A3525"
-          seed={23}
-          height={isMobile ? 560 : 660}
-          email="lienhe@tiemcuonlen.vn"
-          newsletter={{
-            label: "Nhận thông báo mẫu len thủ công mới mỗi tuần",
-            placeholder: "nhập email của bạn...",
-          }}
-          status={{
-            label: "Đang nhận đặt đan móc mẫu len theo yêu cầu",
-            href: "/",
-          }}
-          mark="TCL / 2026"
-          timeZone="Asia/Ho_Chi_Minh"
-          timeLabel="VN"
-          socials={[
-            { icon: "ig", label: "Instagram", href: "https://instagram.com" },
-            { icon: "chat", label: "Trợ giúp", href: "/help" },
-          ]}
-          columns={[
-            {
-              title: "cửa tiệm",
-              links: [
-                { label: "Móc len thủ công", href: "/" },
-                { label: "Túi xách & Ví len", href: "/" },
-                { label: "Thú bông & Búp bê", href: "/" },
-              ],
-              cta: { label: "mua sắm.", href: "/" },
-            },
-            {
-              title: "khách hàng",
-              links: [
-                { label: "Giỏ hàng của bạn", href: "/cart" },
-                { label: "Sản phẩm yêu thích", href: "/favorites" },
-                { label: "Tra cứu đơn hàng", href: "/orders" },
-              ],
-              cta: { label: "liên hệ.", href: "mailto:lienhe@tiemcuonlen.vn" },
-            },
-          ]}
-          sideLinks={[
-            { icon: "shield", label: "bảo mật", href: "/privacy" },
-            { icon: "doc", label: "trợ giúp", href: "/help" },
-          ]}
-          chat={{ label: "tư vấn ngay", href: "/help" }}
-          copyright="© 2026 Tiệm Cuộn Len"
-          credit="đan móc thủ công bằng cả trái tim"
-          handle={{ label: "@tiemcuonlen", href: "/" }}
-        />
-      </View>
+      <BoutiqueFooter
+        onSelectCategory={setSelectedCategory}
+        onScrollToTop={handleScrollToTop}
+      />
       <View style={{ height: BOTTOM_NAV_SPACER }} />
     </View>
   );
@@ -629,6 +584,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <FlatList
+        ref={flatListRef}
         key={`grid-${numColumns}`}
         data={filteredProducts}
         keyExtractor={(item) => item.id}
