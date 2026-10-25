@@ -7,9 +7,7 @@ import {
   StyleSheet,
   Image,
   Linking,
-  Modal,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -19,7 +17,6 @@ import {
   Building2,
   Smartphone,
   Wallet,
-  Copy,
   CheckCheck,
   Send,
   CheckCircle,
@@ -130,11 +127,8 @@ export default function PaymentScreen() {
 
   const order = orders.find((o) => o.id === paramOrderId);
 
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [autoVerifiedBySepay, setAutoVerifiedBySepay] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [bankOpened, setBankOpened] = useState(false);
   const [simulatingSepay, setSimulatingSepay] = useState(false);
   const [checkingNow, setCheckingNow] = useState(false);
@@ -288,12 +282,6 @@ export default function PaymentScreen() {
     }
   };
 
-  const handleCopy = async (text: string, field: string) => {
-    await Clipboard.setStringAsync(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
   const handleCopyAllAndOpenBank = async () => {
     const transferInfo = [
       `Ngân hàng: ${bankName}`,
@@ -330,19 +318,6 @@ export default function PaymentScreen() {
         // ignore
       }
     }
-  };
-
-  const handleConfirmTransfer = async () => {
-    if (!order) return;
-    setShowConfirmModal(false);
-    setConfirming(true);
-
-    updateOrderStatus(order.id, 'awaiting_confirmation');
-
-    setTimeout(() => {
-      setConfirming(false);
-      setConfirmed(true);
-    }, 500);
   };
 
   if (!order) {
@@ -543,42 +518,6 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        {/* Transfer details */}
-        <View style={styles.section}>
-          <View style={styles.detailCard}>
-            <Text style={styles.detailCardTitle}>
-              Thông tin tài khoản nhận tiền
-            </Text>
-
-            <DetailRow label="Ngân hàng" value={bankName} />
-            <DetailRow label="Chủ tài khoản" value={accountName} />
-            <DetailRow
-              label="Số tài khoản"
-              value={accountNo}
-              copyable
-              copied={copiedField === 'account'}
-              onCopy={() => handleCopy(accountNo, 'account')}
-            />
-            <DetailRow
-              label="Số tiền"
-              value={formatVND(orderAmount)}
-              copyable
-              copied={copiedField === 'amount'}
-              onCopy={() => handleCopy(String(orderAmount), 'amount')}
-              highlight
-            />
-            <DetailRow
-              label="Nội dung CK (Bắt buộc)"
-              value={transferContent}
-              copyable
-              copied={copiedField === 'content'}
-              onCopy={() => handleCopy(transferContent, 'content')}
-              highlight
-              mono
-            />
-          </View>
-        </View>
-
         {/* Admin Webhook Simulator Tool */}
         {isAdmin && (
           <View style={styles.section}>
@@ -612,25 +551,8 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        {/* Manual Confirm Fallback Button */}
+        {/* View orders button */}
         <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.confirmBtn, confirming && styles.confirmBtnDisabled]}
-            onPress={() => setShowConfirmModal(true)}
-            disabled={confirming}
-            activeOpacity={0.8}>
-            {confirming ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <>
-                <CheckCircle size={19} color={COLORS.white} />
-                <Text style={styles.confirmBtnText}>
-                  Tôi đã hoàn tất chuyển khoản
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.laterBtn}
             onPress={() => router.replace('/orders')}>
@@ -638,82 +560,7 @@ export default function PaymentScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* Confirmation Modal */}
-      <Modal visible={showConfirmModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Send size={36} color="#3D2B1F" />
-            <Text style={styles.modalTitle}>Xác nhận đã chuyển khoản</Text>
-            <Text style={styles.modalText}>
-              Bạn đã chuyển khoản số tiền{' '}
-              <Text style={styles.modalHighlight}>{formatVND(orderAmount)}</Text>
-              {'\n'}với nội dung{' '}
-              <Text style={styles.modalHighlight}>{transferContent}</Text>
-              {'\n'}vào tài khoản {bankName} chưa?
-            </Text>
-
-            <TouchableOpacity
-              style={styles.modalConfirmBtn}
-              onPress={handleConfirmTransfer}>
-              <Text style={styles.modalConfirmBtnText}>
-                Đúng, tôi đã chuyển khoản
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.modalCancelBtn}
-              onPress={() => setShowConfirmModal(false)}>
-              <Text style={styles.modalCancelBtnText}>Quay lại kiểm tra</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  copyable,
-  copied,
-  onCopy,
-  highlight,
-  mono,
-}: {
-  label: string;
-  value: string;
-  copyable?: boolean;
-  copied?: boolean;
-  onCopy?: () => void;
-  highlight?: boolean;
-  mono?: boolean;
-}) {
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <View style={styles.detailValueRow}>
-        <Text
-          style={[
-            styles.detailValue,
-            highlight && styles.detailValueHighlight,
-            mono && styles.detailValueMono,
-          ]}
-          selectable>
-          {value}
-        </Text>
-        {copyable && onCopy && (
-          <TouchableOpacity onPress={onCopy} style={styles.copyBtn} hitSlop={8}>
-            {copied ? (
-              <CheckCheck size={16} color={COLORS.success} />
-            ) : (
-              <Copy size={16} color="#3D2B1F" />
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
   );
 }
 
@@ -929,52 +776,6 @@ const styles = StyleSheet.create({
   },
   copiedBannerText: { fontSize: 12.5, color: '#2D6A2E', flex: 1, lineHeight: 18 },
 
-  /* Detail card */
-  detailCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5D5C3',
-  },
-  detailCardTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#2C1E14',
-    marginBottom: 10,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5EFE8',
-  },
-  detailLabel: { fontSize: 12.5, color: COLORS.mediumText, fontWeight: '600' },
-  detailValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 1,
-  },
-  detailValue: { fontSize: 13.5, fontWeight: '700', color: '#2C1E14' },
-  detailValueHighlight: {
-    color: '#3D2B1F',
-    fontWeight: '900',
-  },
-  detailValueMono: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 13,
-    backgroundColor: '#F3ECE2',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#D8C3AD',
-  },
-  copyBtn: { padding: 4 },
-
   /* Admin Test Box */
   adminTestBox: {
     backgroundColor: '#EFE5D8',
@@ -1010,80 +811,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  /* Confirm button */
-  confirmBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#5C4332',
-    borderRadius: 18,
-    paddingVertical: 15,
-  },
-  confirmBtnDisabled: { opacity: 0.7 },
-  confirmBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#FAF5EE',
-  },
   laterBtn: {
     alignItems: 'center',
-    marginTop: 10,
-    paddingVertical: 8,
+    marginTop: 4,
+    paddingVertical: 10,
   },
   laterBtnText: { fontSize: 13.5, fontWeight: '600', color: COLORS.mediumText },
-
-  /* Modal */
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.xxl,
-  },
-  modalCard: {
-    backgroundColor: '#FAF5EE',
-    borderRadius: 24,
-    padding: SPACING.xxl,
-    alignItems: 'center',
-    gap: SPACING.md,
-    width: '100%',
-    maxWidth: 420,
-    borderWidth: 1.5,
-    borderColor: '#D8C3AD',
-    ...SHADOWS.large,
-  },
-  modalTitle: { fontSize: 19, fontWeight: '800', color: '#2C1E14' },
-  modalText: {
-    fontSize: 14,
-    color: '#4A3525',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  modalHighlight: { fontWeight: '800', color: '#2C1E14' },
-  modalConfirmBtn: {
-    backgroundColor: '#3D2B1F',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: SPACING.xxl,
-    width: '100%',
-    alignItems: 'center',
-  },
-  modalConfirmBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#FAF5EE',
-  },
-  modalCancelBtn: {
-    paddingVertical: SPACING.sm,
-    width: '100%',
-    alignItems: 'center',
-  },
-  modalCancelBtnText: {
-    fontSize: 13.5,
-    fontWeight: '600',
-    color: COLORS.mediumText,
-  },
 
   /* Confirmed */
   confirmedScroll: {
