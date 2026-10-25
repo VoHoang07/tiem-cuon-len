@@ -18,6 +18,32 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
+    const query = req.query || {};
+    if (query.action === 'qr' && query.url) {
+      try {
+        const targetUrl = String(query.url);
+        if (!targetUrl.startsWith('https://vietqr.app/')) {
+          return res.status(400).json({ success: false, message: 'Invalid QR URL' });
+        }
+        const safeFilename = String(query.filename || 'VietQR-TiemCuonLen.png').replace(
+          /[^A-Za-z0-9._-]/g,
+          '_'
+        );
+        const qrRes = await fetch(targetUrl);
+        if (!qrRes.ok) {
+          return res.status(502).json({ success: false, message: 'Failed to fetch QR' });
+        }
+        const arrayBuf = await qrRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuf);
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(200).send(buffer);
+      } catch (e) {
+        return res.status(500).json({ success: false, message: 'QR download error' });
+      }
+    }
+
     return res.status(200).json({
       success: true,
       service: 'Tiệm Cuộn Len — Cổng Webhook Thanh Toán Tự Động SePay',

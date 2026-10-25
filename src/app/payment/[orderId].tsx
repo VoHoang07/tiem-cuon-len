@@ -491,24 +491,39 @@ export default function PaymentScreen() {
   const handleDownloadQrImage = async () => {
     if (!sepayQrImageUrl) return;
     setDownloadingQr(true);
+    const filename = `VietQR-${order?.id || 'CUONLEN'}.png`;
+    const proxyDownloadUrl = `/api/sepay-webhook?action=qr&url=${encodeURIComponent(
+      sepayQrImageUrl
+    )}&filename=${encodeURIComponent(filename)}`;
+
     try {
       if (Platform.OS === 'web' && typeof document !== 'undefined') {
-        const res = await fetch(sepayQrImageUrl);
+        const res = await fetch(proxyDownloadUrl);
+        if (!res.ok) throw new Error('Proxy fetch failed');
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = blobUrl;
-        link.download = `VietQR-${order?.id || 'CUONLEN'}.png`;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
       } else {
-        await Linking.openURL(sepayQrImageUrl);
+        await Linking.openURL(
+          `https://tiem-cuon-len.vercel.app${proxyDownloadUrl}`
+        );
       }
       setQrSavedSuccess(true);
     } catch {
-      await Linking.openURL(sepayQrImageUrl);
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const link = document.createElement('a');
+        link.href = proxyDownloadUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
       setQrSavedSuccess(true);
     } finally {
       setDownloadingQr(false);
