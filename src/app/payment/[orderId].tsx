@@ -144,34 +144,44 @@ export default function PaymentScreen() {
     enabledMethods.find((m) => m.type === 'bank_transfer') ??
     enabledMethods[0];
 
+  const accountNo = paymentMethod?.account_number || '107888618456';
+  const accountName = paymentMethod?.account_name || 'VO VU MINH HOANG';
+  const bankName = paymentMethod?.bank_name || 'VietinBank';
+  const orderAmount = order?.total ?? 0;
+
   const orderShortId = (order?.id ?? '')
     .replace(/^CUONLEN[-_]?/i, '')
     .replace(/[^A-Za-z0-9]/g, '');
-  const transferPrefix = (paymentMethod?.transfer_prefix ?? 'CUONLEN')
-    .replace(/[^A-Za-z0-9]/g, '')
-    .toUpperCase();
-  // Clean alphanumeric payment code without hyphens so SePay & all VN banking apps parse 100% accurately
-  const transferContent = `${transferPrefix}${orderShortId}`;
 
-  const accountNo = paymentMethod?.account_number || '3387966507';
-  const accountName = paymentMethod?.account_name || 'VO VU MINH HOANG';
-  const bankName = paymentMethod?.bank_name || 'Vietcombank';
-  const orderAmount = order?.total ?? 0;
+  const isVietinBank = bankName.toLowerCase().includes('vietin');
+  const rawPrefix = (paymentMethod?.transfer_prefix ?? 'SEVQR CUONLEN')
+    .replace(/[^A-Za-z0-9 ]/g, '')
+    .trim()
+    .toUpperCase();
+
+  // VietinBank on SePay requires "SEVQR" in transfer description to trigger instant webhook
+  const transferContent = isVietinBank
+    ? rawPrefix.startsWith('SEVQR')
+      ? `${rawPrefix}${orderShortId}`
+      : `SEVQR ${rawPrefix}${orderShortId}`
+    : `${rawPrefix.replace(/\s+/g, '')}${orderShortId}`;
 
   const bankMeta = SEPAY_BANK_CODES[bankName] ?? {
-    sepayCode: bankName || 'Vietcombank',
-    bin: '970436',
+    sepayCode: bankName || 'VietinBank',
+    bin: '970415',
   };
 
-  // Official SePay QR Code URL (`qr.sepay.vn/img`)
+  // Official SePay VietQR URL (`vietqr.app/img`) configured with user's exact parameters
   const sepayQrImageUrl = accountNo
-    ? `https://qr.sepay.vn/img?acc=${encodeURIComponent(
-        accountNo
-      )}&bank=${encodeURIComponent(
+    ? `https://vietqr.app/img?bank=${encodeURIComponent(
         bankMeta.sepayCode
-      )}&amount=${orderAmount}&des=${encodeURIComponent(
+      )}&acc=${encodeURIComponent(
+        accountNo
+      )}&template=&amount=${orderAmount}&des=${encodeURIComponent(
         transferContent
-      )}&template=compact`
+      )}&showinfo=true&holder=${encodeURIComponent(
+        accountName
+      )}&store=${encodeURIComponent('Tiệm Cuộn Len')}`
     : '';
 
   const vietqrDeepLink = accountNo
@@ -876,7 +886,7 @@ const styles = StyleSheet.create({
     color: '#2C1E14',
     marginBottom: 12,
   },
-  qrImage: { width: 230, height: 230, borderRadius: 12 },
+  qrImage: { width: 270, height: 330, borderRadius: 12 },
   qrHint: {
     fontSize: 12,
     color: '#5C4332',

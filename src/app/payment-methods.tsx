@@ -177,12 +177,12 @@ export default function PaymentMethodsScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: Math.floor(100000 + Math.random() * 900000),
-          gateway: bankMethod?.bank_name || 'Vietcombank',
-          accountNumber: bankMethod?.account_number || '3387966507',
+          gateway: bankMethod?.bank_name || 'VietinBank',
+          accountNumber: bankMethod?.account_number || '107888618456',
           transferType: 'in',
           transferAmount: 69000,
           code: 'CUONLEN098929',
-          content: 'CUONLEN098929 Test ket noi SePay Webhook',
+          content: 'SEVQR CUONLEN098929 Test ket noi SePay Webhook',
           description: 'Test SePay Webhook Connection',
           transactionDate: new Date().toISOString(),
         }),
@@ -231,8 +231,8 @@ export default function PaymentMethodsScreen() {
       updates.bank_name = editBankName.trim();
       updates.account_name = editAccountName.trim();
       updates.account_number = editAccountNumber.trim();
-      updates.transfer_prefix = (editTransferPrefix.trim() || 'CUONLEN')
-        .replace(/[^A-Za-z0-9]/g, '')
+      updates.transfer_prefix = (editTransferPrefix.trim() || 'SEVQR CUONLEN')
+        .replace(/[^A-Za-z0-9 ]/g, '')
         .toUpperCase();
     }
     if (method.type === 'momo') {

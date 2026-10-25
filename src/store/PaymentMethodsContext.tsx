@@ -9,38 +9,49 @@ import {
 import { PaymentMethod, PaymentMethodInput, type PaymentMethodType } from '@/types/payment-method';
 import { supabase } from '@/services/supabase';
 
-const PAYMENT_CACHE_KEY = 'tcl_payment_methods_v1';
+const PAYMENT_CACHE_KEY = 'tcl_payment_methods_v3';
+
+const SEPAY_VIETINBANK_CONFIG = {
+  bank_name: 'VietinBank',
+  account_name: 'VO VU MINH HOANG',
+  account_number: '107888618456',
+  transfer_prefix: 'SEVQR CUONLEN',
+  qr_image:
+    'https://vietqr.app/img?bank=VietinBank&acc=107888618456&template=&showinfo=true&holder=VO%20VU%20MINH%20HOANG&store=Ti%E1%BB%87m%20Cu%E1%BB%99n%20Len',
+};
+
+function normalizeBankMethod(m: PaymentMethod): PaymentMethod {
+  if (
+    m.type === 'bank_transfer' &&
+    (!m.account_number ||
+      m.account_number === '3387966507' ||
+      m.account_number === '1029384756')
+  ) {
+    return {
+      ...m,
+      ...SEPAY_VIETINBANK_CONFIG,
+    };
+  }
+  return m;
+}
 
 const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
-  {
-    id: 'pm_cod_default',
-    type: 'cod',
-    title: 'Thanh toán khi nhận hàng (COD)',
-    enabled: true,
-    is_default: true,
-    created_at: '2026-01-01T00:00:00Z',
-  },
   {
     id: '8aac533d-cbf5-4dc4-8b02-6823834f6083',
     type: 'bank_transfer',
     title: 'Chuyển khoản ngân hàng',
     enabled: true,
     is_default: true,
-    bank_name: 'Vietcombank',
-    account_name: 'VO VU MINH HOANG',
-    account_number: '3387966507',
-    transfer_prefix: 'CUONLEN',
+    ...SEPAY_VIETINBANK_CONFIG,
     created_at: '2026-01-02T00:00:00Z',
   },
   {
-    id: 'pm_momo_default',
-    type: 'momo',
-    title: 'Ví điện tử MoMo',
+    id: '1123a83c-e6b5-4ae4-9a13-88033d8d5ad0',
+    type: 'cod',
+    title: 'Thanh toán khi nhận hàng',
     enabled: true,
     is_default: false,
-    account_name: 'Tiệm Cuộn Len',
-    phone_number: '0909123456',
-    created_at: '2026-01-03T00:00:00Z',
+    created_at: '2026-01-01T00:00:00Z',
   },
 ];
 
@@ -51,7 +62,7 @@ function loadCachedMethods(): PaymentMethod[] {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed as PaymentMethod[];
+          return (parsed as PaymentMethod[]).map(normalizeBankMethod);
         }
       }
     }
@@ -102,9 +113,25 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       if (fetchError) {
         if (__DEV__) console.error('[PAYMENT] Fetch error:', fetchError.message);
       } else if (data && data.length > 0) {
-        const rows = data as PaymentMethod[];
+        const rawRows = data as PaymentMethod[];
+        const rows = rawRows.map(normalizeBankMethod);
         setMethods(rows);
         saveCachedMethods(rows);
+
+        // Auto-sync legacy bank row on Supabase when authenticated Admin session is active
+        const legacyRow = rawRows.find(
+          (r) => r.type === 'bank_transfer' && r.account_number === '3387966507'
+        );
+        if (legacyRow) {
+          supabase
+            .from('payment_methods')
+            .update({
+              ...SEPAY_VIETINBANK_CONFIG,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', legacyRow.id)
+            .then(() => {}, () => {});
+        }
       }
     } catch {
       // keep cached/default methods
