@@ -791,14 +791,7 @@ export default function PaymentScreen() {
           <View style={styles.modalSheet}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitle}>Chọn ứng dụng ngân hàng</Text>
-                <Text style={styles.modalSub}>
-                  {detectingBanks
-                    ? 'Đang dò ứng dụng ngân hàng trên điện thoại...'
-                    : 'Chọn ngân hàng bạn muốn dùng để chuyển khoản'}
-                </Text>
-              </View>
+              <Text style={styles.modalTitle}>Chọn ngân hàng</Text>
               <TouchableOpacity
                 style={styles.modalCloseBtn}
                 onPress={() => setShowBankModal(false)}>
@@ -809,137 +802,54 @@ export default function PaymentScreen() {
             {detectingBanks ? (
               <View style={styles.detectingBox}>
                 <ActivityIndicator size="large" color="#3D2B1F" />
-                <Text style={styles.detectingText}>
-                  Đang kiểm tra các ứng dụng ngân hàng hỗ trợ...
-                </Text>
               </View>
             ) : (
-              <>
-                {/* Prompt shown ONLY when user selects a bank NOT in MB Bank, VietinBank iPay, BIDV, ACB, OCB */}
-                {selectedNonAutofillBank && (
-                  <View style={styles.saveQrPromptCard}>
-                    <Text style={styles.saveQrPromptTitle}>
-                      💡 Ngân hàng {selectedNonAutofillBank.shortName} chưa hỗ trợ tự điền trực tiếp qua link
-                    </Text>
-                    <Text style={styles.saveQrPromptDesc}>
-                      Vui lòng bấm <Text style={{ fontWeight: '800' }}>Lưu ảnh QR để chuyển khoản</Text>, sau đó mở ứng dụng{' '}
-                      <Text style={{ fontWeight: '800' }}>
-                        {selectedNonAutofillBank.appName}
-                      </Text>{' '}
-                      và chọn ảnh QR vừa lưu trong thư viện ảnh:
-                    </Text>
+              <ScrollView
+                style={styles.bankListScroll}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.bankListContent}>
+                {detectedBanks.map((app) => {
+                  const isDirectAutofill = DIRECT_AUTOFILL_IDS.has(app.appId);
+                  const isSelectedOther =
+                    selectedNonAutofillBank?.appId === app.appId;
 
-                    <View style={styles.saveQrActionRow}>
-                      <TouchableOpacity
-                        style={[
-                          styles.saveQrBtn,
-                          qrSavedSuccess && styles.saveQrBtnDone,
-                        ]}
-                        onPress={handleDownloadQrImage}
-                        disabled={downloadingQr}
-                        activeOpacity={0.85}>
-                        {downloadingQr ? (
-                          <ActivityIndicator size="small" color="#FAF5EE" />
-                        ) : qrSavedSuccess ? (
-                          <>
-                            <CheckCheck size={16} color="#FAF5EE" />
-                            <Text style={styles.saveQrBtnText}>
-                              Đã lưu ảnh QR!
-                            </Text>
-                          </>
-                        ) : (
-                          <>
-                            <Download size={16} color="#FAF5EE" />
-                            <Text style={styles.saveQrBtnText}>
-                              Lưu ảnh QR để chuyển khoản
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
+                  if (isDirectAutofill) {
+                    const deepLink = buildOfficialVietQRDeepLink(
+                      app.appId,
+                      accountNo,
+                      bankMeta.vietqrAppId,
+                      orderAmount,
+                      transferContent,
+                      accountName,
+                      returnUrl
+                    );
 
-                      <DirectBankLink
-                        deepLink={buildOfficialVietQRDeepLink(
-                          selectedNonAutofillBank.appId,
-                          accountNo,
-                          bankMeta.vietqrAppId,
-                          orderAmount,
-                          transferContent,
-                          accountName,
-                          returnUrl
-                        )}
-                        onPressBeforeNavigate={() => {
-                          rememberBankChoice(selectedNonAutofillBank.appId);
-                        }}
-                        style={styles.openOtherBankBtn}>
-                        <Text style={styles.openOtherBankBtnText}>
-                          Mở {selectedNonAutofillBank.shortName}
-                        </Text>
-                        <ArrowUpRight size={14} color="#3D2B1F" />
-                      </DirectBankLink>
-                    </View>
-                  </View>
-                )}
-
-                <ScrollView
-                  style={styles.bankListScroll}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.bankListContent}>
-                  {detectedBanks.map((app) => {
-                    const isDirectAutofill = DIRECT_AUTOFILL_IDS.has(app.appId);
-                    const isSelectedOther =
-                      selectedNonAutofillBank?.appId === app.appId;
-
-                    // 5 Auto-Fill banks (MB Bank, VietinBank iPay, BIDV, ACB, OCB) -> Open directly!
-                    if (isDirectAutofill) {
-                      const deepLink = buildOfficialVietQRDeepLink(
-                        app.appId,
-                        accountNo,
-                        bankMeta.vietqrAppId,
-                        orderAmount,
-                        transferContent,
-                        accountName,
-                        returnUrl
-                      );
-
-                      return (
-                        <DirectBankLink
-                          key={app.appId}
-                          deepLink={deepLink}
-                          onPressBeforeNavigate={() => {
-                            rememberBankChoice(app.appId);
-                            setSelectedNonAutofillBank(null);
-                            Clipboard.setStringAsync(transferContent).catch(
-                              () => {}
-                            );
-                          }}
-                          style={styles.bankOptionRow}>
-                          <Image
-                            source={{ uri: app.logo }}
-                            style={styles.bankOptionLogo}
-                            resizeMode="cover"
-                          />
-                          <View style={styles.bankOptionInfo}>
-                            <Text style={styles.bankOptionName}>
-                              {app.appName}
-                            </Text>
-                            <Text style={styles.bankOptionBadgeDirect}>
-                              ⚡ Mở thẳng màn hình chuyển khoản (Tự điền 100%)
-                            </Text>
-                          </View>
-                          <View style={styles.bankOptionActionDirect}>
-                            <Text style={styles.bankOptionActionDirectText}>
-                              Mở ngay
-                            </Text>
-                            <ArrowUpRight size={13} color="#FAF5EE" />
-                          </View>
-                        </DirectBankLink>
-                      );
-                    }
-
-                    // Other banks -> Show "Lưu ảnh QR để chuyển khoản" prompt when tapped
                     return (
-                      <TouchableOpacity
+                      <DirectBankLink
                         key={app.appId}
+                        deepLink={deepLink}
+                        onPressBeforeNavigate={() => {
+                          rememberBankChoice(app.appId);
+                          setSelectedNonAutofillBank(null);
+                          Clipboard.setStringAsync(transferContent).catch(
+                            () => {}
+                          );
+                        }}
+                        style={styles.bankOptionRow}>
+                        <Image
+                          source={{ uri: app.logo }}
+                          style={styles.bankOptionLogo}
+                          resizeMode="cover"
+                        />
+                        <Text style={styles.bankOptionName}>{app.appName}</Text>
+                        <ArrowUpRight size={16} color="#5C4332" />
+                      </DirectBankLink>
+                    );
+                  }
+
+                  return (
+                    <View key={app.appId} style={styles.otherBankWrapper}>
+                      <TouchableOpacity
                         style={[
                           styles.bankOptionRow,
                           isSelectedOther && styles.bankOptionRowSelected,
@@ -947,7 +857,9 @@ export default function PaymentScreen() {
                         onPress={() => {
                           rememberBankChoice(app.appId);
                           setQrSavedSuccess(false);
-                          setSelectedNonAutofillBank(app);
+                          setSelectedNonAutofillBank(
+                            isSelectedOther ? null : app
+                          );
                         }}
                         activeOpacity={0.8}>
                         <Image
@@ -955,22 +867,64 @@ export default function PaymentScreen() {
                           style={styles.bankOptionLogo}
                           resizeMode="cover"
                         />
-                        <View style={styles.bankOptionInfo}>
-                          <Text style={styles.bankOptionName}>{app.appName}</Text>
-                          <Text style={styles.bankOptionBadgeOther}>
-                            Quét ảnh QR từ thư viện
-                          </Text>
-                        </View>
-                        <View style={styles.bankOptionActionOther}>
-                          <Text style={styles.bankOptionActionOtherText}>
-                            Chọn
-                          </Text>
-                        </View>
+                        <Text style={styles.bankOptionName}>{app.appName}</Text>
+                        <ArrowUpRight size={16} color="#5C4332" />
                       </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </>
+
+                      {isSelectedOther && (
+                        <View style={styles.inlineSaveQrRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.saveQrBtn,
+                              qrSavedSuccess && styles.saveQrBtnDone,
+                            ]}
+                            onPress={handleDownloadQrImage}
+                            disabled={downloadingQr}
+                            activeOpacity={0.85}>
+                            {downloadingQr ? (
+                              <ActivityIndicator size="small" color="#FAF5EE" />
+                            ) : qrSavedSuccess ? (
+                              <>
+                                <CheckCheck size={15} color="#FAF5EE" />
+                                <Text style={styles.saveQrBtnText}>
+                                  Đã lưu ảnh QR
+                                </Text>
+                              </>
+                            ) : (
+                              <>
+                                <Download size={15} color="#FAF5EE" />
+                                <Text style={styles.saveQrBtnText}>
+                                  Lưu ảnh QR để chuyển khoản
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+
+                          <DirectBankLink
+                            deepLink={buildOfficialVietQRDeepLink(
+                              app.appId,
+                              accountNo,
+                              bankMeta.vietqrAppId,
+                              orderAmount,
+                              transferContent,
+                              accountName,
+                              returnUrl
+                            )}
+                            onPressBeforeNavigate={() => {
+                              rememberBankChoice(app.appId);
+                            }}
+                            style={styles.openOtherBankBtn}>
+                            <Text style={styles.openOtherBankBtnText}>
+                              Mở {app.shortName}
+                            </Text>
+                            <ArrowUpRight size={14} color="#3D2B1F" />
+                          </DirectBankLink>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
             )}
           </View>
         </View>
@@ -1203,7 +1157,7 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
     marginBottom: 14,
@@ -1212,11 +1166,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
     color: '#2C1E14',
-  },
-  modalSub: {
-    fontSize: 12,
-    color: '#5C4332',
-    marginTop: 2,
   },
   modalCloseBtn: {
     width: 32,
@@ -1228,41 +1177,19 @@ const styles = StyleSheet.create({
   },
 
   detectingBox: {
-    paddingVertical: 42,
+    paddingVertical: 36,
     alignItems: 'center',
-    gap: 12,
-  },
-  detectingText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#5C4332',
   },
 
-  /* Non-Autofill Save QR Prompt Card */
-  saveQrPromptCard: {
-    backgroundColor: '#FFF8EC',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#E5C687',
-    marginBottom: 12,
+  otherBankWrapper: {
     gap: 8,
   },
-  saveQrPromptTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#2C1E14',
-  },
-  saveQrPromptDesc: {
-    fontSize: 12,
-    color: '#4A3525',
-    lineHeight: 17,
-  },
-  saveQrActionRow: {
+  inlineSaveQrRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 4,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
   },
   saveQrBtn: {
     flex: 1.4,
@@ -1279,7 +1206,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2E7D32',
   },
   saveQrBtnText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#FAF5EE',
   },
@@ -1297,7 +1224,7 @@ const styles = StyleSheet.create({
     borderColor: '#C9B29B',
   },
   openOtherBankBtnText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#2C1E14',
   },
@@ -1315,8 +1242,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#E5D5C3',
@@ -1327,60 +1254,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5EFE6',
   },
   bankOptionLogo: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#EFE6DC',
   },
-  bankOptionInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
   bankOptionName: {
-    fontSize: 14,
+    flex: 1,
+    fontSize: 14.5,
     fontWeight: '800',
     color: '#2C1E14',
-  },
-  bankOptionBadgeDirect: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#2E7D32',
-    marginTop: 2,
-  },
-  bankOptionBadgeOther: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    color: '#7A5C44',
-    marginTop: 2,
-  },
-  bankOptionActionDirect: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#3D2B1F',
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 10,
-  },
-  bankOptionActionDirectText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#FAF5EE',
-  },
-  bankOptionActionOther: {
-    backgroundColor: '#F3ECE2',
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D8C3AD',
-  },
-  bankOptionActionOtherText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#3D2B1F',
   },
 
   /* Not Found & Confirmed States */
