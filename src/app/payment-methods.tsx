@@ -39,7 +39,7 @@ import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-meth
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 
-const SEPAY_WEBHOOK_URL = 'https://tiem-cuon-len.vercel.app/api/sepay-webhook';
+const SEPAY_WEBHOOK_URL = 'https://www.tiemcuonlen.shop/api/sepay-webhook';
 const SEPAY_LOG_PARTITION = '__TCL_SEPAY_LOG_V1__';
 
 const TYPE_LABELS: Record<PaymentMethodType, string> = {
@@ -202,7 +202,7 @@ export default function PaymentMethodsScreen() {
       }
     } catch {
       setWebhookTestResult(
-        'ℹ️ Endpoint /api/sepay-webhook sẽ hoạt động trực tiếp trên tên miền Vercel (tiem-cuon-len.vercel.app).'
+        'ℹ️ Endpoint /api/sepay-webhook hoạt động trực tiếp trên tên miền tiemcuonlen.shop.'
       );
     } finally {
       setTestingWebhook(false);

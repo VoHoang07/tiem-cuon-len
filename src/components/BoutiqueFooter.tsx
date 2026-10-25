@@ -322,7 +322,7 @@ export function BoutiqueFooter({
         {/* Bottom Divider & Copyright Bar */}
         <View style={[styles.bottomBar, isMobile && styles.bottomBarMobile]}>
           <Text style={styles.copyrightText}>
-            © 2026 Tiệm Cuộn Len Handmade • Đan móc thủ công bằng cả trái tim
+            © 2026 Tiệm Cuộn Len Handmade (tiemcuonlen.shop) • Đan móc thủ công bằng cả trái tim
           </Text>
 
           <View style={styles.bottomActionsRow}>

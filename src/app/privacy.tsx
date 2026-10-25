@@ -52,7 +52,8 @@ export default function PrivacyScreen() {
           <Text style={styles.subheading}>Liên hệ</Text>
           <Text style={styles.paragraph}>
             Nếu bạn có câu hỏi về chính sách quyền riêng tư, vui lòng liên hệ:{'\n'}
-            Email: privacy@tiemcuonlen.com
+            Website: https://tiemcuonlen.shop{'\n'}
+            Email: vohoang1327@gmail.com
           </Text>
         </View>
 

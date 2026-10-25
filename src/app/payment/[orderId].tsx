@@ -329,7 +329,7 @@ export default function PaymentScreen() {
   const returnUrl =
     typeof window !== 'undefined' && window.location?.href
       ? window.location.href
-      : `https://tiem-cuon-len.vercel.app/payment/${order?.id || ''}`;
+      : `https://www.tiemcuonlen.shop/payment/${order?.id || ''}`;
 
   const sepayQrImageUrl = accountNo
     ? `https://vietqr.app/img?bank=${encodeURIComponent(
@@ -511,7 +511,7 @@ export default function PaymentScreen() {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
       } else {
         await Linking.openURL(
-          `https://tiem-cuon-len.vercel.app${proxyDownloadUrl}`
+          `https://www.tiemcuonlen.shop${proxyDownloadUrl}`
         );
       }
       setQrSavedSuccess(true);

@@ -47,6 +47,8 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       success: true,
       service: 'Tiệm Cuộn Len — Cổng Webhook Thanh Toán Tự Động SePay',
+      domain: 'https://tiemcuonlen.shop',
+      webhookUrl: 'https://www.tiemcuonlen.shop/api/sepay-webhook',
       endpoint: '/api/sepay-webhook',
       status: 'active',
     });
