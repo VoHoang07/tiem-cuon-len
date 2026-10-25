@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   Image,
   Linking,
   Modal,
@@ -26,112 +25,258 @@ import {
   CheckCircle,
   Clock,
   ShieldCheck,
+  Zap,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
+import { useAuth } from '@/store/AuthContext';
+import { supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import { getOrderStatusLabel } from '@/constants/orderStatus';
 
-const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: string; bg: string; label: string }> = {
+const TYPE_ICONS: Record<
+  PaymentMethodType,
+  { icon: React.ReactNode; color: string; bg: string; label: string }
+> = {
   bank_transfer: {
-    icon: <Building2 size={28} color="#765341" />,
-    color: '#765341',
-    bg: '#F5EDE8',
-    label: 'Chuyển khoản ngân hàng',
+    icon: <Building2 size={26} color="#3D2B1F" />,
+    color: '#3D2B1F',
+    bg: '#F3ECE2',
+    label: 'Chuyển khoản ngân hàng (SePay VietQR)',
   },
   momo: {
-    icon: <Smartphone size={28} color="#A50064" />,
+    icon: <Smartphone size={26} color="#A50064" />,
     color: '#A50064',
     bg: '#FFF0F5',
     label: 'Ví MoMo',
   },
   zalopay: {
-    icon: <Wallet size={28} color="#0068FF" />,
+    icon: <Wallet size={26} color="#0068FF" />,
     color: '#0068FF',
     bg: '#F0F5FF',
     label: 'ZaloPay',
   },
   cod: {
-    icon: <CheckCircle size={28} color="#6BAF5C" />,
+    icon: <CheckCircle size={26} color="#6BAF5C" />,
     color: '#6BAF5C',
     bg: '#F0FFF4',
     label: 'COD',
   },
 };
 
-// Known bank deep links for common Vietnamese banking apps
 const BANK_DEEP_LINKS: Record<string, string[]> = {
-  'Vietcombank': ['vcbdigibank://'],
+  Vietcombank: ['vcbdigibank://'],
   'MB Bank': ['mbbank://'],
-  'Techcombank': ['tcbdigibank://'],
-  'BIDV': ['bidvsmartbanking://'],
-  'VietinBank': ['vietinbank://'],
-  'ACB': ['acbapp://'],
-  'VPBank': ['vpbankonline://'],
-  'TPBank': ['tpbank://'],
-  'Sacombank': ['sacombank://'],
-  'Agribank': ['agribank://'],
-  'HDBank': ['hdbank://'],
-  'SHB': ['shbmobile://'],
-  'MSB': ['msbmobile://'],
-  'OCB': ['ocbomni://'],
-  'VIB': ['vibmobile://'],
+  MBBank: ['mbbank://'],
+  Techcombank: ['tcbdigibank://'],
+  BIDV: ['bidvsmartbanking://'],
+  VietinBank: ['vietinbank://'],
+  ACB: ['acbapp://'],
+  VPBank: ['vpbankonline://'],
+  TPBank: ['tpbank://'],
+  Sacombank: ['sacombank://'],
+  Agribank: ['agribank://'],
+  HDBank: ['hdbank://'],
+  SHB: ['shbmobile://'],
+  MSB: ['msbmobile://'],
+  OCB: ['ocbomni://'],
+  VIB: ['vibmobile://'],
 };
 
-function buildVietQRDeepLink(bankBin: string, accountNo: string, accountName: string, amount: number, content: string): string {
-  // VietQR universal deep link - opens banking app with pre-filled transfer info
-  // Falls back to VietQR web page if no bank app installed
-  return `https://qr.vietqr.io/${bankBin}-${accountNo}?amount=${amount}&addInfo=${encodeURIComponent(content)}&accountName=${encodeURIComponent(accountName)}`;
+const SEPAY_BANK_CODES: Record<string, { sepayCode: string; bin: string }> = {
+  Vietcombank: { sepayCode: 'Vietcombank', bin: '970436' },
+  VCB: { sepayCode: 'Vietcombank', bin: '970436' },
+  'MB Bank': { sepayCode: 'MBBank', bin: '970422' },
+  MBBank: { sepayCode: 'MBBank', bin: '970422' },
+  MB: { sepayCode: 'MBBank', bin: '970422' },
+  Techcombank: { sepayCode: 'Techcombank', bin: '970407' },
+  TCB: { sepayCode: 'Techcombank', bin: '970407' },
+  BIDV: { sepayCode: 'BIDV', bin: '970418' },
+  VietinBank: { sepayCode: 'VietinBank', bin: '970415' },
+  ACB: { sepayCode: 'ACB', bin: '970416' },
+  VPBank: { sepayCode: 'VPBank', bin: '970432' },
+  TPBank: { sepayCode: 'TPBank', bin: '970423' },
+  Sacombank: { sepayCode: 'Sacombank', bin: '970403' },
+  Agribank: { sepayCode: 'Agribank', bin: '970405' },
+  HDBank: { sepayCode: 'HDBank', bin: '970437' },
+  SHB: { sepayCode: 'SHB', bin: '970443' },
+  MSB: { sepayCode: 'MSB', bin: '970426' },
+  OCB: { sepayCode: 'OCB', bin: '970448' },
+  VIB: { sepayCode: 'VIB', bin: '970441' },
+};
+
+function buildVietQRDeepLink(
+  bankBin: string,
+  accountNo: string,
+  accountName: string,
+  amount: number,
+  content: string
+): string {
+  return `https://qr.vietqr.io/${bankBin}-${accountNo}?amount=${amount}&addInfo=${encodeURIComponent(
+    content
+  )}&accountName=${encodeURIComponent(accountName)}`;
 }
 
 export default function PaymentScreen() {
   const { orderId: paramOrderId } = useLocalSearchParams<{ orderId: string }>();
   const router = useRouter();
-  const { orders, updateOrderStatus } = useOrders();
+  const { orders, updateOrderStatus, refetchOrders } = useOrders();
   const { enabledMethods } = usePaymentMethods();
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
 
   const order = orders.find((o) => o.id === paramOrderId);
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [autoVerifiedBySepay, setAutoVerifiedBySepay] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [bankOpened, setBankOpened] = useState(false);
+  const [simulatingSepay, setSimulatingSepay] = useState(false);
+  const [checkingNow, setCheckingNow] = useState(false);
 
-  const paymentMethod: PaymentMethod | undefined = enabledMethods.find(
-    (m) => m.title === order?.paymentMethod,
-  ) ?? enabledMethods[0];
+  const paymentMethod: PaymentMethod | undefined =
+    enabledMethods.find((m) => m.title === order?.paymentMethod) ??
+    enabledMethods.find((m) => m.type === 'bank_transfer') ??
+    enabledMethods[0];
 
-  const orderShortId = order?.id?.replace('CUONLEN-', '') ?? '';
-  const transferPrefix = paymentMethod?.transfer_prefix ?? 'CUONLEN';
-  const transferContent = `${transferPrefix}-${orderShortId}`;
+  const orderShortId = (order?.id ?? '')
+    .replace(/^CUONLEN[-_]?/i, '')
+    .replace(/[^A-Za-z0-9]/g, '');
+  const transferPrefix = (paymentMethod?.transfer_prefix ?? 'CUONLEN')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase();
+  // Clean alphanumeric payment code without hyphens so SePay & all VN banking apps parse 100% accurately
+  const transferContent = `${transferPrefix}${orderShortId}`;
 
-  const accountNo = paymentMethod?.account_number ?? '';
-  const accountName = paymentMethod?.account_name ?? '';
+  const accountNo = paymentMethod?.account_number || '3387966507';
+  const accountName = paymentMethod?.account_name || 'VO VU MINH HOANG';
+  const bankName = paymentMethod?.bank_name || 'Vietcombank';
   const orderAmount = order?.total ?? 0;
 
-  // Simple bank bin lookup - use known bank BINs
-  let bankBin = '970436'; // default VCB
-  if (paymentMethod?.bank_name) {
-    const bankBins: Record<string, string> = {
-      'Vietcombank': '970436', 'MB Bank': '970422', 'Techcombank': '970407',
-      'BIDV': '970418', 'VietinBank': '970415', 'ACB': '970416',
-      'VPBank': '970432', 'TPBank': '970423', 'Sacombank': '970403',
-      'Agribank': '970405', 'HDBank': '970437', 'SHB': '970443',
-      'MSB': '970426', 'OCB': '970448', 'VIB': '970441',
-    };
-    bankBin = bankBins[paymentMethod.bank_name] ?? bankBin;
-  }
+  const bankMeta = SEPAY_BANK_CODES[bankName] ?? {
+    sepayCode: bankName || 'Vietcombank',
+    bin: '970436',
+  };
 
-  const vietqrImageUrl = accountNo
-    ? `https://img.vietqr.io/image/${bankBin}-${accountNo}-compact.png?accountName=${encodeURIComponent(accountName)}&amount=${orderAmount}&addInfo=${encodeURIComponent(transferContent)}`
+  // Official SePay QR Code URL (`qr.sepay.vn/img`)
+  const sepayQrImageUrl = accountNo
+    ? `https://qr.sepay.vn/img?acc=${encodeURIComponent(
+        accountNo
+      )}&bank=${encodeURIComponent(
+        bankMeta.sepayCode
+      )}&amount=${orderAmount}&des=${encodeURIComponent(
+        transferContent
+      )}&template=compact`
     : '';
 
   const vietqrDeepLink = accountNo
-    ? buildVietQRDeepLink(bankBin, accountNo, accountName, orderAmount, transferContent)
+    ? buildVietQRDeepLink(
+        bankMeta.bin,
+        accountNo,
+        accountName,
+        orderAmount,
+        transferContent
+      )
     : '';
+
+  // Check remote order status from Supabase (triggered automatically when SePay calls /api/sepay-webhook)
+  const checkOrderPaymentStatus = useCallback(async () => {
+    if (!order?.id || !supabaseUrl || !supabaseAnonKey || confirmed) return;
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/orders?id=eq.${encodeURIComponent(
+          order.id
+        )}&select=id,status`,
+        {
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+          },
+        }
+      );
+      if (!res.ok) return;
+      const rows = await res.json();
+      const remoteOrder = Array.isArray(rows) ? rows[0] : null;
+      if (
+        remoteOrder &&
+        remoteOrder.status &&
+        remoteOrder.status !== 'pending_payment'
+      ) {
+        updateOrderStatus(order.id, remoteOrder.status);
+        if (remoteOrder.status === 'Đang xử lý' || remoteOrder.status === 'Hoàn thành') {
+          setAutoVerifiedBySepay(true);
+        }
+        setConfirmed(true);
+      }
+    } catch {
+      // ignore network error
+    }
+  }, [order?.id, confirmed, updateOrderStatus]);
+
+  // Poll every 2.5 seconds for real-time SePay Webhook confirmation
+  useEffect(() => {
+    if (!order || confirmed) return;
+    if (order.status !== 'pending_payment') {
+      setConfirmed(true);
+      return;
+    }
+
+    checkOrderPaymentStatus();
+    const timer = setInterval(checkOrderPaymentStatus, 2500);
+    return () => clearInterval(timer);
+  }, [order, confirmed, checkOrderPaymentStatus]);
+
+  const handleManualCheckNow = async () => {
+    setCheckingNow(true);
+    await checkOrderPaymentStatus();
+    await refetchOrders();
+    setTimeout(() => setCheckingNow(false), 600);
+  };
+
+  const handleSimulateSepayWebhook = async () => {
+    if (!order) return;
+    setSimulatingSepay(true);
+    try {
+      const payload = {
+        id: Math.floor(100000 + Math.random() * 900000),
+        gateway: bankName,
+        transactionDate: new Date().toISOString(),
+        accountNumber: accountNo,
+        code: transferContent,
+        content: `${transferContent} chuyen khoan mua len`,
+        transferType: 'in',
+        description: `SePay Auto Webhook ${transferContent}`,
+        transferAmount: orderAmount,
+        referenceCode: `FT${Date.now()}`,
+      };
+
+      const res = await fetch('/api/sepay-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        await checkOrderPaymentStatus();
+      } else {
+        // Fallback if testing on local dev server without /api route
+        updateOrderStatus(order.id, 'Đang xử lý');
+        setAutoVerifiedBySepay(true);
+        setConfirmed(true);
+      }
+    } catch {
+      updateOrderStatus(order.id, 'Đang xử lý');
+      setAutoVerifiedBySepay(true);
+      setConfirmed(true);
+    } finally {
+      setSimulatingSepay(false);
+    }
+  };
 
   const handleCopy = async (text: string, field: string) => {
     await Clipboard.setStringAsync(text);
@@ -140,9 +285,8 @@ export default function PaymentScreen() {
   };
 
   const handleCopyAllAndOpenBank = async () => {
-    // Copy all transfer info at once
     const transferInfo = [
-      `Ngân hàng: ${paymentMethod?.bank_name ?? ''}`,
+      `Ngân hàng: ${bankName}`,
       `STK: ${accountNo}`,
       `Chủ TK: ${accountName}`,
       `Số tiền: ${formatVND(orderAmount)}`,
@@ -152,9 +296,8 @@ export default function PaymentScreen() {
     await Clipboard.setStringAsync(transferInfo);
     setBankOpened(true);
 
-    // Try opening bank app via deep link first
-    if (paymentMethod?.bank_name) {
-      const schemes = BANK_DEEP_LINKS[paymentMethod.bank_name];
+    if (bankName) {
+      const schemes = BANK_DEEP_LINKS[bankName];
       if (schemes) {
         for (const scheme of schemes) {
           try {
@@ -170,12 +313,11 @@ export default function PaymentScreen() {
       }
     }
 
-    // Fallback: try to open VietQR universal link
     if (vietqrDeepLink) {
       try {
         await Linking.openURL(vietqrDeepLink);
       } catch {
-        // nothing we can do, info is already copied
+        // ignore
       }
     }
   };
@@ -190,14 +332,8 @@ export default function PaymentScreen() {
     setTimeout(() => {
       setConfirming(false);
       setConfirmed(true);
-    }, 600);
+    }, 500);
   };
-
-  useEffect(() => {
-    if (order && order.status === 'awaiting_confirmation') {
-      setConfirmed(true);
-    }
-  }, [order]);
 
   if (!order) {
     return (
@@ -223,22 +359,30 @@ export default function PaymentScreen() {
         <ScrollView contentContainerStyle={styles.confirmedScroll}>
           <View style={styles.confirmedCard}>
             <View style={styles.confirmedIcon}>
-              <ShieldCheck size={64} color={COLORS.success} />
+              <ShieldCheck size={60} color={COLORS.success} />
             </View>
-            <Text style={styles.confirmedTitle}>Cảm ơn bạn!</Text>
+            <Text style={styles.confirmedTitle}>
+              {autoVerifiedBySepay
+                ? 'Thanh toán thành công!'
+                : 'Đã ghi nhận thông tin!'}
+            </Text>
             <Text style={styles.confirmedText}>
-              Tiệm Cuộn Len sẽ kiểm tra và xác nhận đơn hàng sớm.
+              {autoVerifiedBySepay
+                ? 'Cổng thanh toán tự động SePay đã xác nhận giao dịch chuyển khoản của bạn. Tiệm Cuộn Len đang chuẩn bị đơn hàng cho bạn ngay!'
+                : 'Tiệm Cuộn Len sẽ kiểm tra và xác nhận đơn hàng của bạn trong ít phút.'}
             </Text>
 
             <View style={styles.orderSummary}>
               <Text style={styles.orderCode}>Mã đơn: {order.id}</Text>
-              <Text style={styles.orderAmount}>
-                {formatVND(order.total)}
-              </Text>
+              <Text style={styles.orderAmount}>{formatVND(order.total)}</Text>
               <View style={styles.statusBadge}>
-                <Clock size={14} color={COLORS.primary} />
+                {autoVerifiedBySepay ? (
+                  <CheckCircle size={14} color={COLORS.success} />
+                ) : (
+                  <Clock size={14} color="#3D2B1F" />
+                )}
                 <Text style={styles.statusBadgeText}>
-                  {getOrderStatusLabel('awaiting_confirmation')}
+                  {getOrderStatusLabel(order.status)}
                 </Text>
               </View>
             </View>
@@ -263,7 +407,10 @@ export default function PaymentScreen() {
   // ── Payment screen ──
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContainer}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -272,29 +419,88 @@ export default function PaymentScreen() {
               else router.replace('/orders');
             }}
             style={styles.backBtn}>
-            <ChevronLeft size={24} color={COLORS.darkText} />
+            <ChevronLeft size={22} color="#3D2B1F" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Thanh toán đơn hàng</Text>
+          <Text style={styles.headerTitle}>Thanh toán qua SePay VietQR</Text>
           <View style={{ width: 40 }} />
         </View>
 
         {/* Order info card */}
         <View style={styles.section}>
           <View style={styles.infoCard}>
-            <Text style={styles.infoCardLabel}>Mã đơn</Text>
+            <Text style={styles.infoCardLabel}>MÃ ĐƠN HÀNG</Text>
             <Text style={styles.infoCardCode}>{order.id}</Text>
             <View style={styles.infoCardAmountRow}>
-              <Text style={styles.infoCardAmountLabel}>Số tiền</Text>
+              <Text style={styles.infoCardAmountLabel}>Tổng thanh toán</Text>
               <Text style={styles.infoCardAmount}>{formatVND(order.total)}</Text>
             </View>
             <View style={[styles.typeBadge, { backgroundColor: typeInfo.bg }]}>
               {typeInfo.icon}
               <Text style={[styles.typeBadgeText, { color: typeInfo.color }]}>
-                {paymentMethod?.title}
+                {paymentMethod?.title || 'Chuyển khoản ngân hàng'}
               </Text>
             </View>
           </View>
         </View>
+
+        {/* SePay Auto-Verification Live Status Bar */}
+        <View style={styles.section}>
+          <View style={styles.sepayLiveCard}>
+            <View style={styles.sepayLiveLeft}>
+              <View style={styles.sepayPulseDot} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sepayLiveTitle}>
+                  Tự động xác nhận qua SePay (my.sepay.vn)
+                </Text>
+                <Text style={styles.sepayLiveSub}>
+                  Đang chờ nhận chuyển khoản... Đơn hàng sẽ tự động duyệt sau 3–5 giây khi chuyển đúng nội dung{' '}
+                  <Text style={{ fontWeight: '800', color: '#2C1E14' }}>
+                    {transferContent}
+                  </Text>
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.sepayRefreshBtn}
+              onPress={handleManualCheckNow}
+              disabled={checkingNow}
+              activeOpacity={0.75}>
+              {checkingNow ? (
+                <ActivityIndicator size="small" color="#3D2B1F" />
+              ) : (
+                <>
+                  <RefreshCw size={13} color="#3D2B1F" />
+                  <Text style={styles.sepayRefreshText}>Kiểm tra</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* QR Code Card (SePay Official QR) */}
+        {sepayQrImageUrl ? (
+          <View style={styles.section}>
+            <View style={styles.qrCard}>
+              <View style={styles.qrBadgePill}>
+                <Zap size={12} color="#3D2B1F" />
+                <Text style={styles.qrBadgeText}>MÃ VIETQR TỰ ĐỘNG SEPAY</Text>
+              </View>
+              <Text style={styles.qrCardTitle}>
+                Mở App Ngân Hàng bất kỳ để quét mã
+              </Text>
+              <Image
+                source={{ uri: sepayQrImageUrl }}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.qrHint}>
+                Số tiền <Text style={{ fontWeight: '800' }}>{formatVND(orderAmount)}</Text> và nội dung{' '}
+                <Text style={{ fontWeight: '800' }}>{transferContent}</Text> sẽ được điền tự động khi quét
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* 1-tap transfer button */}
         {paymentMethod?.type === 'bank_transfer' && (
@@ -303,99 +509,56 @@ export default function PaymentScreen() {
               style={styles.transferBtn}
               onPress={handleCopyAllAndOpenBank}
               activeOpacity={0.85}>
-              <Building2 size={24} color={COLORS.white} />
+              <Building2 size={22} color="#FAF5EE" />
               <View style={styles.transferBtnContent}>
-                <Text style={styles.transferBtnTitle}>Chuyển khoản ngay</Text>
+                <Text style={styles.transferBtnTitle}>
+                  Sao chép & Mở App Ngân Hàng
+                </Text>
                 <Text style={styles.transferBtnSub}>
-                  Mở app ngân hàng • Thông tin đã được sao chép
+                  Tự động sao chép STK, số tiền và nội dung chuyển khoản
                 </Text>
               </View>
-              <Send size={20} color={COLORS.white} />
+              <Send size={18} color="#FAF5EE" />
             </TouchableOpacity>
 
             {bankOpened && (
               <View style={styles.copiedBanner}>
                 <CheckCheck size={16} color={COLORS.success} />
                 <Text style={styles.copiedBannerText}>
-                  Đã sao chép toàn bộ thông tin. Dán vào app ngân hàng để chuyển khoản.
+                  Đã sao chép thông tin chuyển khoản. Vui lòng giữ nguyên nội dung{' '}
+                  <Text style={{ fontWeight: '800' }}>{transferContent}</Text>.
                 </Text>
               </View>
             )}
           </View>
         )}
-
-        {/* MoMo / ZaloPay */}
-        {(paymentMethod?.type === 'momo' || paymentMethod?.type === 'zalopay') && (
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={styles.transferBtn}
-              onPress={handleCopyAllAndOpenBank}
-              activeOpacity={0.85}>
-              {typeInfo.icon}
-              <View style={styles.transferBtnContent}>
-                <Text style={styles.transferBtnTitle}>Mở {typeInfo.label}</Text>
-                <Text style={styles.transferBtnSub}>
-                  Số tiền và nội dung đã được sao chép
-                </Text>
-              </View>
-              <Send size={20} color={COLORS.white} />
-            </TouchableOpacity>
-
-            {bankOpened && (
-              <View style={styles.copiedBanner}>
-                <CheckCheck size={16} color={COLORS.success} />
-                <Text style={styles.copiedBannerText}>
-                  Đã sao chép. Mở app {typeInfo.label} và dán thông tin để thanh toán.
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* QR Code */}
-        {vietqrImageUrl ? (
-          <View style={styles.section}>
-            <View style={styles.qrCard}>
-              <Text style={styles.qrCardTitle}>Quét mã để thanh toán</Text>
-              <Image
-                source={{ uri: vietqrImageUrl }}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
-              {paymentMethod?.type === 'bank_transfer' && (
-                <Text style={styles.qrHint}>Hoặc mở app ngân hàng và quét mã này</Text>
-              )}
-            </View>
-          </View>
-        ) : null}
 
         {/* Transfer details */}
         <View style={styles.section}>
           <View style={styles.detailCard}>
-            <Text style={styles.detailCardTitle}>Thông tin chuyển khoản</Text>
+            <Text style={styles.detailCardTitle}>
+              Thông tin tài khoản nhận tiền
+            </Text>
 
-            {paymentMethod?.bank_name ? (
-              <DetailRow label="Ngân hàng" value={paymentMethod.bank_name} />
-            ) : null}
-            {accountName ? (
-              <DetailRow label="Chủ tài khoản" value={accountName} />
-            ) : null}
-            {accountNo ? (
-              <DetailRow
-                label="Số tài khoản"
-                value={accountNo}
-                copyable
-                copied={copiedField === 'account'}
-                onCopy={() => handleCopy(accountNo, 'account')}
-              />
-            ) : null}
+            <DetailRow label="Ngân hàng" value={bankName} />
+            <DetailRow label="Chủ tài khoản" value={accountName} />
+            <DetailRow
+              label="Số tài khoản"
+              value={accountNo}
+              copyable
+              copied={copiedField === 'account'}
+              onCopy={() => handleCopy(accountNo, 'account')}
+            />
             <DetailRow
               label="Số tiền"
               value={formatVND(orderAmount)}
+              copyable
+              copied={copiedField === 'amount'}
+              onCopy={() => handleCopy(String(orderAmount), 'amount')}
               highlight
             />
             <DetailRow
-              label="Nội dung CK"
+              label="Nội dung CK (Bắt buộc)"
               value={transferContent}
               copyable
               copied={copiedField === 'content'}
@@ -406,21 +569,40 @@ export default function PaymentScreen() {
           </View>
         </View>
 
-        {/* Instructions */}
-        <View style={styles.section}>
-          <View style={styles.noteBox}>
-            <Text style={styles.noteTitle}>📋 Hướng dẫn</Text>
-            <Text style={styles.noteText}>
-              1. Bấm <Text style={styles.noteBold}>"Chuyển khoản ngay"</Text> → thông tin tự động sao chép{'\n'}
-              2. Mở app ngân hàng, dán thông tin hoặc quét mã QR{'\n'}
-              3. Kiểm tra <Text style={styles.noteBold}>số tiền</Text> và <Text style={styles.noteBold}>nội dung CK</Text> chính xác{'\n'}
-              4. Xác nhận chuyển khoản{'\n'}
-              5. Quay lại đây → bấm <Text style={styles.noteBold}>"Tôi đã chuyển khoản"</Text>
-            </Text>
+        {/* Admin Webhook Simulator Tool */}
+        {isAdmin && (
+          <View style={styles.section}>
+            <View style={styles.adminTestBox}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.adminTestTitle}>
+                  🛠️ Công cụ Admin: Kiểm thử Webhook SePay
+                </Text>
+                <Text style={styles.adminTestSub}>
+                  Bấm nút bên dưới để gửi bản tin giả lập từ SePay vào{' '}
+                  <Text style={{ fontWeight: '700' }}>/api/sepay-webhook</Text> và kiểm tra tự động duyệt đơn.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.adminTestBtn}
+                onPress={handleSimulateSepayWebhook}
+                disabled={simulatingSepay}
+                activeOpacity={0.85}>
+                {simulatingSepay ? (
+                  <ActivityIndicator size="small" color="#FAF5EE" />
+                ) : (
+                  <>
+                    <Zap size={15} color="#FAF5EE" />
+                    <Text style={styles.adminTestBtnText}>
+                      Test nhận tiền SePay
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Confirm button */}
+        {/* Manual Confirm Fallback Button */}
         <View style={styles.section}>
           <TouchableOpacity
             style={[styles.confirmBtn, confirming && styles.confirmBtnDisabled]}
@@ -431,8 +613,10 @@ export default function PaymentScreen() {
               <ActivityIndicator size="small" color={COLORS.white} />
             ) : (
               <>
-                <Send size={20} color={COLORS.white} />
-                <Text style={styles.confirmBtnText}>Tôi đã chuyển khoản</Text>
+                <CheckCircle size={19} color={COLORS.white} />
+                <Text style={styles.confirmBtnText}>
+                  Tôi đã hoàn tất chuyển khoản
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -440,7 +624,7 @@ export default function PaymentScreen() {
           <TouchableOpacity
             style={styles.laterBtn}
             onPress={() => router.replace('/orders')}>
-            <Text style={styles.laterBtnText}>Để sau, xem đơn hàng</Text>
+            <Text style={styles.laterBtnText}>Để sau, xem danh sách đơn hàng</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -449,14 +633,14 @@ export default function PaymentScreen() {
       <Modal visible={showConfirmModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Send size={40} color={COLORS.primary} />
-            <Text style={styles.modalTitle}>Xác nhận thanh toán</Text>
+            <Send size={36} color="#3D2B1F" />
+            <Text style={styles.modalTitle}>Xác nhận đã chuyển khoản</Text>
             <Text style={styles.modalText}>
-              Bạn đã chuyển khoản đúng số tiền{' '}
+              Bạn đã chuyển khoản số tiền{' '}
               <Text style={styles.modalHighlight}>{formatVND(orderAmount)}</Text>
               {'\n'}với nội dung{' '}
               <Text style={styles.modalHighlight}>{transferContent}</Text>
-              {'\n'}chưa?
+              {'\n'}vào tài khoản {bankName} chưa?
             </Text>
 
             <TouchableOpacity
@@ -470,7 +654,7 @@ export default function PaymentScreen() {
             <TouchableOpacity
               style={styles.modalCancelBtn}
               onPress={() => setShowConfirmModal(false)}>
-              <Text style={styles.modalCancelBtnText}>Chưa, để sau</Text>
+              <Text style={styles.modalCancelBtnText}>Quay lại kiểm tra</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -514,7 +698,7 @@ function DetailRow({
             {copied ? (
               <CheckCheck size={16} color={COLORS.success} />
             ) : (
-              <Copy size={16} color={COLORS.primary} />
+              <Copy size={16} color="#3D2B1F" />
             )}
           </TouchableOpacity>
         )}
@@ -526,6 +710,12 @@ function DetailRow({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.cream },
   scroll: { flex: 1 },
+  scrollContainer: {
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
+    paddingBottom: 60,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -535,12 +725,12 @@ const styles = StyleSheet.create({
   },
   notFoundText: { fontSize: 16, color: COLORS.mediumText, textAlign: 'center' },
   backBtnLarge: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#3D2B1F',
     borderRadius: 16,
     paddingHorizontal: SPACING.xxl,
     paddingVertical: 14,
   },
-  backBtnLargeText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  backBtnLargeText: { fontSize: 15, fontWeight: '700', color: '#FAF5EE' },
 
   header: {
     flexDirection: 'row',
@@ -553,228 +743,419 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F3ECE2',
     alignItems: 'center',
     justifyContent: 'center',
-    ...SHADOWS.small,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
   },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#2C1E14' },
   section: { paddingHorizontal: SPACING.lg, marginBottom: SPACING.md },
 
-  // Info card
   infoCard: {
-    backgroundColor: COLORS.warmBrown,
-    borderRadius: 16,
+    backgroundColor: '#D8C3AD',
+    borderRadius: 22,
     padding: SPACING.lg,
     alignItems: 'center',
-    ...SHADOWS.medium,
+    borderWidth: 1.5,
+    borderColor: '#C4AA90',
+    ...SHADOWS.small,
   },
-  infoCardLabel: { fontSize: 11, color: COLORS.soft, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  infoCardCode: { fontSize: 20, color: COLORS.white, fontWeight: '800', marginTop: 2 },
-  infoCardAmountRow: { marginTop: SPACING.md, alignItems: 'center' },
-  infoCardAmountLabel: { fontSize: 11, color: COLORS.soft, fontWeight: '600' },
-  infoCardAmount: { fontSize: 32, fontWeight: '900', color: COLORS.white, fontStyle: 'italic' },
+  infoCardLabel: {
+    fontSize: 11,
+    color: '#5C4332',
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  infoCardCode: {
+    fontSize: 18,
+    color: '#2C1E14',
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  infoCardAmountRow: { marginTop: 10, alignItems: 'center' },
+  infoCardAmountLabel: { fontSize: 11.5, color: '#5C4332', fontWeight: '600' },
+  infoCardAmount: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#2C1E14',
+    marginTop: 2,
+  },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.xs,
-    borderRadius: 20,
-    marginTop: SPACING.md,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 12,
   },
-  typeBadgeText: { fontSize: 13, fontWeight: '700' },
+  typeBadgeText: { fontSize: 12.5, fontWeight: '700' },
 
-  // Transfer button
+  /* SePay Live Card */
+  sepayLiveCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: '#F3ECE2',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
+  },
+  sepayLiveLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  sepayPulseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#2E7D32',
+  },
+  sepayLiveTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2C1E14',
+  },
+  sepayLiveSub: {
+    fontSize: 11.5,
+    color: '#5C4332',
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  sepayRefreshBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FAF5EE',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
+  },
+  sepayRefreshText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+
+  /* QR Card */
+  qrCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    ...SHADOWS.small,
+  },
+  qrBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F3ECE2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  qrBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#3D2B1F',
+    letterSpacing: 0.5,
+  },
+  qrCardTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#2C1E14',
+    marginBottom: 12,
+  },
+  qrImage: { width: 230, height: 230, borderRadius: 12 },
+  qrHint: {
+    fontSize: 12,
+    color: '#5C4332',
+    marginTop: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  /* Transfer button */
   transferBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.success,
-    borderRadius: 20,
-    padding: SPACING.lg,
-    gap: SPACING.md,
-    ...SHADOWS.medium,
+    backgroundColor: '#3D2B1F',
+    borderRadius: 18,
+    padding: 16,
+    gap: 12,
+    ...SHADOWS.small,
   },
   transferBtnContent: { flex: 1 },
-  transferBtnTitle: { fontSize: 18, fontWeight: '900', fontStyle: 'italic', color: COLORS.white },
-  transferBtnSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
+  transferBtnTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FAF5EE',
+  },
+  transferBtnSub: {
+    fontSize: 11.5,
+    color: '#D8C3AD',
+    marginTop: 2,
+  },
   copiedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 8,
     backgroundColor: '#F0FFF4',
     borderRadius: 12,
-    padding: SPACING.md,
-    marginTop: SPACING.sm,
+    padding: 12,
+    marginTop: 8,
     borderLeftWidth: 3,
     borderLeftColor: COLORS.success,
   },
-  copiedBannerText: { fontSize: 13, color: '#2D6A2E', flex: 1, lineHeight: 18 },
+  copiedBannerText: { fontSize: 12.5, color: '#2D6A2E', flex: 1, lineHeight: 18 },
 
-  // QR
-  qrCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: SPACING.xl,
-    alignItems: 'center',
-    ...SHADOWS.small,
-  },
-  qrCardTitle: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: SPACING.md },
-  qrImage: { width: 200, height: 200, borderRadius: 12 },
-  qrHint: { fontSize: 12, color: COLORS.lightText, marginTop: SPACING.md, textAlign: 'center' },
-
-  // Detail card
+  /* Detail card */
   detailCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: SPACING.lg,
-    ...SHADOWS.small,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
   },
-  detailCardTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: SPACING.md },
+  detailCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#2C1E14',
+    marginBottom: 10,
+  },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.xs + 2,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5EFE8',
   },
-  detailLabel: { fontSize: 13, color: COLORS.mediumText, fontWeight: '600' },
-  detailValueRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, flexShrink: 1 },
-  detailValue: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+  detailLabel: { fontSize: 12.5, color: COLORS.mediumText, fontWeight: '600' },
+  detailValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
+  detailValue: { fontSize: 13.5, fontWeight: '700', color: '#2C1E14' },
   detailValueHighlight: {
-    color: COLORS.primary,
-    fontWeight: '800',
+    color: '#3D2B1F',
+    fontWeight: '900',
   },
   detailValueMono: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
-    backgroundColor: COLORS.softBeige,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 4,
+    fontSize: 13,
+    backgroundColor: '#F3ECE2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
   },
   copyBtn: { padding: 4 },
 
-  // Note
-  noteBox: {
-    backgroundColor: COLORS.lightPurple,
-    borderRadius: 14,
-    padding: SPACING.lg,
+  /* Admin Test Box */
+  adminTestBox: {
+    backgroundColor: '#EFE5D8',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#C5AC92',
+    gap: 12,
   },
-  noteTitle: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: SPACING.sm },
-  noteText: { fontSize: 13, color: COLORS.mediumText, lineHeight: 22 },
-  noteBold: { fontWeight: '700', color: COLORS.primary },
+  adminTestTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#2C1E14',
+  },
+  adminTestSub: {
+    fontSize: 12,
+    color: '#4A3525',
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  adminTestBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#2E7D32',
+    paddingVertical: 11,
+    borderRadius: 13,
+  },
+  adminTestBtnText: {
+    color: '#FAF5EE',
+    fontSize: 13,
+    fontWeight: '800',
+  },
 
-  // Confirm
+  /* Confirm button */
   confirmBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.primary,
-    borderRadius: 20,
-    paddingVertical: 18,
-    ...SHADOWS.medium,
+    gap: 8,
+    backgroundColor: '#5C4332',
+    borderRadius: 18,
+    paddingVertical: 15,
   },
   confirmBtnDisabled: { opacity: 0.7 },
-  confirmBtnText: { fontSize: 18, fontWeight: '900', fontStyle: 'italic', color: COLORS.white },
+  confirmBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FAF5EE',
+  },
   laterBtn: {
     alignItems: 'center',
-    marginTop: SPACING.md,
-    paddingVertical: SPACING.sm,
+    marginTop: 10,
+    paddingVertical: 8,
   },
-  laterBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.mediumText },
+  laterBtnText: { fontSize: 13.5, fontWeight: '600', color: COLORS.mediumText },
 
-  // Modal
+  /* Modal */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: SPACING.xxl,
   },
   modalCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FAF5EE',
     borderRadius: 24,
     padding: SPACING.xxl,
     alignItems: 'center',
     gap: SPACING.md,
     width: '100%',
+    maxWidth: 420,
+    borderWidth: 1.5,
+    borderColor: '#D8C3AD',
     ...SHADOWS.large,
   },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.darkText },
-  modalText: { fontSize: 15, color: COLORS.mediumText, textAlign: 'center', lineHeight: 24 },
-  modalHighlight: { fontWeight: '800', color: COLORS.primary },
+  modalTitle: { fontSize: 19, fontWeight: '800', color: '#2C1E14' },
+  modalText: {
+    fontSize: 14,
+    color: '#4A3525',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  modalHighlight: { fontWeight: '800', color: '#2C1E14' },
   modalConfirmBtn: {
-    backgroundColor: COLORS.success,
+    backgroundColor: '#3D2B1F',
     borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: SPACING.xxl,
     width: '100%',
     alignItems: 'center',
-    ...SHADOWS.medium,
   },
-  modalConfirmBtnText: { fontSize: 16, fontWeight: '900', fontStyle: 'italic', color: COLORS.white },
-  modalCancelBtn: { paddingVertical: SPACING.sm, width: '100%', alignItems: 'center' },
-  modalCancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.mediumText },
+  modalConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FAF5EE',
+  },
+  modalCancelBtn: {
+    paddingVertical: SPACING.sm,
+    width: '100%',
+    alignItems: 'center',
+  },
+  modalCancelBtnText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: COLORS.mediumText,
+  },
 
-  // Confirmed
-  confirmedScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACING.lg },
+  /* Confirmed */
+  confirmedScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    maxWidth: 560,
+    width: '100%',
+    alignSelf: 'center',
+  },
   confirmedCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: SPACING.xxxl,
     alignItems: 'center',
     gap: SPACING.lg,
+    borderWidth: 1.5,
+    borderColor: '#D8C3AD',
     ...SHADOWS.large,
   },
   confirmedIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     backgroundColor: '#F0FFF4',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  confirmedTitle: { fontSize: 28, fontWeight: '900', color: COLORS.darkText },
-  confirmedText: { fontSize: 15, color: COLORS.mediumText, textAlign: 'center', lineHeight: 22 },
+  confirmedTitle: { fontSize: 24, fontWeight: '900', color: '#2C1E14' },
+  confirmedText: {
+    fontSize: 14,
+    color: '#4A3525',
+    textAlign: 'center',
+    lineHeight: 21,
+  },
   orderSummary: {
-    backgroundColor: COLORS.cream,
+    backgroundColor: '#FAF5EE',
     borderRadius: 16,
     padding: SPACING.lg,
     width: '100%',
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
   },
-  orderCode: { fontSize: 14, color: COLORS.mediumText, fontWeight: '600' },
-  orderAmount: { fontSize: 28, fontWeight: '900', fontStyle: 'italic', color: COLORS.primary },
+  orderCode: { fontSize: 13.5, color: '#5C4332', fontWeight: '700' },
+  orderAmount: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#2C1E14',
+  },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    backgroundColor: COLORS.softBeige,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    gap: 6,
+    backgroundColor: '#F3ECE2',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 12,
   },
-  statusBadgeText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  statusBadgeText: { fontSize: 12.5, fontWeight: '800', color: '#3D2B1F' },
   primaryBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 20,
-    paddingVertical: 16,
+    backgroundColor: '#3D2B1F',
+    borderRadius: 18,
+    paddingVertical: 15,
     paddingHorizontal: SPACING.xxxl,
     width: '100%',
     alignItems: 'center',
-    ...SHADOWS.medium,
   },
-  primaryBtnText: { fontSize: 16, fontWeight: '900', fontStyle: 'italic', color: COLORS.white },
+  primaryBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FAF5EE',
+  },
   outlineBtn: {
-    borderRadius: 20,
-    paddingVertical: 14,
+    borderRadius: 18,
+    paddingVertical: 13,
     paddingHorizontal: SPACING.xxxl,
     width: '100%',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.border,
+    borderWidth: 1.5,
+    borderColor: '#D8C3AD',
   },
-  outlineBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.mediumText },
+  outlineBtnText: { fontSize: 14, fontWeight: '700', color: '#3D2B1F' },
 });

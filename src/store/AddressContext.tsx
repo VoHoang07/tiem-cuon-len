@@ -20,7 +20,9 @@ function loadCachedAddresses(userId: string): Address[] {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return (parsed as Address[]).filter((a) => a.fullName !== '__TCL_CHAT_V2__');
+          return (parsed as Address[]).filter(
+            (a) => !String(a.fullName || '').startsWith('__TCL_')
+          );
         }
       }
     }
@@ -79,7 +81,7 @@ export function AddressProvider({ children }: { children: ReactNode }) {
 
         if (!error && data) {
           const filtered = (data as Address[]).filter(
-            (a) => a.fullName !== '__TCL_CHAT_V2__'
+            (a) => !String(a.fullName || '').startsWith('__TCL_')
           );
           setAddresses(filtered);
           saveCachedAddresses(user.id, filtered);
