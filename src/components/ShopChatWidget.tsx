@@ -143,9 +143,24 @@ export function ShopChatWidget() {
     }
   }, [isOpen, displayedMessages.length, pendingProduct, activeAdminConversation?.conversationId]);
 
-  // Hide widget on login/register pages
+  // Hide widget on login/register pages, and hide floating launcher on checkout/payment/cart/form pages when closed
   const normalizedRoute = pathname.replace(/^\//, '');
   if (normalizedRoute === 'login' || normalizedRoute === 'register') {
+    return null;
+  }
+
+  const hideFloatingLauncherOnRoute =
+    normalizedRoute === 'checkout' ||
+    normalizedRoute === 'cart' ||
+    normalizedRoute === 'add-product' ||
+    normalizedRoute === 'payment-methods' ||
+    normalizedRoute.startsWith('payment/') ||
+    normalizedRoute.startsWith('product/') ||
+    normalizedRoute.startsWith('edit-product/') ||
+    normalizedRoute.startsWith('addresses/') ||
+    normalizedRoute.startsWith('profile/');
+
+  if (!isOpen && hideFloatingLauncherOnRoute) {
     return null;
   }
 
@@ -200,7 +215,11 @@ export function ShopChatWidget() {
     <View
       style={[
         styles.rootOverlay,
-        isMobile ? styles.rootOverlayMobile : styles.rootOverlayDesktop,
+        isMobile
+          ? isOpen
+            ? styles.rootOverlayMobileOpen
+            : styles.rootOverlayMobileClosed
+          : styles.rootOverlayDesktop,
       ]}
       pointerEvents="box-none">
       {isOpen ? (
@@ -599,15 +618,11 @@ export function ShopChatWidget() {
             )}
           </View>
 
-          <View style={styles.launcherTextWrap}>
-            <Text style={styles.launcherTitle}>
-              {isAdmin
-                ? 'Hộp thư khách'
-                : isMobile
-                ? 'Chat Shop'
-                : 'Chat với Tiệm'}
-            </Text>
-            {!isMobile && (
+          {!isMobile && (
+            <View style={styles.launcherTextWrap}>
+              <Text style={styles.launcherTitle}>
+                {isAdmin ? 'Hộp thư khách' : 'Chat với Tiệm'}
+              </Text>
               <Text style={styles.launcherSub}>
                 {isAdmin
                   ? unreadCount > 0
@@ -615,8 +630,8 @@ export function ShopChatWidget() {
                     : `${conversations.length} cuộc trò chuyện`
                   : 'Hỏi mẫu & đặt hàng'}
               </Text>
-            )}
-          </View>
+            </View>
+          )}
         </TouchableOpacity>
       )}
     </View>
@@ -633,10 +648,15 @@ const styles = StyleSheet.create({
     right: 20,
     bottom: 20,
   },
-  rootOverlayMobile: {
-    right: 12,
-    left: 12,
-    bottom: 78,
+  rootOverlayMobileClosed: {
+    right: 14,
+    bottom: 84,
+  },
+  rootOverlayMobileOpen: {
+    right: 10,
+    left: 10,
+    bottom: 14,
+    zIndex: 999,
   },
 
   /* Launcher Button */
@@ -653,9 +673,13 @@ const styles = StyleSheet.create({
     ...SHADOWS.large,
   },
   launcherBtnMobile: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   launcherIconWrap: {
     position: 'relative',
