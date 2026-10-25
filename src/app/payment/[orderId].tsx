@@ -26,7 +26,7 @@ import {
   Download,
   Smartphone,
   Lock,
-  ExternalLink,
+  ArrowUpRight,
 } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
@@ -45,20 +45,20 @@ interface VietQRBankApp {
   autofill: boolean;
 }
 
-// Official VietQR Universal Deep-Link Bank Apps (https://api.vietqr.io/v2/ios-app-deeplinks)
-const VIETQR_BANK_APPS: VietQRBankApp[] = [
-  {
-    appId: 'icb',
-    shortName: 'VietinBank',
-    appName: 'VietinBank iPay',
-    logo: 'https://cdn.vietqr.io/bank-app-icon/icb-ios.webp',
-    autofill: true,
-  },
+// 5 Banks with official VietQR Universal Link Auto-Fill SDK (opens straight to pre-filled Transfer Confirmation screen)
+const AUTOFILL_BANK_APPS: VietQRBankApp[] = [
   {
     appId: 'mb',
     shortName: 'MB Bank',
     appName: 'MB Bank',
     logo: 'https://cdn.vietqr.io/bank-app-icon/mb-ios.webp',
+    autofill: true,
+  },
+  {
+    appId: 'icb',
+    shortName: 'VietinBank',
+    appName: 'VietinBank iPay',
+    logo: 'https://cdn.vietqr.io/bank-app-icon/icb-ios.webp',
     autofill: true,
   },
   {
@@ -70,11 +70,22 @@ const VIETQR_BANK_APPS: VietQRBankApp[] = [
   },
   {
     appId: 'acb',
-    shortName: 'ACB',
+    shortName: 'ACB ONE',
     appName: 'ACB ONE',
     logo: 'https://cdn.vietqr.io/bank-app-icon/acb-ios.webp',
     autofill: true,
   },
+  {
+    appId: 'ocb',
+    shortName: 'OCB OMNI',
+    appName: 'OCB OMNI',
+    logo: 'https://cdn.vietqr.io/bank-app-icon/ocb-ios.webp',
+    autofill: true,
+  },
+];
+
+// Other major banks (opens app + copies STK/content; user scans saved QR from gallery)
+const OTHER_BANK_APPS: VietQRBankApp[] = [
   {
     appId: 'vcb',
     shortName: 'Vietcombank',
@@ -111,15 +122,8 @@ const VIETQR_BANK_APPS: VietQRBankApp[] = [
     autofill: false,
   },
   {
-    appId: 'ocb',
-    shortName: 'OCB',
-    appName: 'OCB OMNI',
-    logo: 'https://cdn.vietqr.io/bank-app-icon/ocb-ios.webp',
-    autofill: true,
-  },
-  {
     appId: 'vib-2',
-    shortName: 'VIB',
+    shortName: 'MyVIB',
     appName: 'MyVIB',
     logo: 'https://cdn.vietqr.io/bank-app-icon/vib-2-ios.webp',
     autofill: false,
@@ -129,6 +133,13 @@ const VIETQR_BANK_APPS: VietQRBankApp[] = [
     shortName: 'CAKE',
     appName: 'CAKE Bank',
     logo: 'https://cdn.vietqr.io/bank-app-icon/cake-ios.webp',
+    autofill: false,
+  },
+  {
+    appId: 'hdb',
+    shortName: 'HDBank',
+    appName: 'HDBank',
+    logo: 'https://cdn.vietqr.io/bank-app-icon/hdb-ios.webp',
     autofill: false,
   },
 ];
@@ -155,21 +166,88 @@ const RECIPIENT_BANK_META: Record<
   VIB: { sepayCode: 'VIB', vietqrAppId: 'vib-2', bin: '970441' },
 };
 
+/**
+ * Builds the official VietQR Payment Kit Universal Deep Link (`https://dl.vietqr.io/pay`).
+ * NOTE: `@` in `ba=<account>@<bank>` MUST remain literal `@` so the bank app parser reads it properly.
+ */
 function buildOfficialVietQRDeepLink(
   customerAppId: string,
   recipientAccountNo: string,
   recipientBankAppId: string,
   amount: number,
   transferContent: string,
-  recipientName: string
+  recipientName: string,
+  returnUrl?: string
 ): string {
-  return `https://dl.vietqr.io/pay?app=${encodeURIComponent(
+  const cleanAcc = recipientAccountNo.trim();
+  const cleanBank = recipientBankAppId.trim();
+  const cleanAmount = Math.max(0, Math.round(amount));
+  let url = `https://dl.vietqr.io/pay?app=${encodeURIComponent(
     customerAppId
-  )}&ba=${encodeURIComponent(recipientAccountNo)}@${encodeURIComponent(
-    recipientBankAppId
-  )}&am=${amount}&tn=${encodeURIComponent(
+  )}&ba=${cleanAcc}@${cleanBank}&am=${cleanAmount}&tn=${encodeURIComponent(
     transferContent
   )}&bn=${encodeURIComponent(recipientName)}`;
+  if (returnUrl) {
+    url += `&url=${encodeURIComponent(returnUrl)}`;
+  }
+  return url;
+}
+
+/**
+ * Renders a genuine HTML `<a href="...">` on Mobile Web so iOS Universal Links & Android App Links
+ * intercept the tap at the OS level and open straight to the pre-filled Transfer Confirmation screen
+ * inside the banking app (instead of falling back to a bare custom scheme via JS redirect).
+ */
+function BankDeepLinkButton({
+  deepLink,
+  isMobileBrowser,
+  onPressBeforeNavigate,
+  style,
+  children,
+}: {
+  deepLink: string;
+  isMobileBrowser: boolean;
+  onPressBeforeNavigate: () => void;
+  style?: any;
+  children: React.ReactNode;
+}) {
+  if (Platform.OS === 'web' && isMobileBrowser) {
+    return React.createElement(
+      'a',
+      {
+        href: deepLink,
+        target: '_top',
+        rel: 'noopener noreferrer',
+        onClick: () => {
+          // Do NOT call e.preventDefault() — iOS/Android Universal Links require native anchor navigation
+          onPressBeforeNavigate();
+        },
+        style: {
+          textDecoration: 'none',
+          color: 'inherit',
+          display: 'flex',
+          WebkitTapHighlightColor: 'transparent',
+          cursor: 'pointer',
+          ...StyleSheet.flatten(style),
+        },
+      },
+      children
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      style={style}
+      onPress={() => {
+        onPressBeforeNavigate();
+        if (Platform.OS !== 'web') {
+          Linking.openURL(deepLink).catch(() => {});
+        }
+      }}
+      activeOpacity={0.78}>
+      {children}
+    </TouchableOpacity>
+  );
 }
 
 export default function PaymentScreen() {
@@ -190,6 +268,12 @@ export default function PaymentScreen() {
   const isDesktop = windowWidth >= 820;
   const isMobile = windowWidth < 600;
 
+  const isMobileBrowser =
+    Platform.OS !== 'web' ||
+    (typeof navigator !== 'undefined' &&
+      /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) ||
+    windowWidth < 768;
+
   const order = orders.find((o) => o.id === paramOrderId);
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -198,6 +282,7 @@ export default function PaymentScreen() {
   const [selectedBankFeedback, setSelectedBankFeedback] = useState<{
     appName: string;
     deepLink: string;
+    autofill: boolean;
   } | null>(null);
   const [simulatingSepay, setSimulatingSepay] = useState(false);
   const [checkingNow, setCheckingNow] = useState(false);
@@ -235,6 +320,11 @@ export default function PaymentScreen() {
     vietqrAppId: 'icb',
     bin: '970415',
   };
+
+  const returnUrl =
+    typeof window !== 'undefined' && window.location?.href
+      ? window.location.href
+      : `https://tiem-cuon-len.vercel.app/payment/${order?.id || ''}`;
 
   // Official SePay VietQR image (`vietqr.app/img`)
   const sepayQrImageUrl = accountNo
@@ -341,38 +431,15 @@ export default function PaymentScreen() {
     }
   };
 
-  // Launch customer's banking app using official VietQR Universal Link
-  const handleLaunchBankApp = (app: VietQRBankApp) => {
-    const deepLink = buildOfficialVietQRDeepLink(
-      app.appId,
-      accountNo,
-      bankMeta.vietqrAppId,
-      orderAmount,
-      transferContent,
-      accountName
-    );
-
-    // Copy transfer content without blocking synchronous user gesture
+  const handleBankTapSideEffect = (app: VietQRBankApp, deepLink: string) => {
     Clipboard.setStringAsync(transferContent).catch(() => {});
     setCopiedKey('content');
     setTimeout(() => setCopiedKey(null), 2500);
-
-    const isMobileBrowser =
-      Platform.OS !== 'web' ||
-      (typeof navigator !== 'undefined' &&
-        /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) ||
-      windowWidth < 768;
-
-    setSelectedBankFeedback({ appName: app.appName, deepLink });
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      if (isMobileBrowser) {
-        // Top-level navigation is required on iOS Safari & Android Chrome to trigger Universal Links / App Links
-        window.location.href = deepLink;
-      }
-    } else {
-      Linking.openURL(deepLink).catch(() => {});
-    }
+    setSelectedBankFeedback({
+      appName: app.appName,
+      deepLink,
+      autofill: app.autofill,
+    });
   };
 
   const handleSimulateSepayWebhook = async () => {
@@ -583,7 +650,7 @@ export default function PaymentScreen() {
               </View>
 
               <Text style={styles.qrScanCaption}>
-                Quét mã bằng bất kỳ App Ngân Hàng hoặc Ví Điện Tử nào để tự động điền đúng số tiền & nội dung
+                Quét mã bằng bất kỳ App Ngân Hàng nào để mở thẳng màn hình xác nhận chuyển khoản
               </Text>
 
               {/* Quick Actions below QR */}
@@ -630,13 +697,140 @@ export default function PaymentScreen() {
             </View>
           </View>
 
-          {/* ── RIGHT COLUMN: ORDER TICKET + DIRECT MOBILE BANK APPS ── */}
+          {/* ── RIGHT COLUMN: DIRECT TRANSFER LAUNCHER + ORDER TICKET ── */}
           <View style={styles.infoColumn}>
-            {/* Compact Order & Transfer Summary Ticket */}
+            {/* 1. Direct Auto-Fill Transfer Launcher Card (Top Priority) */}
+            <View style={styles.bankAppsCard}>
+              <View style={styles.bankAppsHeader}>
+                <View style={styles.autofillHeaderBadge}>
+                  <Zap size={12} color="#2E7D32" />
+                  <Text style={styles.autofillHeaderBadgeText}>
+                    MỞ THẲNG MÀN HÌNH CHUYỂN KHOẢN • CHỈ CẦN ẤN XÁC NHẬN
+                  </Text>
+                </View>
+                <Text style={styles.bankAppsTitle}>
+                  Chọn ngân hàng trên điện thoại để chuyển khoản ngay
+                </Text>
+                <Text style={styles.bankAppsSub}>
+                  Tự động điền sẵn STK <Text style={{ fontWeight: '800' }}>{accountNo}</Text>, số tiền{' '}
+                  <Text style={{ fontWeight: '800' }}>{formatVND(orderAmount)}</Text> và nội dung{' '}
+                  <Text style={{ fontWeight: '800' }}>{transferContent}</Text>
+                </Text>
+              </View>
+
+              {/* Featured 5 Auto-Fill Banks (1-tap straight to Transfer screen) */}
+              <View style={styles.autofillBankList}>
+                {AUTOFILL_BANK_APPS.map((app) => {
+                  const deepLink = buildOfficialVietQRDeepLink(
+                    app.appId,
+                    accountNo,
+                    bankMeta.vietqrAppId,
+                    orderAmount,
+                    transferContent,
+                    accountName,
+                    returnUrl
+                  );
+                  return (
+                    <BankDeepLinkButton
+                      key={app.appId}
+                      deepLink={deepLink}
+                      isMobileBrowser={isMobileBrowser}
+                      onPressBeforeNavigate={() =>
+                        handleBankTapSideEffect(app, deepLink)
+                      }
+                      style={[
+                        styles.autofillBankRow,
+                        !isMobile && styles.autofillBankRowDesktop,
+                      ]}>
+                      <Image
+                        source={{ uri: app.logo }}
+                        style={styles.autofillBankLogo}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.autofillBankMeta}>
+                        <Text style={styles.autofillBankName} numberOfLines={1}>
+                          {app.appName}
+                        </Text>
+                        <Text style={styles.autofillBankHint} numberOfLines={1}>
+                          Tự điền 100% • Chỉ cần ấn Xác nhận
+                        </Text>
+                      </View>
+                      <View style={styles.autofillGoPill}>
+                        <Text style={styles.autofillGoText}>Chuyển ngay</Text>
+                        <ArrowUpRight size={13} color="#FAF5EE" />
+                      </View>
+                    </BankDeepLinkButton>
+                  );
+                })}
+              </View>
+
+              {/* Other Banks Section (Scan saved QR / Copy STK) */}
+              <View style={styles.otherBanksSection}>
+                <Text style={styles.otherBanksTitle}>
+                  Ngân hàng khác (Mở App & chọn ảnh QR đã lưu hoặc dán STK):
+                </Text>
+                <View style={styles.bankGrid}>
+                  {OTHER_BANK_APPS.map((app) => {
+                    const deepLink = buildOfficialVietQRDeepLink(
+                      app.appId,
+                      accountNo,
+                      bankMeta.vietqrAppId,
+                      orderAmount,
+                      transferContent,
+                      accountName,
+                      returnUrl
+                    );
+                    return (
+                      <BankDeepLinkButton
+                        key={app.appId}
+                        deepLink={deepLink}
+                        isMobileBrowser={isMobileBrowser}
+                        onPressBeforeNavigate={() =>
+                          handleBankTapSideEffect(app, deepLink)
+                        }
+                        style={[
+                          styles.bankAppItem,
+                          isMobile
+                            ? styles.bankAppItemMobile
+                            : styles.bankAppItemDesktop,
+                        ]}>
+                        <View style={styles.bankLogoWrap}>
+                          <Image
+                            source={{ uri: app.logo }}
+                            style={styles.bankLogo}
+                            resizeMode="cover"
+                          />
+                        </View>
+                        <Text style={styles.bankShortName} numberOfLines={1}>
+                          {app.shortName}
+                        </Text>
+                      </BankDeepLinkButton>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {selectedBankFeedback && !isMobileBrowser && (
+                <View style={styles.bankFeedbackBanner}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bankFeedbackText}>
+                      📱 Bạn đang mở trên máy tính: Đã sao chép nội dung{' '}
+                      <Text style={{ fontWeight: '800' }}>{transferContent}</Text>. Hãy mở ứng dụng{' '}
+                      <Text style={{ fontWeight: '800' }}>
+                        {selectedBankFeedback.appName}
+                      </Text>{' '}
+                      trên điện thoại và quét mã VietQR bên trái để vào thẳng màn hình xác nhận chuyển khoản!
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* 2. Compact Order & Transfer Summary Ticket */}
             <View style={styles.ticketCard}>
               <View style={styles.ticketTopRow}>
                 <View>
-                  <Text style={styles.ticketEyebrow}>ĐƠN HÀNG CỦA BẠN</Text>
+                  <Text style={styles.ticketEyebrow}>MÃ ĐƠN HÀNG</Text>
                   <Text style={styles.ticketOrderId}>{order.id}</Text>
                 </View>
                 <View style={styles.amountBox}>
@@ -647,7 +841,6 @@ export default function PaymentScreen() {
 
               <View style={styles.ticketDivider} />
 
-              {/* Compact Quick-Copy Pills */}
               <View style={styles.copyPillsGrid}>
                 <TouchableOpacity
                   style={styles.copyPill}
@@ -683,76 +876,6 @@ export default function PaymentScreen() {
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-
-            {/* Direct Bank App Deep-Link Launcher Card */}
-            <View style={styles.bankAppsCard}>
-              <View style={styles.bankAppsHeader}>
-                <View style={styles.bankAppsTitleRow}>
-                  <Smartphone size={17} color="#3D2B1F" />
-                  <Text style={styles.bankAppsTitle}>
-                    Mở nhanh App Ngân Hàng trên điện thoại
-                  </Text>
-                </View>
-                <Text style={styles.bankAppsSub}>
-                  Chạm vào ngân hàng bạn đang dùng để mở ứng dụng và tự động sao chép nội dung chuyển khoản
-                </Text>
-              </View>
-
-              <View style={styles.bankGrid}>
-                {VIETQR_BANK_APPS.map((app) => (
-                  <TouchableOpacity
-                    key={app.appId}
-                    style={[
-                      styles.bankAppItem,
-                      isMobile ? styles.bankAppItemMobile : styles.bankAppItemDesktop,
-                    ]}
-                    onPress={() => handleLaunchBankApp(app)}
-                    activeOpacity={0.78}>
-                    <View style={styles.bankLogoWrap}>
-                      <Image
-                        source={{ uri: app.logo }}
-                        style={styles.bankLogo}
-                        resizeMode="cover"
-                      />
-                      {app.autofill && (
-                        <View style={styles.autofillBadge}>
-                          <Zap size={8} color="#FAF5EE" />
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.bankShortName} numberOfLines={1}>
-                      {app.shortName}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {selectedBankFeedback && (
-                <View style={styles.bankFeedbackBanner}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.bankFeedbackText}>
-                      ✅ Đã sao chép nội dung{' '}
-                      <Text style={{ fontWeight: '800' }}>{transferContent}</Text>.{' '}
-                      {isDesktop
-                        ? `Hãy mở ứng dụng ${selectedBankFeedback.appName} trên điện thoại để quét mã VietQR bên trái.`
-                        : `Nếu ứng dụng ${selectedBankFeedback.appName} chưa tự mở, bấm nút bên cạnh hoặc dùng tính năng "Quét ảnh QR từ thư viện".`}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.bankFeedbackOpenLink}
-                    onPress={() => {
-                      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                        window.location.href = selectedBankFeedback.deepLink;
-                      } else {
-                        Linking.openURL(selectedBankFeedback.deepLink).catch(() => {});
-                      }
-                    }}>
-                    <ExternalLink size={13} color="#FAF5EE" />
-                    <Text style={styles.bankFeedbackOpenText}>Mở App</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
             </View>
 
             {/* Admin Webhook Simulator Tool */}
@@ -814,7 +937,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     width: '100%',
-    maxWidth: 1040,
+    maxWidth: 1060,
     alignSelf: 'center',
     paddingHorizontal: 14,
     paddingTop: 14,
@@ -835,7 +958,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   topNavInner: {
-    maxWidth: 1040,
+    maxWidth: 1060,
     width: '100%',
     alignSelf: 'center',
     flexDirection: 'row',
@@ -902,7 +1025,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   qrColumnDesktop: {
-    width: 390,
+    width: 385,
     flexShrink: 0,
   },
   qrColumnMobile: {
@@ -1031,13 +1154,13 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 12,
   },
   qrImage: {
-    width: 268,
-    height: 325,
+    width: 265,
+    height: 322,
     borderRadius: 10,
   },
   qrImageMobile: {
-    width: 245,
-    height: 298,
+    width: 242,
+    height: 295,
   },
   qrScanCaption: {
     fontSize: 12,
@@ -1088,6 +1211,182 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '800',
     color: '#FAF5EE',
+  },
+
+  /* Direct Bank Apps Card */
+  bankAppsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#DFCBB5',
+    ...SHADOWS.small,
+  },
+  bankAppsHeader: {
+    marginBottom: 14,
+  },
+  autofillHeaderBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#EBF7EE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFE3C8',
+    marginBottom: 8,
+  },
+  autofillHeaderBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#2E7D32',
+    letterSpacing: 0.3,
+  },
+  bankAppsTitle: {
+    fontSize: 15.5,
+    fontWeight: '900',
+    color: '#2C1E14',
+  },
+  bankAppsSub: {
+    fontSize: 12,
+    color: '#5C4332',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+
+  /* Featured Auto-Fill Bank Rows */
+  autofillBankList: {
+    gap: 8,
+  },
+  autofillBankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    backgroundColor: '#FAF5EE',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: '#D8C3AD',
+  },
+  autofillBankRowDesktop: {
+    paddingVertical: 10,
+  },
+  autofillBankLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+  },
+  autofillBankMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
+  autofillBankName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#2C1E14',
+  },
+  autofillBankHint: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginTop: 1,
+  },
+  autofillGoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#3D2B1F',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 11,
+    flexShrink: 0,
+  },
+  autofillGoText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FAF5EE',
+  },
+
+  /* Other Banks Grid */
+  otherBanksSection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#EFE6DC',
+  },
+  otherBanksTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#6E533E',
+    marginBottom: 9,
+  },
+  bankGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  bankAppItem: {
+    flexDirection: 'column',
+    backgroundColor: '#FAF5EE',
+    borderRadius: 13,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    gap: 5,
+  },
+  bankAppItemDesktop: {
+    width: '23.4%',
+  },
+  bankAppItemMobile: {
+    width: '23%',
+  },
+  bankLogoWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    overflow: 'hidden',
+  },
+  bankLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+  },
+  bankShortName: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#2C1E14',
+    textAlign: 'center',
+  },
+  bankFeedbackBanner: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: '#F0FFF4',
+    borderRadius: 12,
+    padding: 11,
+    borderWidth: 1,
+    borderColor: '#BFE3C8',
+  },
+  bankFeedbackText: {
+    fontSize: 12,
+    color: '#1E5622',
+    lineHeight: 17,
   },
 
   /* Right Column: Ticket Card */
@@ -1178,125 +1477,6 @@ const styles = StyleSheet.create({
     color: '#2C1E14',
     marginTop: 2,
     letterSpacing: 0.4,
-  },
-
-  /* Direct Bank Apps Card */
-  bankAppsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1.5,
-    borderColor: '#DFCBB5',
-    ...SHADOWS.small,
-  },
-  bankAppsHeader: {
-    marginBottom: 14,
-  },
-  bankAppsTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  bankAppsTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#2C1E14',
-  },
-  bankAppsSub: {
-    fontSize: 12,
-    color: '#5C4332',
-    marginTop: 3,
-    lineHeight: 17,
-  },
-  bankGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  bankAppItem: {
-    backgroundColor: '#FAF5EE',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5D5C3',
-    gap: 6,
-  },
-  bankAppItemDesktop: {
-    width: '23.4%',
-  },
-  bankAppItemMobile: {
-    width: '23%',
-  },
-  bankLogoWrap: {
-    position: 'relative',
-    width: 40,
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5D5C3',
-    overflow: 'visible',
-  },
-  bankLogo: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-  },
-  autofillBadge: {
-    position: 'absolute',
-    bottom: -3,
-    right: -3,
-    width: 15,
-    height: 15,
-    borderRadius: 7.5,
-    backgroundColor: '#2E7D32',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  bankShortName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#2C1E14',
-    textAlign: 'center',
-  },
-  bankFeedbackBanner: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    backgroundColor: '#F0FFF4',
-    borderRadius: 12,
-    padding: 11,
-    borderWidth: 1,
-    borderColor: '#BFE3C8',
-  },
-  bankFeedbackText: {
-    fontSize: 12,
-    color: '#1E5622',
-    lineHeight: 17,
-  },
-  bankFeedbackOpenLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#2E7D32',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    flexShrink: 0,
-  },
-  bankFeedbackOpenText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#FAF5EE',
   },
 
   /* Admin Test Box */
