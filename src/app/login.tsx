@@ -371,6 +371,7 @@ export default function LoginScreen() {
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
+                      autoComplete="off"
                     />
                   </View>
                 </Animated.View>
@@ -408,15 +409,22 @@ export default function LoginScreen() {
                       />
                     </View>
                     <TextInput
-                      style={styles.input}
+                      style={[
+                        styles.input,
+                        Platform.OS === 'web' && !showPassword && styles.webPasswordMask,
+                      ]}
                       placeholder={LOGIN_PASSWORD_PLACEHOLDER}
                       placeholderTextColor={COLORS.lightText}
                       value={password}
                       onChangeText={setPassword}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
-                      secureTextEntry={!showPassword}
+                      secureTextEntry={Platform.OS === 'web' ? false : !showPassword}
                       autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      autoComplete="off"
+                      textContentType="oneTimeCode"
                       onSubmitEditing={handleLogin}
                     />
                     <TouchableOpacity
@@ -727,6 +735,9 @@ const styles = StyleSheet.create({
     color: COLORS.darkText,
     paddingVertical: 13,
   },
+  webPasswordMask: {
+    WebkitTextSecurity: 'disc',
+  } as any,
   eyeBtn: {
     padding: SPACING.sm,
   },

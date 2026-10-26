@@ -345,6 +345,7 @@ export default function RegisterScreen() {
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
+                      autoComplete="off"
                     />
                   </View>
                 </View>
@@ -368,15 +369,22 @@ export default function RegisterScreen() {
                       />
                     </View>
                     <TextInput
-                      style={styles.input}
+                      style={[
+                        styles.input,
+                        Platform.OS === 'web' && !showPassword && styles.webPasswordMask,
+                      ]}
                       placeholder="Ít nhất 6 ký tự"
                       placeholderTextColor={COLORS.lightText}
                       value={password}
                       onChangeText={setPassword}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
-                      secureTextEntry={!showPassword}
+                      secureTextEntry={Platform.OS === 'web' ? false : !showPassword}
                       autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      autoComplete="off"
+                      textContentType="oneTimeCode"
                     />
                   </View>
                 </View>
@@ -400,15 +408,22 @@ export default function RegisterScreen() {
                       />
                     </View>
                     <TextInput
-                      style={styles.input}
+                      style={[
+                        styles.input,
+                        Platform.OS === 'web' && !showPassword && styles.webPasswordMask,
+                      ]}
                       placeholder="Nhập lại mật khẩu"
                       placeholderTextColor={COLORS.lightText}
                       value={confirmPassword}
                       onChangeText={setConfirmPassword}
                       onFocus={() => setFocusedField('confirm')}
                       onBlur={() => setFocusedField(null)}
-                      secureTextEntry={!showPassword}
+                      secureTextEntry={Platform.OS === 'web' ? false : !showPassword}
                       autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      autoComplete="off"
+                      textContentType="oneTimeCode"
                       onSubmitEditing={handleRegister}
                     />
                     <TouchableOpacity
@@ -678,6 +693,9 @@ const styles = StyleSheet.create({
     color: COLORS.darkText,
     paddingVertical: 12,
   },
+  webPasswordMask: {
+    WebkitTextSecurity: 'disc',
+  } as any,
   eyeBtn: {
     padding: SPACING.sm,
   },
