@@ -6,14 +6,18 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/services/supabase';
-import type { Session, User } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 
-interface AuthUser {
+const AVATAR_STORAGE_PREFIX = '@tiem_cuon_len_avatar_';
+
+export interface AuthUser {
   id: string;
   email: string;
   name: string;
   role: 'admin' | 'customer';
+  avatar?: string;
 }
 
 interface AuthContextType {
@@ -22,15 +26,17 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   configError: string | null;
+  guestAvatar: string;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  updateProfile: (name: string) => Promise<void>;
+  updateProfile: (name: string, avatar?: string) => Promise<void>;
+  updateAvatar: (avatar: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function toAuthUser(session: Session | null): AuthUser | null {
+function toAuthUser(session: Session | null, localAvatar?: string | null): AuthUser | null {
   if (!session?.user) return null;
   const meta = session.user.user_metadata || {};
   return {
@@ -38,6 +44,7 @@ function toAuthUser(session: Session | null): AuthUser | null {
     email: session.user.email ?? '',
     name: (meta.name as string) ?? '',
     role: (meta.role as 'admin' | 'customer') ?? 'customer',
+    avatar: localAvatar || (meta.avatar as string) || undefined,
   };
 }
 
@@ -48,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [guestAvatar, setGuestAvatar] = useState<string>('capybara');
 
   useEffect(() => {
     let cancelled = false;
@@ -57,9 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       try {
+        const storedGuestAvatar = await AsyncStorage.getItem(`${AVATAR_STORAGE_PREFIX}guest`);
+        if (storedGuestAvatar && !cancelled) {
+          setGuestAvatar(storedGuestAvatar);
+        }
         const { data: { session } } = await supabase.auth.getSession();
         if (!cancelled) {
-          setUser(toAuthUser(session));
+          const localAvatar = session?.user
+            ? await AsyncStorage.getItem(`${AVATAR_STORAGE_PREFIX}${session.user.id}`)
+            : null;
+          setUser(toAuthUser(session, localAvatar));
         }
       } catch (err: unknown) {
         if (__DEV__) console.error('[AUTH] Lỗi getSession:', err);
@@ -75,12 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     init();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        setUser(toAuthUser(session));
-      } else {
-        setUser(toAuthUser(session));
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const localAvatar = session?.user
+        ? await AsyncStorage.getItem(`${AVATAR_STORAGE_PREFIX}${session.user.id}`).catch(() => null)
+        : null;
+      setUser(toAuthUser(session, localAvatar));
     });
 
     return () => {
@@ -106,7 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: 'Email hoặc mật khẩu không đúng.' };
       }
       if (data.session) {
-        setUser(toAuthUser(data.session));
+        const localAvatar = await AsyncStorage.getItem(`${AVATAR_STORAGE_PREFIX}${data.session.user.id}`).catch(() => null);
+        setUser(toAuthUser(data.session, localAvatar));
       }
       return { success: true };
     } catch (err: unknown) {
@@ -125,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: email.toLowerCase().trim(),
         password,
         options: {
-          data: { name: name.trim(), role: 'customer' },
+          data: { name: name.trim(), role: 'customer', avatar: 'capybara' },
         },
       });
 
@@ -163,17 +178,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const updateProfile = useCallback(async (name: string) => {
+  const updateProfile = useCallback(async (name: string, avatar?: string) => {
     if (!user) return;
+    const trimmedName = name.trim();
+    const nextAvatar = avatar ?? user.avatar;
+    setUser((prev) => prev ? { ...prev, name: trimmedName, avatar: nextAvatar } : null);
+    if (nextAvatar) {
+      await AsyncStorage.setItem(`${AVATAR_STORAGE_PREFIX}${user.id}`, nextAvatar).catch(() => {});
+    }
     try {
-      const { error } = await supabase.auth.updateUser({
-        data: { name: name.trim() },
+      await supabase.auth.updateUser({
+        data: { name: trimmedName, ...(nextAvatar ? { avatar: nextAvatar } : {}) },
       });
-      if (!error) {
-        setUser((prev) => prev ? { ...prev, name: name.trim() } : null);
-      }
     } catch (err: unknown) {
       if (__DEV__) console.error('[AUTH] Lỗi updateProfile:', err);
+    }
+  }, [user]);
+
+  const updateAvatar = useCallback(async (avatar: string) => {
+    if (!user) {
+      setGuestAvatar(avatar);
+      await AsyncStorage.setItem(`${AVATAR_STORAGE_PREFIX}guest`, avatar).catch(() => {});
+      return;
+    }
+    setUser((prev) => prev ? { ...prev, avatar } : null);
+    await AsyncStorage.setItem(`${AVATAR_STORAGE_PREFIX}${user.id}`, avatar).catch(() => {});
+    try {
+      await supabase.auth.updateUser({
+        data: { avatar },
+      });
+    } catch (err: unknown) {
+      if (__DEV__) console.error('[AUTH] Lỗi updateAvatar:', err);
     }
   }, [user]);
 
@@ -185,10 +220,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: user !== null,
         isLoading,
         configError,
+        guestAvatar,
         login,
         register,
         logout,
         updateProfile,
+        updateAvatar,
       }}>
       {children}
     </AuthContext.Provider>

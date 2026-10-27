@@ -295,7 +295,7 @@ export function YarnRollIntro() {
           </div>
 
           <div className="yri-sub">
-            Đan từng mũi ấm áp • Gửi trọn yêu thương
+            Đồ len thủ công • Phụ kiện & Quà tặng handmade
           </div>
         </div>
       </div>
@@ -309,7 +309,7 @@ export function YarnRollIntro() {
       style={styles.nativeOverlay}>
       <Text style={styles.nativeEmoji}>🧶</Text>
       <Text style={styles.nativeTitle}>Tiệm Cuộn Len</Text>
-      <Text style={styles.nativeSub}>Đan từng mũi ấm áp • Gửi trọn yêu thương</Text>
+      <Text style={styles.nativeSub}>Đồ len thủ công • Phụ kiện & Quà tặng handmade</Text>
     </TouchableOpacity>
   );
 }

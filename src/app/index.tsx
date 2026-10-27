@@ -334,7 +334,7 @@ export default function HomeScreen() {
                 <Text style={styles.heroBadgeText}>BỘ SƯU TẬP THỦ CÔNG MỚI</Text>
               </View>
               <Text style={[styles.heroTitle, isMobile && styles.heroTitleMobile]}>
-                Đan từng mũi ấm áp,{'\n'}gửi trọn yêu thương 🧶
+                Đồ len thủ công xinh xắn,{'\n'}chăm chút từng chi tiết 🧶
               </Text>
               <Text style={[styles.heroSubtitle, isMobile && styles.heroSubtitleMobile]}>
                 Móc khoá, hoa len, túi xách & quà tặng đan móc tỉ mỉ từ sợi len cotton cao cấp.

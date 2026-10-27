@@ -222,8 +222,8 @@ export function BoutiqueFooter({
             </View>
 
             <Text style={styles.brandBio}>
-              Đan từng mũi ấm áp, gửi trọn yêu thương. Chuyên thú bông, hoa len,
-              túi xách và phụ kiện đan móc thủ công 100% từ sợi len cotton cao cấp.
+              Chuyên móc khoá, thú bông, hoa len, túi xách và phụ kiện đan móc
+              thủ công 100% từ sợi len cotton cao cấp.
             </Text>
 
             <View style={styles.statusRow}>

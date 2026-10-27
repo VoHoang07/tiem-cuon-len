@@ -1,4 +1,4 @@
-import React, { type ComponentType } from 'react';
+import React, { useState, type ComponentType } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import {
   Edit3,
   Sparkles,
   MessageCircle,
+  Check,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useShop } from '@/store/ShopContext';
@@ -33,7 +34,11 @@ import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { useChat } from '@/store/ChatContext';
 import { useLogout } from '@/hooks/useLogout';
-import { BrandAvatar } from '@/components/BrandTitle';
+import {
+  ANIMAL_AVATARS,
+  BrandAvatar,
+  getAnimalAvatar,
+} from '@/components/BrandTitle';
 import {
   COLORS,
   SPACING,
@@ -63,13 +68,59 @@ import {
 export default function ProfileScreen() {
   const router = useRouter();
   const { products, favorites, cart } = useShop();
-  const { user, role } = useAuth();
+  const { user, role, guestAvatar, updateAvatar } = useAuth();
   const { orders, getOrdersByUser } = useOrders();
   const { openChat, unreadCount, conversations } = useChat();
   const { handleLogout } = useLogout();
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+
+  const currentAnimal = getAnimalAvatar(
+    user?.avatar ?? (!user ? guestAvatar : undefined),
+    user?.id || user?.email || user?.name
+  );
 
   const userOrders = user ? getOrdersByUser(user.id) : [];
   const isAdmin = role === 'admin';
+
+  const AvatarPickerBlock = showAvatarPicker ? (
+    <View style={styles.avatarPickerBox}>
+      <Text style={styles.avatarPickerTitle}>Chọn thú cưng đại diện của bạn</Text>
+      <View style={styles.avatarPickerGrid}>
+        {ANIMAL_AVATARS.map((item) => {
+          const active = currentAnimal.id === item.id;
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.avatarPickerItem,
+                { backgroundColor: item.bg },
+                active && [styles.avatarPickerItemActive, { borderColor: item.border }],
+              ]}
+              onPress={() => {
+                updateAvatar(item.id);
+                setShowAvatarPicker(false);
+              }}
+              activeOpacity={0.8}>
+              <Text style={styles.avatarPickerEmoji}>{item.emoji}</Text>
+              <Text
+                style={[
+                  styles.avatarPickerName,
+                  active && styles.avatarPickerNameActive,
+                ]}
+                numberOfLines={1}>
+                {item.name}
+              </Text>
+              {active && (
+                <View style={[styles.avatarPickerCheck, { backgroundColor: item.border }]}>
+                  <Check size={9} color="#FFF" strokeWidth={3} />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  ) : null;
 
   // ─── ADMIN PROFILE ──────────────────────────
   if (isAdmin) {
@@ -103,9 +154,23 @@ export default function ProfileScreen() {
                 <Sparkles size={12} color="#5C4332" />
                 <Text style={styles.roleBadgeText}>QUẢN TRỊ VIÊN TIỆM LEN</Text>
               </View>
-              <View style={styles.adminAvatar}>
+              <TouchableOpacity
+                style={styles.avatarWrapBtn}
+                onPress={() => setShowAvatarPicker((v) => !v)}
+                activeOpacity={0.85}>
                 <BrandAvatar size={88} />
-              </View>
+                <View style={styles.avatarEditBadge}>
+                  <Edit3 size={11} color="#FFFDF9" />
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowAvatarPicker((v) => !v)}
+                activeOpacity={0.75}>
+                <Text style={styles.changeAvatarHint}>
+                  {currentAnimal.emoji} {currentAnimal.name} • Nhấn để đổi thú cưng
+                </Text>
+              </TouchableOpacity>
+              {AvatarPickerBlock}
               <Text style={styles.customerName}>{user?.name || 'Quản trị viên'}</Text>
               {user?.email ? (
                 <View style={styles.emailRow}>
@@ -244,9 +309,23 @@ export default function ProfileScreen() {
                 {user ? 'KHÁCH HÀNG THÂN THIẾT' : 'KHÁCH THĂM TIỆM'}
               </Text>
             </View>
-            <View style={styles.avatar}>
+            <TouchableOpacity
+              style={styles.avatarWrapBtn}
+              onPress={() => setShowAvatarPicker((v) => !v)}
+              activeOpacity={0.85}>
               <BrandAvatar size={86} />
-            </View>
+              <View style={styles.avatarEditBadge}>
+                <Edit3 size={11} color="#FFFDF9" />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowAvatarPicker((v) => !v)}
+              activeOpacity={0.75}>
+              <Text style={styles.changeAvatarHint}>
+                {currentAnimal.emoji} {currentAnimal.name} • Nhấn để đổi thú cưng
+              </Text>
+            </TouchableOpacity>
+            {AvatarPickerBlock}
             <Text style={styles.customerName}>{user?.name || 'Khách hàng'}</Text>
             {user ? (
               <>
@@ -417,30 +496,89 @@ const styles = StyleSheet.create({
     color: '#5C4332',
     letterSpacing: 0.6,
   },
-  avatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#FAF5EE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#C5AC92',
-    marginBottom: SPACING.sm,
-    ...SHADOWS.small,
+  avatarWrapBtn: {
+    position: 'relative',
+    marginBottom: 6,
   },
-  adminAvatar: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
-    borderWidth: 3,
-    borderColor: '#765341',
-    overflow: 'hidden',
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#5C4033',
+    borderWidth: 2,
+    borderColor: '#F3ECE2',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#D8C3AD',
-    marginBottom: SPACING.sm,
-    ...SHADOWS.small,
+  },
+  changeAvatarHint: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6E4F37',
+    marginBottom: 8,
+  },
+  avatarPickerBox: {
+    width: '100%',
+    backgroundColor: '#FFFDF9',
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+  },
+  avatarPickerTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#5C4332',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  avatarPickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  avatarPickerItem: {
+    width: '22.5%',
+    minWidth: 66,
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E8DACB',
+    position: 'relative',
+  },
+  avatarPickerItemActive: {
+    borderWidth: 2.5,
+  },
+  avatarPickerEmoji: {
+    fontSize: 24,
+    marginBottom: 2,
+  },
+  avatarPickerName: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#6E5A4B',
+  },
+  avatarPickerNameActive: {
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  avatarPickerCheck: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   customerName: {
     fontSize: 22,
