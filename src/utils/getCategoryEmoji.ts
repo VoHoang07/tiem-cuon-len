@@ -4,6 +4,10 @@ export function getCategoryEmoji(category: string): string {
   switch (category) {
     case 'Keychains':
       return '🔑';
+    case 'Yarn':
+      return '🧶';
+    case 'Crochet':
+      return '🌻';
     case 'Bags':
       return '👜';
     case 'Dolls':

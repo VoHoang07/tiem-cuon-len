@@ -1,10 +1,70 @@
-import { Category } from '@/types/product';
+import { Category, ProductColorOption, ProductAccessoryOption } from '@/types/product';
 import {
   GEN_CATEGORY_INTRO,
   GEN_ADJECTIVES,
   GEN_MATERIAL_PHRASES,
   GEN_CLOSING_PHRASES,
 } from '@/constants/strings';
+
+const COLOR_HEX_MAP: Record<string, string> = {
+  kem: '#F5EBE0',
+  trắng: '#FAF7F2',
+  hồng: '#F4ACB7',
+  đỏ: '#E63946',
+  vàng: '#FDE047',
+  cam: '#F4A261',
+  xanh: '#B7E4C7',
+  dương: '#93C5FD',
+  tím: '#CDB4DB',
+  nâu: '#A67B5B',
+  đen: '#2B2D42',
+  xám: '#9E9E9E',
+  be: '#D8C3AD',
+};
+
+export function inferColorHex(colorName: string, index: number = 0): string {
+  const lower = colorName.toLowerCase();
+  for (const [kw, hex] of Object.entries(COLOR_HEX_MAP)) {
+    if (lower.includes(kw)) return hex;
+  }
+  const fallbackPalette = ['#F5EBE0', '#F4ACB7', '#B7E4C7', '#FDE68A', '#CDB4DB', '#A67B5B'];
+  return fallbackPalette[index % fallbackPalette.length];
+}
+
+export function parseColorOptionsInput(raw: string): ProductColorOption[] {
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.map((name, idx) => ({
+    id: `c_${idx + 1}`,
+    name,
+    hex: inferColorHex(name, idx),
+  }));
+}
+
+export function parseAccessoryOptionsInput(raw: string): ProductAccessoryOption[] {
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const defaultEmojis = ['🎀', '🍓', '🌼', '✨', '👑', '🧣'];
+  return parts.map((item, idx) => {
+    const plusMatch = item.match(/\(\+?(\d+)k?\)/i);
+    const priceDelta = plusMatch
+      ? Number(plusMatch[1]) < 1000
+        ? Number(plusMatch[1]) * 1000
+        : Number(plusMatch[1])
+      : 0;
+    const cleanName = item.replace(/\(\+?\d+k?\)/i, '').trim();
+    return {
+      id: `a_${idx + 1}`,
+      name: cleanName || item,
+      emoji: defaultEmojis[idx % defaultEmojis.length],
+      priceDelta,
+    };
+  });
+}
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   Keychains: ['keychain', 'móc khoá', 'móc khóa', 'moc khoa', 'charm', 'treo balo', 'chìa khoá', 'chìa khóa'],

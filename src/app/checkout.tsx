@@ -48,10 +48,20 @@ const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: stri
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { mode, productId, quantity: buyNowQty } = useLocalSearchParams<{
+  const {
+    mode,
+    productId,
+    quantity: buyNowQty,
+    selectedColor,
+    selectedAccessory,
+    unitPrice,
+  } = useLocalSearchParams<{
     mode?: string;
     productId?: string;
     quantity?: string;
+    selectedColor?: string;
+    selectedAccessory?: string;
+    unitPrice?: string;
   }>();
   const isBuyNow = mode === 'buyNow';
 
@@ -64,8 +74,17 @@ export default function CheckoutScreen() {
   // Compute buyNow product
   const buyNowProduct = useMemo(() => {
     if (!isBuyNow || !productId) return null;
-    return products.find((p) => p.id === productId) ?? null;
-  }, [isBuyNow, productId, products]);
+    const base = products.find((p) => p.id === productId) ?? null;
+    if (!base) return null;
+    const suffixParts = [selectedColor, selectedAccessory].filter(Boolean);
+    const parsedPrice = unitPrice ? parseInt(unitPrice, 10) : NaN;
+    return {
+      ...base,
+      name: suffixParts.length > 0 ? `${base.name} (${suffixParts.join(' - ')})` : base.name,
+      color: selectedColor || base.color,
+      price: !isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : base.price,
+    };
+  }, [isBuyNow, productId, products, selectedColor, selectedAccessory, unitPrice]);
 
   const buyNowQtyNum = parseInt(buyNowQty ?? '1', 10) || 1;
 

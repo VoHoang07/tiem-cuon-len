@@ -10,8 +10,86 @@ import { Product, Review } from '@/types/product';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 
-const PAGE_SIZE = 20;
-const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v3';
+const PAGE_SIZE = 50;
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v6';
+const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
+
+function getDeletedIds(): Set<string> {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(DELETED_IDS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Set(parsed);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return new Set();
+}
+
+function saveDeletedIds(ids: Set<string>) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify([...ids]));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
+  const deletedIds = getDeletedIds();
+  const mockById = new Map<string, Product>();
+  const mockByName = new Map<string, Product>();
+  for (const mp of MOCK_PRODUCTS) {
+    mockById.set(mp.id, mp);
+    mockByName.set(mp.name.trim().toLowerCase(), mp);
+  }
+
+  const seenMockIds = new Set<string>();
+  const merged: Product[] = [];
+
+  for (const item of remoteOrCached) {
+    if (deletedIds.has(item.id)) continue;
+    const matchedMock =
+      mockById.get(item.id) || mockByName.get(item.name.trim().toLowerCase());
+
+    if (matchedMock) {
+      seenMockIds.add(matchedMock.id);
+      merged.push({
+        ...matchedMock,
+        ...item,
+        // Ensure updated category, local image fallback, and rich variants from MOCK_PRODUCTS are preserved
+        category: matchedMock.category,
+        image: item.image || matchedMock.image,
+        gallery:
+          item.gallery && item.gallery.length > 0
+            ? item.gallery
+            : matchedMock.gallery,
+        colorOptions:
+          item.colorOptions && item.colorOptions.length > 0
+            ? item.colorOptions
+            : matchedMock.colorOptions,
+        accessoryOptions:
+          item.accessoryOptions && item.accessoryOptions.length > 0
+            ? item.accessoryOptions
+            : matchedMock.accessoryOptions,
+      });
+    } else {
+      merged.push(item);
+    }
+  }
+
+  for (const mp of MOCK_PRODUCTS) {
+    if (!seenMockIds.has(mp.id) && !deletedIds.has(mp.id)) {
+      merged.push(mp);
+    }
+  }
+
+  return merged;
+}
 
 function loadCachedProducts(): Product[] {
   try {
@@ -20,14 +98,14 @@ function loadCachedProducts(): Product[] {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed as Product[];
+          return mergeWithMockProducts(parsed as Product[]);
         }
       }
     }
   } catch {
     // ignore storage errors
   }
-  return MOCK_PRODUCTS;
+  return mergeWithMockProducts(MOCK_PRODUCTS);
 }
 
 function saveCachedProducts(items: Product[]) {
@@ -116,8 +194,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (cancelled) return;
         if (data && data.length > 0) {
-          setProducts(data);
-          saveCachedProducts(data);
+          const merged = mergeWithMockProducts(data);
+          setProducts(merged);
+          saveCachedProducts(merged);
         }
         setLoaded(true);
       })
@@ -133,7 +212,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     const nextPage = page + 1;
     const data = await fetchProducts(nextPage);
     if (data && data.length > 0) {
-      setProducts((prev) => [...prev, ...data]);
+      setProducts((prev) => mergeWithMockProducts([...prev, ...data]));
       setPage(nextPage);
     }
   }, [page, fetchProducts]);
@@ -142,8 +221,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     setPage(0);
     const data = await fetchProducts(0);
     if (data && data.length > 0) {
-      setProducts(data);
-      saveCachedProducts(data);
+      const merged = mergeWithMockProducts(data);
+      setProducts(merged);
+      saveCachedProducts(merged);
     }
   }, [fetchProducts]);
 
@@ -153,7 +233,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       saveCachedProducts(next);
       return next;
     });
-    const { isFavorite, ...dbProduct } = product;
+    const { isFavorite, gallery, colorOptions, accessoryOptions, ...dbProduct } = product;
     supabase.from('products').insert(dbProduct).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm sản phẩm:', error.message);
     }, () => {});
@@ -165,13 +245,16 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       saveCachedProducts(next);
       return next;
     });
-    const { isFavorite, ...dbProduct } = product;
+    const { isFavorite, gallery, colorOptions, accessoryOptions, ...dbProduct } = product;
     supabase.from('products').update(dbProduct).eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa sản phẩm:', error.message);
     }, () => {});
   }, []);
 
   const removeProduct = useCallback((id: string) => {
+    const deleted = getDeletedIds();
+    deleted.add(id);
+    saveDeletedIds(deleted);
     setProducts((prev) => {
       const next = prev.filter((p) => p.id !== id);
       saveCachedProducts(next);

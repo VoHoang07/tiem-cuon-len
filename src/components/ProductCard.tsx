@@ -184,6 +184,37 @@ export function ProductCard({
             {product.name}
           </Text>
 
+          {((product.colorOptions && product.colorOptions.length > 0) ||
+            (product.accessoryOptions && product.accessoryOptions.length > 0)) && (
+            <View style={styles.variantsPreviewRow}>
+              {product.colorOptions && product.colorOptions.length > 0 && (
+                <View style={styles.colorDotsRow}>
+                  {product.colorOptions.slice(0, 4).map((c) => (
+                    <View
+                      key={c.id}
+                      style={[
+                        styles.colorDot,
+                        { backgroundColor: c.hex },
+                      ]}
+                    />
+                  ))}
+                  {product.colorOptions.length > 4 && (
+                    <Text style={styles.moreVariantsText}>
+                      +{product.colorOptions.length - 4}
+                    </Text>
+                  )}
+                </View>
+              )}
+              {product.accessoryOptions && product.accessoryOptions.length > 0 && (
+                <View style={styles.accessoryCountBadge}>
+                  <Text style={styles.accessoryCountText} numberOfLines={1}>
+                    {product.accessoryOptions[0]?.emoji || '🎀'} {product.accessoryOptions.length} phụ kiện
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           <View style={styles.metaRow}>
             <View style={styles.ratingBadge}>
               <Text style={styles.ratingStar}>★</Text>
@@ -320,6 +351,44 @@ const styles = StyleSheet.create({
     color: COLORS.darkText,
     lineHeight: 19,
     minHeight: 38,
+  },
+  variantsPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    marginTop: 1,
+  },
+  colorDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  colorDot: {
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(61, 43, 31, 0.25)',
+  },
+  moreVariantsText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: COLORS.mediumText,
+  },
+  accessoryCountBadge: {
+    backgroundColor: '#F3ECE2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    maxWidth: '58%',
+  },
+  accessoryCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5C4332',
   },
   metaRow: {
     flexDirection: 'row',

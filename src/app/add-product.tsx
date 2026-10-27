@@ -18,7 +18,12 @@ import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { Product, Category, Review } from '@/types/product';
 import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
-import { generateProductDescription, inferCategory } from '@/utils/generateProductDescription';
+import {
+  generateProductDescription,
+  inferCategory,
+  parseColorOptionsInput,
+  parseAccessoryOptionsInput,
+} from '@/utils/generateProductDescription';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   AP_TITLE,
@@ -72,6 +77,8 @@ export default function AddProductScreen() {
   const [category, setCategory] = useState<Category>('Crochet');
   const [material, setMaterial] = useState('');
   const [color, setColor] = useState('');
+  const [colorVariantsInput, setColorVariantsInput] = useState('');
+  const [accessoryVariantsInput, setAccessoryVariantsInput] = useState('');
   const [quantity, setQuantity] = useState('');
   const [tags, setTags] = useState('');
   const [description, setDescription] = useState('');
@@ -153,6 +160,8 @@ export default function AddProductScreen() {
     setCategory('Crochet');
     setMaterial('');
     setColor('');
+    setColorVariantsInput('');
+    setAccessoryVariantsInput('');
     setQuantity('');
     setTags('');
     setDescription('');
@@ -185,6 +194,11 @@ export default function AddProductScreen() {
       return;
     }
 
+    const parsedColors = parseColorOptionsInput(
+      colorVariantsInput.trim() || color.trim()
+    );
+    const parsedAccessories = parseAccessoryOptionsInput(accessoryVariantsInput);
+
     const newProduct: Product = {
       id: `user_${Date.now()}`,
       name: name.trim(),
@@ -194,6 +208,8 @@ export default function AddProductScreen() {
       category,
       material: material.trim(),
       color: color.trim(),
+      colorOptions: parsedColors.length > 0 ? parsedColors : undefined,
+      accessoryOptions: parsedAccessories.length > 0 ? parsedAccessories : undefined,
       quantity: Number(quantity),
       rating: 5,
       reviews: [],
@@ -348,6 +364,20 @@ export default function AddProductScreen() {
             value={color}
             onChangeText={setColor}
             placeholder={AP_COLOR_PLACEHOLDER}
+          />
+
+          <FormField
+            label="Các màu tuỳ chọn (cách nhau bằng dấu phẩy)"
+            value={colorVariantsInput}
+            onChangeText={setColorVariantsInput}
+            placeholder="VD: Kem Sữa, Hồng Đào, Xanh Bơ, Tím Khoai Môn"
+          />
+
+          <FormField
+            label="Phụ kiện phối kèm (cách nhau bằng dấu phẩy)"
+            value={accessoryVariantsInput}
+            onChangeText={setAccessoryVariantsInput}
+            placeholder="VD: Ôm dâu tây, Đeo nơ lụa (+5k), Đội mũ hoa (+10k)"
           />
 
           <FormField

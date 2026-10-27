@@ -240,7 +240,17 @@ export function BoutiqueFooter({
             <TouchableOpacity
               style={styles.footerLinkBtn}
               onPress={() => handleCategoryPress('All')}>
-              <Text style={styles.footerLinkText}>🧶 Tất cả sản phẩm</Text>
+              <Text style={styles.footerLinkText}>✨ Tất cả sản phẩm (30 mẫu)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.footerLinkBtn}
+              onPress={() => handleCategoryPress('Keychains')}>
+              <Text style={styles.footerLinkText}>🔑 Móc khoá len đáng yêu</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.footerLinkBtn}
+              onPress={() => handleCategoryPress('Yarn')}>
+              <Text style={styles.footerLinkText}>🧶 Len cuộn & Nguyên liệu</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}
@@ -249,18 +259,13 @@ export function BoutiqueFooter({
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}
-              onPress={() => handleCategoryPress('Dolls')}>
-              <Text style={styles.footerLinkText}>🧸 Thú bông & Búp bê len</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.footerLinkBtn}
               onPress={() => handleCategoryPress('Bags')}>
               <Text style={styles.footerLinkText}>👜 Túi xách & Ví len</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}
-              onPress={() => handleCategoryPress('Keychains')}>
-              <Text style={styles.footerLinkText}>🔑 Móc khoá len đáng yêu</Text>
+              onPress={() => handleCategoryPress('Dolls')}>
+              <Text style={styles.footerLinkText}>🧸 Thú bông & Búp bê len</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}

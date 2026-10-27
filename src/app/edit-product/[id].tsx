@@ -18,7 +18,12 @@ import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { Product, Category } from '@/types/product';
 import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
-import { generateProductDescription, inferCategory } from '@/utils/generateProductDescription';
+import {
+  generateProductDescription,
+  inferCategory,
+  parseColorOptionsInput,
+  parseAccessoryOptionsInput,
+} from '@/utils/generateProductDescription';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   AP_TITLE,
@@ -71,6 +76,8 @@ export default function EditProductScreen() {
   const [category, setCategory] = useState<Category>('Crochet');
   const [material, setMaterial] = useState('');
   const [color, setColor] = useState('');
+  const [colorVariantsInput, setColorVariantsInput] = useState('');
+  const [accessoryVariantsInput, setAccessoryVariantsInput] = useState('');
   const [quantity, setQuantity] = useState('');
   const [tags, setTags] = useState('');
   const [description, setDescription] = useState('');
@@ -84,6 +91,18 @@ export default function EditProductScreen() {
       setCategory(existingProduct.category);
       setMaterial(existingProduct.material);
       setColor(existingProduct.color);
+      setColorVariantsInput(
+        existingProduct.colorOptions?.map((c) => c.name).join(', ') ?? ''
+      );
+      setAccessoryVariantsInput(
+        existingProduct.accessoryOptions
+          ?.map((a) =>
+            a.priceDelta && a.priceDelta > 0
+              ? `${a.name} (+${Math.round(a.priceDelta / 1000)}k)`
+              : a.name
+          )
+          .join(', ') ?? ''
+      );
       setQuantity(existingProduct.quantity.toString());
       setTags(existingProduct.tags.join(', '));
       setDescription(existingProduct.description);
@@ -195,6 +214,11 @@ export default function EditProductScreen() {
       return;
     }
 
+    const parsedColors = parseColorOptionsInput(
+      colorVariantsInput.trim() || color.trim()
+    );
+    const parsedAccessories = parseAccessoryOptionsInput(accessoryVariantsInput);
+
     const updatedProduct: Product = {
       ...existingProduct,
       name: name.trim(),
@@ -204,6 +228,12 @@ export default function EditProductScreen() {
       category,
       material: material.trim(),
       color: color.trim(),
+      colorOptions:
+        parsedColors.length > 0 ? parsedColors : existingProduct.colorOptions,
+      accessoryOptions:
+        parsedAccessories.length > 0
+          ? parsedAccessories
+          : existingProduct.accessoryOptions,
       quantity: Number(quantity),
       tags: tags
         .split(',')
@@ -308,6 +338,18 @@ export default function EditProductScreen() {
 
           <FormField label={AP_MATERIAL} value={material} onChangeText={setMaterial} placeholder={AP_MATERIAL_PLACEHOLDER} />
           <FormField label={AP_COLOR_FIELD} value={color} onChangeText={setColor} placeholder={AP_COLOR_PLACEHOLDER} />
+          <FormField
+            label="Các màu tuỳ chọn (cách nhau bằng dấu phẩy)"
+            value={colorVariantsInput}
+            onChangeText={setColorVariantsInput}
+            placeholder="VD: Kem Sữa, Hồng Đào, Xanh Bơ, Tím Khoai Môn"
+          />
+          <FormField
+            label="Phụ kiện phối kèm (cách nhau bằng dấu phẩy)"
+            value={accessoryVariantsInput}
+            onChangeText={setAccessoryVariantsInput}
+            placeholder="VD: Ôm dâu tây, Đeo nơ lụa (+5k), Đội mũ hoa (+10k)"
+          />
           <FormField label={AP_QUANTITY} value={quantity} onChangeText={setQuantity} placeholder={AP_QUANTITY_PLACEHOLDER} keyboardType="numeric" />
           <FormField label={AP_TAGS_LABEL} value={tags} onChangeText={setTags} placeholder={AP_TAGS_PLACEHOLDER} />
 

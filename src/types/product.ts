@@ -7,15 +7,45 @@ export interface Review {
   date: string;
 }
 
+export interface ProductColorOption {
+  id: string;
+  name: string;
+  hex: string;
+  secondaryHex?: string;
+  image?: string | null;
+}
+
+export interface ProductAccessoryOption {
+  id: string;
+  name: string;
+  emoji?: string;
+  priceDelta?: number;
+  image?: string | null;
+}
+
+export interface ProductGalleryItem {
+  id: string;
+  label: string;
+  angleTag: string;
+  image: string | null;
+  colorId?: string;
+  accessoryId?: string;
+  tintHex?: string;
+  zoomMode?: 'normal' | 'closeup' | 'detail' | 'angleLeft' | 'angleRight';
+}
+
 export interface Product {
   id: string;
   name: string;
   description: string;
   price: number;
   image: string | null;
+  gallery?: ProductGalleryItem[];
   category: Category;
   material: string;
   color: string;
+  colorOptions?: ProductColorOption[];
+  accessoryOptions?: ProductAccessoryOption[];
   quantity: number;
   rating: number;
   reviews: Review[];
@@ -36,4 +66,6 @@ export type Category =
 export interface CartItem {
   product: Product;
   quantity: number;
+  selectedColor?: string;
+  selectedAccessory?: string;
 }
