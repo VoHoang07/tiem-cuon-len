@@ -191,46 +191,42 @@ export default function ProductDetailScreen() {
     setActiveGalleryIndex(idx);
     const item = galleryItems[idx];
     if (item?.colorId) setSelectedColorId(item.colorId);
-    if (item?.accessoryId) setSelectedAccessoryId(item.accessoryId);
   };
 
-  const handleSelectColor = (colorOpt: ProductColorOption, idx: number) => {
+  const handleSelectColor = (colorOpt: ProductColorOption) => {
     setSelectedColorId(colorOpt.id);
-    // Sync matching accessory index if available so photo & accessory stay harmonious
-    if (accessoryOptions[idx]) {
-      setSelectedAccessoryId(accessoryOptions[idx].id);
-    }
-    const matchIdx = galleryItems.findIndex((g) => g.colorId === colorOpt.id);
+    const matchIdx = galleryItems.findIndex(
+      (g) => g.colorId === colorOpt.id && g.zoomMode !== 'closeup'
+    );
     if (matchIdx !== -1) {
       setActiveGalleryIndex(matchIdx);
     }
   };
 
-  const handleSelectAccessory = (accOpt: ProductAccessoryOption, idx: number) => {
+  const handleSelectAccessory = (accOpt: ProductAccessoryOption) => {
+    // Attach accessory to the currently selected color without changing the selected color or swapping to another color's photo
     setSelectedAccessoryId(accOpt.id);
-    if (colorOptions[idx]) {
-      setSelectedColorId(colorOptions[idx].id);
-    }
-    const matchIdx = galleryItems.findIndex((g) => g.accessoryId === accOpt.id);
-    if (matchIdx !== -1) {
-      setActiveGalleryIndex(matchIdx);
-    }
   };
 
   const accessoryDelta = activeAccessory?.priceDelta ?? 0;
   const effectivePrice = product.price + accessoryDelta;
 
   const buildVariantProduct = (): Product => {
-    const suffixParts = [
-      activeColor?.name,
-      activeAccessory?.name,
-    ].filter(Boolean);
-    const variantLabel = suffixParts.join(' - ');
+    const colorId = activeColor?.id ?? 'c1';
+    const accId = activeAccessory?.id ?? 'a1';
+    const variantId = `${product.id}__${colorId}__${accId}`;
     return {
       ...product,
-      name: variantLabel ? `${product.name} (${variantLabel})` : product.name,
+      id: variantId,
+      baseProductId: product.id,
       color: activeColor ? activeColor.name : product.color,
-      image: activeColor?.image || currentGalleryItem?.image || product.image,
+      selectedColorId: activeColor?.id,
+      selectedColorName: activeColor?.name ?? product.color,
+      selectedColorHex: activeColor?.hex,
+      selectedAccessoryId: activeAccessory?.id,
+      selectedAccessoryName: activeAccessory?.name,
+      selectedAccessoryEmoji: activeAccessory?.emoji,
+      image: activeColor?.image || product.image,
       price: effectivePrice,
     };
   };
@@ -322,13 +318,10 @@ export default function ProductDetailScreen() {
     );
   };
 
-  const activeDisplayImage =
-    currentGalleryItem?.image ||
-    activeColor?.image ||
-    activeAccessory?.image ||
-    product.image;
-
   const isCloseupZoom = currentGalleryItem?.zoomMode === 'closeup';
+  const activeDisplayImage = isCloseupZoom
+    ? activeColor?.image || currentGalleryItem?.image || product.image
+    : activeColor?.image || currentGalleryItem?.image || product.image;
   const relatedNumColumns = windowWidth >= 900 ? 4 : windowWidth >= 620 ? 3 : 2;
 
   return (
@@ -451,6 +444,15 @@ export default function ProductDetailScreen() {
                 </>
               )}
 
+              {activeAccessory && (
+                <View style={styles.attachedAccessoryPill}>
+                  <Text style={styles.attachedAccessoryText} numberOfLines={1}>
+                    {activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}
+                    Kèm: {activeAccessory.name}
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.counterPill}>
                 <Text style={styles.counterPillText}>
                   {safeGalleryIndex + 1} / {galleryItems.length}
@@ -561,7 +563,7 @@ export default function ProductDetailScreen() {
                   </Text>
                 </Text>
                 <View style={styles.pillWrap}>
-                  {colorOptions.map((c, idx) => {
+                  {colorOptions.map((c) => {
                     const isSelected = activeColor?.id === c.id;
                     return (
                       <TouchableOpacity
@@ -570,7 +572,7 @@ export default function ProductDetailScreen() {
                           styles.optionPill,
                           isSelected && styles.optionPillSelected,
                         ]}
-                        onPress={() => handleSelectColor(c, idx)}
+                        onPress={() => handleSelectColor(c)}
                         activeOpacity={0.8}>
                         <View
                           style={[
@@ -592,39 +594,47 @@ export default function ProductDetailScreen() {
               </View>
             )}
 
-            {/* 2. Compact Accessory Pill Selector */}
+            {/* 2. Responsive Accessory Selector (Attaches to Selected Color, Never Overflows on Mobile) */}
             {accessoryOptions.length > 0 && (
               <View style={styles.selectorGroup}>
                 <Text style={styles.selectorLabel}>
-                  Phụ kiện đi kèm:{' '}
+                  Phụ kiện gắn kèm ({activeColor?.name ?? product.color}):{' '}
                   <Text style={styles.selectorValue}>
                     {activeAccessory?.name ?? 'Nguyên bản'}
                   </Text>
                 </Text>
-                <View style={styles.pillWrap}>
-                  {accessoryOptions.map((acc, idx) => {
+                <View style={styles.accessoryList}>
+                  {accessoryOptions.map((acc) => {
                     const isSelected = activeAccessory?.id === acc.id;
                     return (
                       <TouchableOpacity
                         key={acc.id}
                         style={[
-                          styles.optionPill,
-                          isSelected && styles.optionPillSelected,
+                          styles.accessoryRowBtn,
+                          isSelected && styles.accessoryRowBtnSelected,
                         ]}
-                        onPress={() => handleSelectAccessory(acc, idx)}
+                        onPress={() => handleSelectAccessory(acc)}
                         activeOpacity={0.8}>
-                        <Text style={styles.optionEmoji}>
-                          {acc.emoji || '🎀'}
-                        </Text>
+                        <View style={styles.accessoryRowLeft}>
+                          <Text style={styles.optionEmoji}>
+                            {acc.emoji || '🎀'}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.accessoryRowLabel,
+                              isSelected && styles.optionPillTextSelected,
+                            ]}>
+                            {acc.name}
+                          </Text>
+                        </View>
                         <Text
                           style={[
-                            styles.optionPillText,
-                            isSelected && styles.optionPillTextSelected,
+                            styles.accessoryRowPrice,
+                            isSelected && styles.accessoryRowPriceSelected,
                           ]}>
-                          {acc.name}
                           {acc.priceDelta && acc.priceDelta > 0
-                            ? ` (+${formatVND(acc.priceDelta)})`
-                            : ''}
+                            ? `+${formatVND(acc.priceDelta)}`
+                            : 'Miễn phí'}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -1056,6 +1066,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#5C4738',
   },
+  attachedAccessoryPill: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    maxWidth: '72%',
+    backgroundColor: 'rgba(255, 253, 249, 0.92)',
+    borderWidth: 1,
+    borderColor: '#E6DDD0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  attachedAccessoryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4A3728',
+  },
   thumbRow: {
     flexDirection: 'row',
     gap: 10,
@@ -1166,6 +1193,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF6F0',
     borderWidth: 1,
     borderColor: '#E6DDD0',
+    maxWidth: '100%',
   },
   optionPillSelected: {
     backgroundColor: '#F1E7DA',
@@ -1179,15 +1207,66 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(61,43,31,0.18)',
   },
   optionEmoji: {
-    fontSize: 14,
+    fontSize: 15,
   },
   optionPillText: {
     fontSize: 13.5,
     color: '#5C4738',
     fontWeight: '500',
+    flexShrink: 1,
   },
   optionPillTextSelected: {
     color: '#3D2B1F',
+    fontWeight: '700',
+  },
+  accessoryList: {
+    width: '100%',
+    gap: 8,
+  },
+  accessoryRowBtn: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#FAF6F0',
+    borderWidth: 1,
+    borderColor: '#E6DDD0',
+  },
+  accessoryRowBtnSelected: {
+    backgroundColor: '#F1E7DA',
+    borderColor: '#6E4F37',
+  },
+  accessoryRowLeft: {
+    flex: 1,
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  accessoryRowLabel: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 13.5,
+    color: '#5C4738',
+    fontWeight: '500',
+    lineHeight: 19,
+  },
+  accessoryRowPrice: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#8C7A6B',
+    backgroundColor: '#F2ECE1',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  accessoryRowPriceSelected: {
+    color: '#3D2B1F',
+    backgroundColor: '#E4D5C3',
     fontWeight: '700',
   },
 

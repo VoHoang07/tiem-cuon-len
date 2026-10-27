@@ -11,6 +11,7 @@ import { Platform, AppState } from 'react-native';
 import { Product, CartItem } from '@/types/product';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
+import { MOCK_PRODUCTS } from '@/data/products';
 
 interface CartContextType {
   cart: CartItem[];
@@ -30,6 +31,65 @@ function getCartOwnerId(user: { id: string; email: string } | null): string {
   return user?.id || 'guest';
 }
 
+function getBaseProductId(productId: string, baseProductId?: string): string {
+  if (baseProductId) return baseProductId;
+  return productId.split('__')[0];
+}
+
+function rehydrateCartItem(ci: CartItem): CartItem {
+  if (!ci || !ci.product) return ci;
+  const p = ci.product;
+  const baseId = getBaseProductId(p.id, p.baseProductId);
+  const parts = p.id.split('__');
+  const parsedColorId = p.selectedColorId || (parts.length >= 2 ? parts[1] : undefined);
+  const parsedAccId = p.selectedAccessoryId || (parts.length >= 3 ? parts[2] : undefined);
+
+  const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
+  if (!mock) return ci;
+
+  const colorOpt =
+    mock.colorOptions?.find((c) => c.id === parsedColorId) ||
+    mock.colorOptions?.find(
+      (c) =>
+        c.name.toLowerCase() ===
+        (p.selectedColorName || p.color || '').trim().toLowerCase()
+    ) ||
+    mock.colorOptions?.[0];
+
+  const accOpt =
+    mock.accessoryOptions?.find((a) => a.id === parsedAccId) ||
+    mock.accessoryOptions?.find(
+      (a) =>
+        a.name.toLowerCase() === (p.selectedAccessoryName || '').trim().toLowerCase()
+    ) ||
+    mock.accessoryOptions?.[0];
+
+  const resolvedImage = colorOpt?.image || p.image || mock.image;
+  const resolvedPrice =
+    p.price && p.price >= mock.price
+      ? p.price
+      : mock.price + (accOpt?.priceDelta ?? 0);
+
+  return {
+    ...ci,
+    selectedColor: p.selectedColorName || colorOpt?.name || ci.selectedColor,
+    selectedAccessory:
+      p.selectedAccessoryName || accOpt?.name || ci.selectedAccessory,
+    product: {
+      ...p,
+      baseProductId: baseId,
+      image: resolvedImage,
+      price: resolvedPrice,
+      selectedColorId: colorOpt?.id ?? parsedColorId,
+      selectedColorName: p.selectedColorName || colorOpt?.name || p.color,
+      selectedColorHex: p.selectedColorHex || colorOpt?.hex,
+      selectedAccessoryId: accOpt?.id ?? parsedAccId,
+      selectedAccessoryName: p.selectedAccessoryName || accOpt?.name,
+      selectedAccessoryEmoji: p.selectedAccessoryEmoji || accOpt?.emoji,
+    },
+  };
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -44,7 +104,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const raw = window.localStorage.getItem(`cart_${cartOwnerId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed as CartItem[];
+        if (Array.isArray(parsed)) {
+          return (parsed as CartItem[]).map(rehydrateCartItem);
+        }
       }
     } catch {
       // ignore
@@ -52,15 +114,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return null;
   }, [cartOwnerId]);
 
-  const persistCart = useCallback((items: CartItem[]) => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(`cart_${cartOwnerId}`, JSON.stringify(items));
+  const persistCart = useCallback(
+    (items: CartItem[]) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(`cart_${cartOwnerId}`, JSON.stringify(items));
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-  }, [cartOwnerId]);
+    },
+    [cartOwnerId]
+  );
 
   const fetchCart = useCallback(async () => {
     if (!user) return;
@@ -71,7 +136,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const rawGuest = window.localStorage.getItem('cart_guest');
         if (rawGuest) {
           const parsed = JSON.parse(rawGuest);
-          if (Array.isArray(parsed)) guestCart = parsed as CartItem[];
+          if (Array.isArray(parsed)) {
+            guestCart = (parsed as CartItem[]).map(rehydrateCartItem);
+          }
           window.localStorage.removeItem('cart_guest');
         }
       }
@@ -79,35 +146,39 @@ export function CartProvider({ children }: { children: ReactNode }) {
       // ignore
     }
 
-    const { data } = await supabase
-      .from('cart_items')
-      .select('productId, quantity')
-      .eq('userId', user.id);
+    // Prefer rich localStorage cart (which preserves exact color & accessory variants)
+    const localCart = hydrateCartFromStorage();
+    let baseItems: CartItem[] = localCart && localCart.length > 0 ? localCart : [];
 
-    let baseItems: CartItem[] = [];
+    if (baseItems.length === 0) {
+      const { data } = await supabase
+        .from('cart_items')
+        .select('productId, quantity')
+        .eq('userId', user.id);
 
-    if (data && data.length > 0) {
-      const cartRows = data as { productId: string; quantity: number }[];
-      const productIds = [...new Set(cartRows.map((r) => r.productId))];
+      if (data && data.length > 0) {
+        const cartRows = data as { productId: string; quantity: number }[];
+        const productIds = [...new Set(cartRows.map((r) => r.productId))];
 
-      const { data: products } = await supabase
-        .from('products')
-        .select('*')
-        .in('id', productIds);
+        const { data: products } = await supabase
+          .from('products')
+          .select('*')
+          .in('id', productIds);
 
-      const productMap = new Map((products ?? []).map((p) => [p.id, p]));
+        const productMap = new Map((products ?? []).map((p) => [p.id, p]));
 
-      baseItems = cartRows
-        .map((ci) => {
-          const product = productMap.get(ci.productId);
-          if (!product) return null;
-          return { product: product as Product, quantity: ci.quantity };
-        })
-        .filter((ci): ci is CartItem => ci !== null && ci.quantity > 0);
-    } else {
-      const localCart = hydrateCartFromStorage();
-      if (localCart && localCart.length > 0) {
-        baseItems = localCart;
+        baseItems = cartRows
+          .map((ci) => {
+            const baseId = getBaseProductId(ci.productId);
+            const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
+            const product = (productMap.get(ci.productId) || mock) as Product | undefined;
+            if (!product) return null;
+            return rehydrateCartItem({
+              product: { ...product, id: ci.productId },
+              quantity: ci.quantity,
+            });
+          })
+          .filter((ci): ci is CartItem => ci !== null && ci.quantity > 0);
       }
     }
 
@@ -120,21 +191,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const existing = mergedMap.get(gItem.product.id);
         if (existing) {
           existing.quantity += gItem.quantity;
+          existing.product = gItem.product;
         } else {
           mergedMap.set(gItem.product.id, { ...gItem });
         }
       }
       baseItems = Array.from(mergedMap.values());
-
-      for (const item of baseItems) {
-        supabase
-          .from('cart_items')
-          .upsert(
-            { userId: user.id, productId: item.product.id, quantity: item.quantity },
-            { onConflict: 'userId,productId' },
-          )
-          .then(() => {}, () => {});
-      }
     }
 
     setCart(baseItems);
@@ -143,7 +205,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [user, persistCart, hydrateCartFromStorage]);
 
   useEffect(() => {
-    if (prevOwnerId.current && prevOwnerId.current !== cartOwnerId && prevOwnerId.current !== 'guest') {
+    if (
+      prevOwnerId.current &&
+      prevOwnerId.current !== cartOwnerId &&
+      prevOwnerId.current !== 'guest'
+    ) {
       setCart([]);
       setCartHydrated(false);
     }
@@ -167,23 +233,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const handlePageShow = (e: PageTransitionEvent) => {
         if (e.persisted) {
-          if (user) {
-            fetchCart();
-          } else {
-            const localCart = hydrateCartFromStorage();
-            if (localCart) setCart(localCart);
-          }
+          const localCart = hydrateCartFromStorage();
+          if (localCart) setCart(localCart);
         }
       };
 
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
-          if (user) {
-            fetchCart();
-          } else {
-            const localCart = hydrateCartFromStorage();
-            if (localCart) setCart(localCart);
-          }
+          const localCart = hydrateCartFromStorage();
+          if (localCart) setCart(localCart);
         }
       };
 
@@ -195,85 +253,127 @@ export function CartProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    // Native: rehydrate cart when app comes to foreground
     const sub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        if (user) {
-          fetchCart();
-        } else {
-          const localCart = hydrateCartFromStorage();
-          if (localCart) setCart(localCart);
-        }
+        const localCart = hydrateCartFromStorage();
+        if (localCart) setCart(localCart);
       }
     });
 
     return () => sub.remove();
-  }, [user, fetchCart, hydrateCartFromStorage]);
+  }, [hydrateCartFromStorage]);
 
   const refetchCart = useCallback(async () => {
-    if (user) {
+    const localCart = hydrateCartFromStorage();
+    if (localCart) {
+      setCart(localCart);
+    } else if (user) {
       await fetchCart();
-    } else {
-      const localCart = hydrateCartFromStorage();
-      if (localCart) setCart(localCart);
     }
   }, [user, fetchCart, hydrateCartFromStorage]);
 
-  const syncCartToSupabase = useCallback(async (productId: string, quantity: number | null) => {
-    if (!user) return;
-    if (quantity === null || quantity <= 0) {
-      await supabase.from('cart_items').delete().eq('userId', user.id).eq('productId', productId);
-    } else {
-      await supabase.from('cart_items').upsert(
-        { userId: user.id, productId, quantity },
-        { onConflict: 'userId,productId' },
+  const syncCartToSupabase = useCallback(
+    async (productId: string, quantity: number | null) => {
+      if (!user) return;
+      const baseId = getBaseProductId(productId);
+      try {
+        if (quantity === null || quantity <= 0) {
+          await supabase
+            .from('cart_items')
+            .delete()
+            .eq('userId', user.id)
+            .eq('productId', baseId);
+        } else {
+          await supabase.from('cart_items').upsert(
+            { userId: user.id, productId: baseId, quantity },
+            { onConflict: 'userId,productId' }
+          );
+        }
+      } catch {
+        // ignore if productId is local-only mock ID
+      }
+    },
+    [user]
+  );
+
+  const addToCart = useCallback(
+    async (product: Product, quantity: number) => {
+      let newQty = quantity;
+      const rehydrated = rehydrateCartItem({
+        product,
+        quantity,
+        selectedColor: product.selectedColorName || product.color,
+        selectedAccessory: product.selectedAccessoryName,
+      });
+
+      const nextCart = produceNewCart(
+        cart,
+        rehydrated.product,
+        quantity,
+        (q) => {
+          newQty = q;
+        }
       );
-    }
-  }, [user]);
+      setCart(nextCart);
+      persistCart(nextCart);
 
-  const addToCart = useCallback(async (product: Product, quantity: number) => {
-    let newQty = quantity;
+      await syncCartToSupabase(rehydrated.product.id, newQty);
+    },
+    [cart, persistCart, syncCartToSupabase]
+  );
 
-    const nextCart = produceNewCart(cart, product, quantity, (q) => { newQty = q; });
-    setCart(nextCart);
-    persistCart(nextCart);
+  const removeFromCart = useCallback(
+    (productId: string) => {
+      setCart((prev) => {
+        const next = prev.filter((ci) => ci.product.id !== productId);
+        persistCart(next);
+        syncCartToSupabase(productId, null);
+        return next;
+      });
+    },
+    [persistCart, syncCartToSupabase]
+  );
 
-    await syncCartToSupabase(product.id, newQty);
-  }, [cart, persistCart, syncCartToSupabase]);
-
-  const removeFromCart = useCallback((productId: string) => {
-    setCart((prev) => {
-      const next = prev.filter((ci) => ci.product.id !== productId);
-      persistCart(next);
-      syncCartToSupabase(productId, null);
-      return next;
-    });
-  }, [persistCart, syncCartToSupabase]);
-
-  const updateCartQuantity = useCallback((productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
-      return;
-    }
-    setCart((prev) => {
-      const next = prev.map((ci) => ci.product.id === productId ? { ...ci, quantity } : ci);
-      persistCart(next);
-      syncCartToSupabase(productId, quantity);
-      return next;
-    });
-  }, [persistCart, syncCartToSupabase, removeFromCart]);
+  const updateCartQuantity = useCallback(
+    (productId: string, quantity: number) => {
+      if (quantity <= 0) {
+        removeFromCart(productId);
+        return;
+      }
+      setCart((prev) => {
+        const next = prev.map((ci) =>
+          ci.product.id === productId ? { ...ci, quantity } : ci
+        );
+        persistCart(next);
+        syncCartToSupabase(productId, quantity);
+        return next;
+      });
+    },
+    [persistCart, syncCartToSupabase, removeFromCart]
+  );
 
   const clearCart = useCallback(() => {
     setCart([]);
     persistCart([]);
     if (user) {
-      supabase.from('cart_items').delete().eq('userId', user.id).then(({ error }) => {
-        if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá giỏ hàng:', error.message);
-      }, () => {});
+      supabase
+        .from('cart_items')
+        .delete()
+        .eq('userId', user.id)
+        .then(
+          ({ error }) => {
+            if (error && __DEV__)
+              console.error('[SUPABASE] Lỗi xoá giỏ hàng:', error.message);
+          },
+          () => {}
+        );
     }
   }, [user, persistCart]);
 
-  const cartTotal = cart.reduce((sum, ci) => sum + ci.product.price * ci.quantity, 0);
+  const cartTotal = cart.reduce(
+    (sum, ci) => sum + ci.product.price * ci.quantity,
+    0
+  );
   const cartCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
 
   return (
@@ -298,16 +398,34 @@ function produceNewCart(
   currentCart: CartItem[],
   product: Product,
   quantity: number,
-  onNewQty: (q: number) => void,
+  onNewQty: (q: number) => void
 ): CartItem[] {
   const existing = currentCart.find((ci) => ci.product.id === product.id);
   if (existing) {
     const newQty = existing.quantity + quantity;
     onNewQty(newQty);
-    return currentCart.map((ci) => ci.product.id === product.id ? { ...ci, quantity: newQty } : ci);
+    return currentCart.map((ci) =>
+      ci.product.id === product.id
+        ? {
+            ...ci,
+            product,
+            selectedColor: product.selectedColorName || product.color,
+            selectedAccessory: product.selectedAccessoryName,
+            quantity: newQty,
+          }
+        : ci
+    );
   }
   onNewQty(quantity);
-  return [...currentCart, { product, quantity }];
+  return [
+    ...currentCart,
+    {
+      product,
+      quantity,
+      selectedColor: product.selectedColorName || product.color,
+      selectedAccessory: product.selectedAccessoryName,
+    },
+  ];
 }
 
 export function useCart() {

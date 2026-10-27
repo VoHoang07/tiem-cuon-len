@@ -78,52 +78,101 @@ export default function CartScreen() {
     </TouchableOpacity>
   );
 
-  const renderCartItem = ({ item }: { item: CartItem }) => (
-    <Swipeable renderRightActions={() => renderRightActions(item)}>
-      <View style={styles.cartItem}>
-        <View style={styles.itemImage}>
-          {item.product.image ? (
-            <Image
-              source={typeof item.product.image === 'string' ? { uri: item.product.image } : (item.product.image as any)}
-              style={styles.itemProductImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <Text style={styles.itemEmoji}>{getCategoryEmoji(item.product.category)}</Text>
-          )}
-        </View>
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemName} numberOfLines={2}>
-            {item.product.name}
-          </Text>
-          <Text style={styles.itemCategory}>
-            {getCategoryLabel(item.product.category)}
-          </Text>
-          <Text style={styles.itemPrice}>
-            {formatVND(item.product.price)} {CART_PER_PIECE}
-          </Text>
-        </View>
-        <View style={styles.itemActions}>
-          <View style={styles.qtyControl}>
-            <TouchableOpacity
-              style={styles.qtyBtn}
-              onPress={() => updateCartQuantity(item.product.id, item.quantity - 1)}>
-              <Minus size={14} color={COLORS.primary} />
-            </TouchableOpacity>
-            <Text style={styles.qtyText}>{item.quantity}</Text>
-            <TouchableOpacity
-              style={styles.qtyBtn}
-              onPress={() => updateCartQuantity(item.product.id, item.quantity + 1)}>
-              <Plus size={14} color={COLORS.primary} />
-            </TouchableOpacity>
+  const renderCartItem = ({ item }: { item: CartItem }) => {
+    const colorLabel =
+      item.product.selectedColorName || item.selectedColor || item.product.color;
+    const accLabel =
+      item.product.selectedAccessoryName || item.selectedAccessory;
+    const accEmoji = item.product.selectedAccessoryEmoji;
+    const colorHex = item.product.selectedColorHex;
+
+    return (
+      <Swipeable renderRightActions={() => renderRightActions(item)}>
+        <View style={styles.cartItem}>
+          <View style={styles.itemImage}>
+            {item.product.image ? (
+              <Image
+                source={
+                  typeof item.product.image === 'string'
+                    ? { uri: item.product.image }
+                    : (item.product.image as any)
+                }
+                style={styles.itemProductImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={styles.itemEmoji}>
+                {getCategoryEmoji(item.product.category)}
+              </Text>
+            )}
+            {accEmoji ? (
+              <View style={styles.itemAccCornerBadge}>
+                <Text style={styles.itemAccCornerEmoji}>{accEmoji}</Text>
+              </View>
+            ) : null}
           </View>
-          <Text style={styles.itemTotal}>
-            {formatVND(item.product.price * item.quantity)}
-          </Text>
+          <View style={styles.itemInfo}>
+            <Text style={styles.itemName} numberOfLines={2}>
+              {item.product.name}
+            </Text>
+
+            <View style={styles.variantTagsWrap}>
+              {colorLabel ? (
+                <View style={styles.variantTagPill}>
+                  {colorHex ? (
+                    <View
+                      style={[
+                        styles.variantColorDot,
+                        { backgroundColor: colorHex },
+                      ]}
+                    />
+                  ) : null}
+                  <Text style={styles.variantTagText} numberOfLines={1}>
+                    Màu: {colorLabel}
+                  </Text>
+                </View>
+              ) : null}
+
+              {accLabel ? (
+                <View style={styles.variantTagPill}>
+                  <Text style={styles.variantTagText} numberOfLines={1}>
+                    {accEmoji ? `${accEmoji} ` : ''}
+                    {accLabel}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <Text style={styles.itemPrice}>
+              {formatVND(item.product.price)} {CART_PER_PIECE}
+            </Text>
+          </View>
+          <View style={styles.itemActions}>
+            <View style={styles.qtyControl}>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                onPress={() =>
+                  updateCartQuantity(item.product.id, item.quantity - 1)
+                }>
+                <Minus size={14} color={COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.qtyText}>{item.quantity}</Text>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                onPress={() =>
+                  updateCartQuantity(item.product.id, item.quantity + 1)
+                }>
+                <Plus size={14} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.itemTotal}>
+              {formatVND(item.product.price * item.quantity)}
+            </Text>
+          </View>
         </View>
-      </View>
-    </Swipeable>
-  );
+      </Swipeable>
+    );
+  };
 
   const ListHeader = (
     <View style={styles.header}>
@@ -348,15 +397,63 @@ const styles = StyleSheet.create({
   itemEmoji: {
     fontSize: 32,
   },
+  itemAccCornerBadge: {
+    position: 'absolute',
+    bottom: 3,
+    right: 3,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,253,249,0.94)',
+    borderWidth: 1,
+    borderColor: '#E5D8C8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemAccCornerEmoji: {
+    fontSize: 12,
+  },
   itemInfo: {
     flex: 1,
     marginLeft: SPACING.md,
     justifyContent: 'center',
+    gap: 4,
   },
   itemName: {
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.darkText,
+  },
+  variantTagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  variantTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F5EFE6',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#E6DDD0',
+    maxWidth: '100%',
+  },
+  variantColorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(61,43,31,0.2)',
+  },
+  variantTagText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#5C4738',
+    flexShrink: 1,
   },
   itemCategory: {
     fontSize: 12,

@@ -36,6 +36,7 @@ export interface ProductGalleryItem {
 
 export interface Product {
   id: string;
+  baseProductId?: string;
   name: string;
   description: string;
   price: number;
@@ -44,6 +45,12 @@ export interface Product {
   category: Category;
   material: string;
   color: string;
+  selectedColorId?: string;
+  selectedColorName?: string;
+  selectedColorHex?: string;
+  selectedAccessoryId?: string;
+  selectedAccessoryName?: string;
+  selectedAccessoryEmoji?: string;
   colorOptions?: ProductColorOption[];
   accessoryOptions?: ProductAccessoryOption[];
   quantity: number;

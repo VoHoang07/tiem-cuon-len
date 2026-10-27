@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -63,7 +64,7 @@ export default function CheckoutScreen() {
     selectedAccessory?: string;
     unitPrice?: string;
   }>();
-  const isBuyNow = mode === 'buyNow';
+  const isBuyNow = mode === 'buyNow' || mode === 'buy_now';
 
   const { cart, clearCart, products } = useShop();
   const { user } = useAuth();
@@ -76,12 +77,19 @@ export default function CheckoutScreen() {
     if (!isBuyNow || !productId) return null;
     const base = products.find((p) => p.id === productId) ?? null;
     if (!base) return null;
+    const matchedColor = base.colorOptions?.find(
+      (c) => c.name.toLowerCase() === (selectedColor || '').trim().toLowerCase()
+    );
     const suffixParts = [selectedColor, selectedAccessory].filter(Boolean);
     const parsedPrice = unitPrice ? parseInt(unitPrice, 10) : NaN;
     return {
       ...base,
       name: suffixParts.length > 0 ? `${base.name} (${suffixParts.join(' - ')})` : base.name,
       color: selectedColor || base.color,
+      selectedColorName: selectedColor || base.color,
+      selectedColorHex: matchedColor?.hex,
+      selectedAccessoryName: selectedAccessory || undefined,
+      image: matchedColor?.image || base.image,
       price: !isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : base.price,
     };
   }, [isBuyNow, productId, products, selectedColor, selectedAccessory, unitPrice]);
@@ -337,9 +345,37 @@ export default function CheckoutScreen() {
           <Text style={styles.sectionTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
           {checkoutItems.map((item) => (
             <View key={item.product.id} style={styles.summaryItem}>
-              <Text style={styles.itemName} numberOfLines={1}>
-                {item.product.name} x{item.quantity}
-              </Text>
+              {item.product.image ? (
+                <Image
+                  source={
+                    typeof item.product.image === 'string'
+                      ? { uri: item.product.image }
+                      : (item.product.image as any)
+                  }
+                  style={styles.summaryThumb}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={styles.itemName} numberOfLines={2}>
+                  {item.product.name}
+                </Text>
+                {(item.product.selectedColorName || item.product.selectedAccessoryName) ? (
+                  <Text style={styles.summaryVariantText} numberOfLines={1}>
+                    {[
+                      item.product.selectedColorName
+                        ? `Màu: ${item.product.selectedColorName}`
+                        : null,
+                      item.product.selectedAccessoryName
+                        ? `${item.product.selectedAccessoryEmoji ? `${item.product.selectedAccessoryEmoji} ` : ''}${item.product.selectedAccessoryName}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' • ')}
+                  </Text>
+                ) : null}
+                <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
+              </View>
               <Text style={styles.itemPrice}>
                 {formatVND(item.product.price * item.quantity)}
               </Text>
@@ -586,9 +622,23 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   noteText: { fontSize: 13, color: COLORS.mediumText, lineHeight: 20 },
-  summaryItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.xs },
-  itemName: { fontSize: 14, color: COLORS.mediumText, flex: 1 },
-  itemPrice: { fontSize: 14, fontWeight: '600', color: COLORS.darkText },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.sm,
+    gap: 10,
+  },
+  summaryThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#F5EFE6',
+  },
+  itemName: { fontSize: 14, fontWeight: '600', color: COLORS.darkText },
+  summaryVariantText: { fontSize: 12, color: '#6E5239', marginTop: 2 },
+  summaryQtyText: { fontSize: 12, color: COLORS.mediumText, marginTop: 1 },
+  itemPrice: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.sm },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
   totalLabel: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
