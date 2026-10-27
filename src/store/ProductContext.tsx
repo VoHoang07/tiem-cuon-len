@@ -11,8 +11,81 @@ import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 
 const PAGE_SIZE = 50;
-const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v6';
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v8';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
+
+const RETIRED_PRODUCT_IDS = new Set([
+  'keychain-duck-5',
+  'yarn-mohair-4',
+  'yarn-macrame-5',
+  'crochet-tulip-pot-3',
+  'crochet-rose-bouquet-4',
+  'bag-tulip-pouch-3',
+  'bag-strawberry-pouch-5',
+  'doll-bunny-dress-3',
+  'doll-couple-bears-5',
+  'acc-fruit-hairclips-4',
+  'acc-crochet-collar-5',
+]);
+
+const LEGACY_ID_TO_MOCK_ID: Record<string, string> = {
+  '1': 'bearbag-7',
+  '2': 'bouquet-4',
+  '3': 'cherry-1',
+  '4': 'dino-5',
+  '5': 'icecream-2',
+  '6': 'mirror-6',
+  '7': 'sunflower-3',
+};
+
+function findMatchingMockProduct(
+  item: Product,
+  mockById: Map<string, Product>,
+  mockByName: Map<string, Product>
+): Product | undefined {
+  const direct = mockById.get(item.id);
+  if (direct) return direct;
+
+  const mappedLegacyId = LEGACY_ID_TO_MOCK_ID[item.id];
+  if (mappedLegacyId && mockById.get(mappedLegacyId)) {
+    return mockById.get(mappedLegacyId);
+  }
+
+  const normName = (item.name || '').trim().toLowerCase();
+  const byExactName = mockByName.get(normName);
+  if (byExactName) return byExactName;
+
+  // Match legacy seeded names / keywords from earlier versions in Supabase
+  if (normName.includes('thỏ ôm dâu') || normName.includes('thỏ tai cụp')) {
+    return mockById.get('user_bunny_keychain_01');
+  }
+  if (normName.includes('cherry')) {
+    return mockById.get('cherry-1');
+  }
+  if (normName.includes('kem ốc quế') || normName.includes('móc khoá kem')) {
+    return mockById.get('icecream-2');
+  }
+  if (normName.includes('hướng dương')) {
+    return mockById.get('sunflower-3');
+  }
+  if (
+    normName.includes('bó hoa thỏ') ||
+    normName.includes('bó hoa crochet pastel')
+  ) {
+    return mockById.get('bouquet-4');
+  }
+  if (normName.includes('khủng long')) {
+    return mockById.get('dino-5');
+  }
+  if (normName.includes('gương')) {
+    return mockById.get('mirror-6');
+  }
+  if (normName.includes('túi gấu') || normName.includes('pudding')) {
+    return mockById.get('bearbag-7');
+  }
+
+  return undefined;
+}
 
 function getDeletedIds(): Set<string> {
   try {
@@ -48,44 +121,43 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
     mockByName.set(mp.name.trim().toLowerCase(), mp);
   }
 
-  const seenMockIds = new Set<string>();
-  const merged: Product[] = [];
+  const remoteReviewsByMockId = new Map<string, Review[]>();
+  const customAdminProducts: Product[] = [];
+  const seenCustomNames = new Set<string>();
 
   for (const item of remoteOrCached) {
-    if (deletedIds.has(item.id)) continue;
-    const matchedMock =
-      mockById.get(item.id) || mockByName.get(item.name.trim().toLowerCase());
-
-    if (matchedMock) {
-      seenMockIds.add(matchedMock.id);
-      merged.push({
-        ...matchedMock,
-        ...item,
-        // Ensure updated category, local image fallback, and rich variants from MOCK_PRODUCTS are preserved
-        category: matchedMock.category,
-        image: item.image || matchedMock.image,
-        gallery:
-          item.gallery && item.gallery.length > 0
-            ? item.gallery
-            : matchedMock.gallery,
-        colorOptions:
-          item.colorOptions && item.colorOptions.length > 0
-            ? item.colorOptions
-            : matchedMock.colorOptions,
-        accessoryOptions:
-          item.accessoryOptions && item.accessoryOptions.length > 0
-            ? item.accessoryOptions
-            : matchedMock.accessoryOptions,
-      });
-    } else {
-      merged.push(item);
+    if (!item || deletedIds.has(item.id) || RETIRED_PRODUCT_IDS.has(item.id)) {
+      continue;
     }
+
+    const matchedMock = findMatchingMockProduct(item, mockById, mockByName);
+    if (matchedMock) {
+      if (deletedIds.has(matchedMock.id)) continue;
+      if (Array.isArray(item.reviews) && item.reviews.length > 0) {
+        const existing = remoteReviewsByMockId.get(matchedMock.id) || [];
+        if (item.reviews.length > existing.length) {
+          remoteReviewsByMockId.set(matchedMock.id, item.reviews);
+        }
+      }
+      continue;
+    }
+
+    const normName = (item.name || '').trim().toLowerCase();
+    if (!normName || seenCustomNames.has(normName)) continue;
+    seenCustomNames.add(normName);
+    customAdminProducts.push(item);
   }
 
+  const merged: Product[] = [...customAdminProducts];
+
   for (const mp of MOCK_PRODUCTS) {
-    if (!seenMockIds.has(mp.id) && !deletedIds.has(mp.id)) {
-      merged.push(mp);
-    }
+    if (deletedIds.has(mp.id)) continue;
+    const remoteReviews = remoteReviewsByMockId.get(mp.id);
+    merged.push(
+      remoteReviews && remoteReviews.length > 0
+        ? { ...mp, reviews: remoteReviews }
+        : mp
+    );
   }
 
   return merged;
