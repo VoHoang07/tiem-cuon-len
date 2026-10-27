@@ -7,11 +7,12 @@ import {
 } from '@/constants/strings';
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  Bags: ['bag', 'handbag', 'purse', 'tote', 'pouch', 'clutch'],
-  Dolls: ['doll', 'teddy', 'bear', 'frock', 'dress', 'toy', 'plush'],
-  Crochet: ['tulip', 'sunflower', 'flower', 'bouquet', 'rose', 'lily', 'basket'],
-  Yarn: ['yarn', 'thread', 'skein', 'wool', 'roll'],
-  Accessories: ['scarf', 'shoe', 'hook', 'needle', 'hat', 'glove', 'sock'],
+  Keychains: ['keychain', 'móc khoá', 'móc khóa', 'moc khoa', 'charm', 'treo balo', 'chìa khoá', 'chìa khóa'],
+  Bags: ['bag', 'handbag', 'purse', 'tote', 'pouch', 'clutch', 'túi'],
+  Dolls: ['doll', 'teddy', 'bear', 'frock', 'dress', 'toy', 'plush', 'thú bông', 'khủng long', 'gấu'],
+  Crochet: ['tulip', 'sunflower', 'flower', 'bouquet', 'rose', 'lily', 'basket', 'hoa'],
+  Yarn: ['yarn', 'thread', 'skein', 'wool', 'roll', 'cuộn len'],
+  Accessories: ['scarf', 'shoe', 'hook', 'needle', 'hat', 'glove', 'sock', 'gương', 'phụ kiện'],
 };
 
 export function inferCategory(name: string): Category {

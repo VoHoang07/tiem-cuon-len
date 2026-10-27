@@ -2,6 +2,8 @@ import { Category } from '@/types/product';
 
 export function getCategoryEmoji(category: string): string {
   switch (category) {
+    case 'Keychains':
+      return '🔑';
     case 'Bags':
       return '👜';
     case 'Dolls':
@@ -17,6 +19,8 @@ export function getCategoryLabel(category: string): string {
   switch (category) {
     case 'All':
       return 'Tất cả';
+    case 'Keychains':
+      return 'Móc khoá';
     case 'Yarn':
       return 'Len cuộn';
     case 'Crochet':

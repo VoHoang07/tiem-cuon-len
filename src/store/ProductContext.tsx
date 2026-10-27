@@ -11,7 +11,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 
 const PAGE_SIZE = 20;
-const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v2';
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v3';
 
 function loadCachedProducts(): Product[] {
   try {

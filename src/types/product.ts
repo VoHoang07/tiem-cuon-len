@@ -26,6 +26,7 @@ export interface Product {
 
 export type Category =
   | 'All'
+  | 'Keychains'
   | 'Yarn'
   | 'Crochet'
   | 'Bags'

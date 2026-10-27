@@ -109,6 +109,7 @@ export const SHADOWS = {
 
 export const CATEGORIES = [
   'All',
+  'Keychains',
   'Yarn',
   'Crochet',
   'Bags',

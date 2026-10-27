@@ -125,7 +125,22 @@ export default function HomeScreen() {
   const filteredProducts = useMemo(() => {
     let list = [...uniqueProducts];
     if (selectedCategory !== 'All') {
-      list = list.filter((p) => p.category === selectedCategory);
+      if (selectedCategory === 'Keychains') {
+        list = list.filter(
+          (p) =>
+            p.category === 'Keychains' ||
+            p.name.toLowerCase().includes('móc khoá') ||
+            p.name.toLowerCase().includes('móc khóa') ||
+            (Array.isArray(p.tags) &&
+              p.tags.some(
+                (t) =>
+                  t.toLowerCase().includes('móc khoá') ||
+                  t.toLowerCase().includes('móc khóa')
+              ))
+        );
+      } else {
+        list = list.filter((p) => p.category === selectedCategory);
+      }
     }
     if (search.trim()) {
       const q = search.toLowerCase();

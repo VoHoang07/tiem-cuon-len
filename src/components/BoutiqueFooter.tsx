@@ -249,7 +249,7 @@ export function BoutiqueFooter({
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}
-              onPress={() => handleCategoryPress('Plushies')}>
+              onPress={() => handleCategoryPress('Dolls')}>
               <Text style={styles.footerLinkText}>🧸 Thú bông & Búp bê len</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -259,8 +259,13 @@ export function BoutiqueFooter({
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}
+              onPress={() => handleCategoryPress('Keychains')}>
+              <Text style={styles.footerLinkText}>🔑 Móc khoá len đáng yêu</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.footerLinkBtn}
               onPress={() => handleCategoryPress('Accessories')}>
-              <Text style={styles.footerLinkText}>🍒 Móc khoá & Phụ kiện</Text>
+              <Text style={styles.footerLinkText}>🧣 Phụ kiện & Decor len</Text>
             </TouchableOpacity>
           </View>
 

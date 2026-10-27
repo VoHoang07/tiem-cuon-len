@@ -2,13 +2,30 @@ import { Product } from '@/types/product';
 
 export const MOCK_PRODUCTS: Product[] = [
   {
+    id: 'user_bunny_keychain_01',
+    name: 'Móc Khoá Thỏ Ôm Dâu Len Handmade',
+    description:
+      'Chú thỏ kem tai cụp đan móc thủ công ôm trái dâu tây đỏ mọng kèm khoen móc khoá mạ vàng sang trọng. Sợi len cotton milk mềm mịn, nhỏ gọn xinh xắn để treo chìa khoá, balo hoặc túi xách.',
+    price: 85000,
+    image: require('@/assets/images/products/bunny-keychain.png'),
+    category: 'Keychains',
+    material: 'Len Cotton Milk Cao Cấp',
+    color: 'Kem Sữa & Đỏ Dâu',
+    quantity: 10,
+    rating: 5.0,
+    reviews: [],
+    isFavorite: false,
+    tags: ['móc khoá', 'thỏ len', 'dâu tây', 'quà tặng', 'dễ thương'],
+    createdAt: '2026-10-27T06:12:00Z',
+  },
+  {
     id: 'cherry-1',
     name: 'Móc Khoá Cherry Len Handmade',
     description:
       'Móc khoá đôi cherry đan móc thủ công với hai trái cherry đỏ mọng và chiếc lá xanh nhỏ xinh. Sợi len cotton mềm mịn, bền màu, thích hợp treo balo, túi xách hoặc làm quà tặng đáng yêu.',
     price: 69000,
     image: require('@/assets/images/products/cherry.png'),
-    category: 'Accessories',
+    category: 'Keychains',
     material: 'Len Cotton Milk',
     color: 'Đỏ & Xanh lá',
     quantity: 5,
@@ -25,7 +42,7 @@ export const MOCK_PRODUCTS: Product[] = [
       'Bộ móc khoá kem ốc quế len handmade tông pastel ngọt ngào, từng mũi móc tỉ mỉ, nhỏ gọn vừa tay, trang trí túi xách hay chìa khoá đều cực xinh.',
     price: 79000,
     image: require('@/assets/images/products/icecream.png'),
-    category: 'Accessories',
+    category: 'Keychains',
     material: 'Len Cotton Milk',
     color: 'Kem Pastel Mix',
     quantity: 5,
