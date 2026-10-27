@@ -1,4 +1,4 @@
 export function formatVND(amount: number): string {
-  const k = Math.round(amount / 1000);
-  return k.toLocaleString('vi-VN') + 'K';
+  const safe = Number.isFinite(amount) ? Math.round(amount) : 0;
+  return safe.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '₫';
 }

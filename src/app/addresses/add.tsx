@@ -70,15 +70,18 @@ export default function AddAddressScreen() {
     error: locationError,
     setError: setLocationError,
   } = useAutoLocation();
+  const [locationSuccess, setLocationSuccess] = useState(false);
 
   const handleAutoLocation = async () => {
     setLocationError(null);
+    setLocationSuccess(false);
     const resolved = await getCurrentLocation();
     if (resolved) {
       if (resolved.city) setCity(resolved.city);
       if (resolved.district) setDistrict(resolved.district);
       if (resolved.ward) setWard(resolved.ward);
       if (resolved.detailAddress) setDetailAddress(resolved.detailAddress);
+      setLocationSuccess(true);
     }
   };
 
@@ -171,6 +174,7 @@ export default function AddAddressScreen() {
         <TouchableOpacity
           style={[
             styles.gpsCard,
+            locationSuccess && styles.gpsCardSuccess,
             locationLoading && styles.gpsCardDisabled,
           ]}
           onPress={handleAutoLocation}
@@ -179,6 +183,8 @@ export default function AddAddressScreen() {
           <View style={styles.gpsIconCircle}>
             {locationLoading ? (
               <ActivityIndicator size="small" color="#6E4F37" />
+            ) : locationSuccess ? (
+              <Check size={18} color="#2E7D32" strokeWidth={2.5} />
             ) : (
               <Navigation size={18} color="#6E4F37" />
             )}
@@ -187,14 +193,20 @@ export default function AddAddressScreen() {
             <Text style={styles.gpsTitle}>
               {locationLoading
                 ? 'Đang xác định vị trí của bạn...'
-                : 'Định vị tự động vị trí hiện tại'}
+                : locationSuccess
+                  ? 'Đã tự động điền vị trí hiện tại'
+                  : 'Định vị tự động vị trí hiện tại'}
             </Text>
             <Text style={styles.gpsSubtitle}>
-              Tự động điền nhanh Tỉnh/Thành, Quận/Huyện & Phường/Xã
+              {locationSuccess
+                ? 'Bạn có thể kiểm tra hoặc chỉnh sửa thêm số nhà bên dưới'
+                : 'Tự động điền nhanh Tỉnh/Thành, Quận/Huyện & Phường/Xã'}
             </Text>
           </View>
           <View style={styles.gpsActionPill}>
-            <Text style={styles.gpsActionText}>Lấy vị trí</Text>
+            <Text style={styles.gpsActionText}>
+              {locationLoading ? 'Đang lấy...' : locationSuccess ? 'Lấy lại' : 'Lấy vị trí'}
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -528,6 +540,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2D4C3',
     marginBottom: 14,
+  },
+  gpsCardSuccess: {
+    backgroundColor: '#EDF6EE',
+    borderColor: '#B8DCBD',
   },
   gpsCardDisabled: {
     opacity: 0.65,
