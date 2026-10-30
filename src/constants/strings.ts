@@ -156,6 +156,10 @@ export const CARD_RATING_FORMAT = '★ ';
 
 export const GEN_CATEGORY_INTRO: Record<string, string> = {
   VelvetWire: 'Sản phẩm kẽm nhung thủ công mềm mịn này',
+  VelvetPots: 'Chậu hoa kẽm nhung để bàn xinh xắn này',
+  VelvetFlowers: 'Bó hoa kẽm nhung thủ công mềm mịn này',
+  VelvetAccessories: 'Phụ kiện kẽm nhung handmade tinh tế này',
+  VelvetStems: 'Bộ sợi kẽm nhung lông mịn cao cấp này',
   Keychains: 'Chiếc móc khoá crochet nhỏ xinh này',
   Bags: 'Chiếc túi crochet thủ công này',
   Dolls: 'Món đồ chơi crochet đáng yêu này',

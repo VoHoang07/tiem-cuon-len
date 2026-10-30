@@ -13,6 +13,10 @@ interface CategoryChipsProps {
 const CATEGORY_LABELS: Record<Category, string> = {
   All: 'Tất cả',
   VelvetWire: 'Kẽm nhung',
+  VelvetPots: 'Chậu hoa',
+  VelvetFlowers: 'Hoa',
+  VelvetAccessories: 'Phụ kiện kẽm nhung',
+  VelvetStems: 'Sợi kẽm nhung',
   Keychains: 'Móc khoá',
   Yarn: 'Len cuộn',
   Crochet: 'Móc len',

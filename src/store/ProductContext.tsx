@@ -11,7 +11,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 
 const PAGE_SIZE = 50;
-const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v9';
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v10';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
 
 const RETIRED_PRODUCT_IDS = new Set([
@@ -26,6 +26,12 @@ const RETIRED_PRODUCT_IDS = new Set([
   'doll-couple-bears-5',
   'acc-fruit-hairclips-4',
   'acc-crochet-collar-5',
+  'velvet_wire_tulip_01',
+  'velvet_wire_puppy_keychain_02',
+  'velvet_wire_lily_lamp_03',
+  'velvet_wire_bear_04',
+  'velvet_wire_hairclip_05',
+  'velvet_wire_diy_kit_06',
 ]);
 
 const LEGACY_ID_TO_MOCK_ID: Record<string, string> = {

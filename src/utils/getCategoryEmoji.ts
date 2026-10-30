@@ -4,6 +4,14 @@ export function getCategoryEmoji(category: string): string {
   switch (category) {
     case 'VelvetWire':
       return '🌸';
+    case 'VelvetPots':
+      return '🪴';
+    case 'VelvetFlowers':
+      return '💐';
+    case 'VelvetAccessories':
+      return '🎀';
+    case 'VelvetStems':
+      return '🧵';
     case 'Keychains':
       return '🔑';
     case 'Yarn':
@@ -27,6 +35,14 @@ export function getCategoryLabel(category: string): string {
       return 'Tất cả';
     case 'VelvetWire':
       return 'Kẽm nhung';
+    case 'VelvetPots':
+      return 'Chậu hoa';
+    case 'VelvetFlowers':
+      return 'Hoa';
+    case 'VelvetAccessories':
+      return 'Phụ kiện kẽm nhung';
+    case 'VelvetStems':
+      return 'Sợi kẽm nhung';
     case 'Keychains':
       return 'Móc khoá';
     case 'Yarn':

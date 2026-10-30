@@ -66,6 +66,10 @@ export interface Product {
 export type Category =
   | 'All'
   | 'VelvetWire'
+  | 'VelvetPots'
+  | 'VelvetFlowers'
+  | 'VelvetAccessories'
+  | 'VelvetStems'
   | 'Keychains'
   | 'Yarn'
   | 'Crochet'

@@ -36,7 +36,14 @@ import { CategoryChips } from '@/components/CategoryChips';
 import { SectionHeader } from '@/components/SectionHeader';
 import { useDebounce } from '@/hooks/useDebounce';
 import { BOTTOM_NAV_SPACER } from '@/constants/layout';
-import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
+import {
+  COLORS,
+  SPACING,
+  SHADOWS,
+  CATEGORIES,
+  LEN_CATEGORIES,
+  KEM_NHUNG_CATEGORIES,
+} from '@/constants/theme';
 import { Product, Category } from '@/types/product';
 import {
   HOME_WELCOME,
@@ -57,16 +64,21 @@ const MAX_CONTAINER_WIDTH = 1120;
 type SortOption = 'popular' | 'price_asc' | 'price_desc' | 'rating';
 type MainLine = 'all' | 'len' | 'kem_nhung';
 
+const KEM_NHUNG_CAT_SET = new Set<string>([
+  'VelvetWire',
+  'VelvetPots',
+  'VelvetFlowers',
+  'VelvetAccessories',
+  'VelvetStems',
+]);
+
 function isVelvetWireProduct(p: Product): boolean {
-  const mat = (p.material || '').toLowerCase();
+  if (p.craftLine === 'kem_nhung') return true;
+  if (p.craftLine === 'len') return false;
+  if (KEM_NHUNG_CAT_SET.has(p.category)) return true;
   const name = (p.name || '').toLowerCase();
-  return (
-    p.craftLine === 'kem_nhung' ||
-    p.category === 'VelvetWire' ||
-    mat.includes('kẽm nhung') ||
-    mat.includes('kem nhung') ||
-    name.includes('kẽm nhung')
-  );
+  if (name.includes('len')) return false;
+  return name.includes('kẽm nhung') || name.includes('kẻm nhung');
 }
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
@@ -563,7 +575,7 @@ export default function HomeScreen() {
           ]}
           onPress={() => {
             setSelectedMainLine('len');
-            if (selectedCategory === 'VelvetWire') setSelectedCategory('All');
+            setSelectedCategory('All');
           }}
           activeOpacity={0.8}>
           <View style={[styles.mainLineEmojiCircle, { backgroundColor: '#F3E5D8' }]}>
@@ -588,12 +600,11 @@ export default function HomeScreen() {
           style={[
             styles.mainLineCard,
             isMobile && styles.mainLineCardMobile,
-            (selectedMainLine === 'kem_nhung' || selectedCategory === 'VelvetWire') &&
-              styles.mainLineCardActivePink,
+            selectedMainLine === 'kem_nhung' && styles.mainLineCardActivePink,
           ]}
           onPress={() => {
             setSelectedMainLine('kem_nhung');
-            if (selectedCategory === 'VelvetWire') setSelectedCategory('All');
+            setSelectedCategory('All');
           }}
           activeOpacity={0.8}>
           <View style={[styles.mainLineEmojiCircle, { backgroundColor: '#FCE8EE' }]}>
@@ -603,8 +614,7 @@ export default function HomeScreen() {
             <Text
               style={[
                 styles.mainLineTitle,
-                (selectedMainLine === 'kem_nhung' || selectedCategory === 'VelvetWire') &&
-                  styles.mainLineTitleActive,
+                selectedMainLine === 'kem_nhung' && styles.mainLineTitleActive,
               ]}
               numberOfLines={1}>
               Sản phẩm Kẽm nhung
@@ -635,9 +645,9 @@ export default function HomeScreen() {
         <CategoryChips
           categories={
             selectedMainLine === 'len'
-              ? CATEGORIES.filter((c) => c !== 'VelvetWire')
+              ? [...LEN_CATEGORIES]
               : selectedMainLine === 'kem_nhung'
-                ? ['All', 'Crochet', 'Keychains', 'Dolls', 'Accessories', 'Yarn']
+                ? [...KEM_NHUNG_CATEGORIES]
                 : [...CATEGORIES]
           }
           selected={selectedCategory}

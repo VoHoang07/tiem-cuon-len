@@ -107,15 +107,36 @@ export const SHADOWS = {
   },
 };
 
-export const CATEGORIES = [
+export const LEN_CATEGORIES = [
   'All',
-  'VelvetWire',
   'Keychains',
   'Yarn',
   'Crochet',
   'Bags',
   'Dolls',
   'Accessories',
+] as const;
+
+export const KEM_NHUNG_CATEGORIES = [
+  'All',
+  'VelvetPots',
+  'VelvetFlowers',
+  'VelvetAccessories',
+  'VelvetStems',
+] as const;
+
+export const CATEGORIES = [
+  'All',
+  'Keychains',
+  'Yarn',
+  'Crochet',
+  'Bags',
+  'Dolls',
+  'Accessories',
+  'VelvetPots',
+  'VelvetFlowers',
+  'VelvetAccessories',
+  'VelvetStems',
 ] as const;
 
 export const SHOP_NAME = 'Tiệm Cuộn Len';
