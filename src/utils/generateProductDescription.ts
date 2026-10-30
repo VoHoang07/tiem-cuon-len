@@ -67,6 +67,7 @@ export function parseAccessoryOptionsInput(raw: string): ProductAccessoryOption[
 }
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  VelvetWire: ['kẽm nhung', 'kem nhung', 'kẻm nhung', 'nhung', 'pipe cleaner'],
   Keychains: ['keychain', 'móc khoá', 'móc khóa', 'moc khoa', 'charm', 'treo balo', 'chìa khoá', 'chìa khóa'],
   Bags: ['bag', 'handbag', 'purse', 'tote', 'pouch', 'clutch', 'túi'],
   Dolls: ['doll', 'teddy', 'bear', 'frock', 'dress', 'toy', 'plush', 'thú bông', 'khủng long', 'gấu'],

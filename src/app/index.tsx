@@ -55,6 +55,19 @@ const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
 
 type SortOption = 'popular' | 'price_asc' | 'price_desc' | 'rating';
+type MainLine = 'all' | 'len' | 'kem_nhung';
+
+function isVelvetWireProduct(p: Product): boolean {
+  const mat = (p.material || '').toLowerCase();
+  const name = (p.name || '').toLowerCase();
+  return (
+    p.craftLine === 'kem_nhung' ||
+    p.category === 'VelvetWire' ||
+    mat.includes('kẽm nhung') ||
+    mat.includes('kem nhung') ||
+    name.includes('kẽm nhung')
+  );
+}
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'popular', label: 'Phổ biến' },
@@ -104,6 +117,7 @@ export default function HomeScreen() {
     }, [refetchCartFavorites])
   );
 
+  const [selectedMainLine, setSelectedMainLine] = useState<MainLine>('all');
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [searchInput, setSearchInput] = useState('');
@@ -122,10 +136,30 @@ export default function HomeScreen() {
     });
   }, [products]);
 
+  const lenCount = useMemo(
+    () => uniqueProducts.filter((p) => !isVelvetWireProduct(p)).length,
+    [uniqueProducts]
+  );
+  const kemNhungCount = useMemo(
+    () => uniqueProducts.filter((p) => isVelvetWireProduct(p)).length,
+    [uniqueProducts]
+  );
+
   const filteredProducts = useMemo(() => {
     let list = [...uniqueProducts];
+    if (selectedMainLine === 'len') {
+      list = list.filter((p) => !isVelvetWireProduct(p));
+    } else if (selectedMainLine === 'kem_nhung') {
+      list = list.filter((p) => isVelvetWireProduct(p));
+    }
     if (selectedCategory !== 'All') {
-      list = list.filter((p) => p.category === selectedCategory);
+      if (selectedCategory === 'VelvetWire') {
+        list = list.filter((p) => isVelvetWireProduct(p));
+      } else {
+        list = list.filter(
+          (p) => p.category === selectedCategory || p.subCategory === selectedCategory
+        );
+      }
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -144,7 +178,7 @@ export default function HomeScreen() {
       list.sort((a, b) => b.rating - a.rating);
     }
     return list;
-  }, [uniqueProducts, selectedCategory, search, sortBy]);
+  }, [uniqueProducts, selectedMainLine, selectedCategory, search, sortBy]);
 
   const featuredProducts = useMemo(
     () =>
@@ -175,7 +209,8 @@ export default function HomeScreen() {
     />
   );
 
-  const showHeroAndFeatured = !search && selectedCategory === 'All';
+  const showHeroAndFeatured =
+    !search && selectedCategory === 'All' && selectedMainLine === 'all';
 
   const SearchBarBlock = (
     <View
@@ -337,7 +372,7 @@ export default function HomeScreen() {
                 Đồ len thủ công xinh xắn,{'\n'}chăm chút từng chi tiết 🧶
               </Text>
               <Text style={[styles.heroSubtitle, isMobile && styles.heroSubtitleMobile]}>
-                Móc khoá, hoa len, túi xách & quà tặng đan móc tỉ mỉ từ sợi len cotton cao cấp.
+                Móc khoá, hoa trang trí, thú bông & phụ kiện làm từ sợi len cotton và kẽm nhung cao cấp.
               </Text>
               <View style={styles.heroPillsRow}>
                 <View style={styles.heroFeaturePill}>
@@ -485,18 +520,135 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* Major Product Lines: Len vs Kẽm Nhung */}
+      <View style={[styles.mainLineSection, isMobile && styles.mainLineSectionMobile]}>
+        <TouchableOpacity
+          style={[
+            styles.mainLineCard,
+            isMobile && styles.mainLineCardMobile,
+            selectedMainLine === 'all' &&
+              selectedCategory === 'All' &&
+              styles.mainLineCardActive,
+          ]}
+          onPress={() => {
+            setSelectedMainLine('all');
+            setSelectedCategory('All');
+          }}
+          activeOpacity={0.8}>
+          <View style={styles.mainLineEmojiCircle}>
+            <Text style={styles.mainLineEmoji}>✨</Text>
+          </View>
+          <View style={styles.mainLineTextCol}>
+            <Text
+              style={[
+                styles.mainLineTitle,
+                selectedMainLine === 'all' &&
+                  selectedCategory === 'All' &&
+                  styles.mainLineTitleActive,
+              ]}
+              numberOfLines={1}>
+              Tất cả dòng SP
+            </Text>
+            <Text style={styles.mainLineSub} numberOfLines={1}>
+              {uniqueProducts.length} sản phẩm
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.mainLineCard,
+            isMobile && styles.mainLineCardMobile,
+            selectedMainLine === 'len' && styles.mainLineCardActive,
+          ]}
+          onPress={() => {
+            setSelectedMainLine('len');
+            if (selectedCategory === 'VelvetWire') setSelectedCategory('All');
+          }}
+          activeOpacity={0.8}>
+          <View style={[styles.mainLineEmojiCircle, { backgroundColor: '#F3E5D8' }]}>
+            <Text style={styles.mainLineEmoji}>🧶</Text>
+          </View>
+          <View style={styles.mainLineTextCol}>
+            <Text
+              style={[
+                styles.mainLineTitle,
+                selectedMainLine === 'len' && styles.mainLineTitleActive,
+              ]}
+              numberOfLines={1}>
+              Sản phẩm từ Len
+            </Text>
+            <Text style={styles.mainLineSub} numberOfLines={1}>
+              {lenCount} mẫu đan móc
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.mainLineCard,
+            isMobile && styles.mainLineCardMobile,
+            (selectedMainLine === 'kem_nhung' || selectedCategory === 'VelvetWire') &&
+              styles.mainLineCardActivePink,
+          ]}
+          onPress={() => {
+            setSelectedMainLine('kem_nhung');
+            if (selectedCategory === 'VelvetWire') setSelectedCategory('All');
+          }}
+          activeOpacity={0.8}>
+          <View style={[styles.mainLineEmojiCircle, { backgroundColor: '#FCE8EE' }]}>
+            <Text style={styles.mainLineEmoji}>🌸</Text>
+          </View>
+          <View style={styles.mainLineTextCol}>
+            <Text
+              style={[
+                styles.mainLineTitle,
+                (selectedMainLine === 'kem_nhung' || selectedCategory === 'VelvetWire') &&
+                  styles.mainLineTitleActive,
+              ]}
+              numberOfLines={1}>
+              Sản phẩm Kẽm nhung
+            </Text>
+            <Text style={styles.mainLineSub} numberOfLines={1}>
+              {kemNhungCount} mẫu nhung mịn
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
       {/* Main Catalog Filter & Sort Toolbar */}
       <View style={styles.catalogToolbar}>
         <SectionHeader
-          title={selectedCategory === 'All' ? HOME_ALL_PRODUCTS : getCategoryLabel(selectedCategory)}
+          title={
+            selectedMainLine === 'kem_nhung' && selectedCategory === 'All'
+              ? 'Sản phẩm Kẽm nhung'
+              : selectedMainLine === 'len' && selectedCategory === 'All'
+                ? 'Sản phẩm từ Len'
+                : selectedCategory === 'All'
+                  ? HOME_ALL_PRODUCTS
+                  : getCategoryLabel(selectedCategory)
+          }
           subtitle={`${filteredProducts.length} sản phẩm sẵn sàng giao ngay`}
         />
 
         {/* Category Filter Chips */}
         <CategoryChips
-          categories={[...CATEGORIES]}
+          categories={
+            selectedMainLine === 'len'
+              ? CATEGORIES.filter((c) => c !== 'VelvetWire')
+              : selectedMainLine === 'kem_nhung'
+                ? ['All', 'Crochet', 'Keychains', 'Dolls', 'Accessories', 'Yarn']
+                : [...CATEGORIES]
+          }
           selected={selectedCategory}
-          onSelect={setSelectedCategory}
+          onSelect={(cat) => {
+            if (cat === 'VelvetWire') {
+              setSelectedMainLine('kem_nhung');
+              setSelectedCategory('All');
+            } else {
+              setSelectedCategory(cat);
+            }
+          }}
         />
 
         {/* Quick Sort Bar */}
@@ -532,10 +684,11 @@ export default function HomeScreen() {
       <Text style={styles.emptyEmoji}>🧶</Text>
       <Text style={styles.emptyText}>{HOME_EMPTY_TITLE}</Text>
       <Text style={styles.emptySubtext}>{HOME_EMPTY_SUBTEXT}</Text>
-      {(selectedCategory !== 'All' || searchInput.length > 0) && (
+      {(selectedCategory !== 'All' || selectedMainLine !== 'all' || searchInput.length > 0) && (
         <TouchableOpacity
           style={styles.resetFilterBtn}
           onPress={() => {
+            setSelectedMainLine('all');
             setSelectedCategory('All');
             setSearchInput('');
             setSortBy('popular');
@@ -1140,5 +1293,72 @@ const styles = StyleSheet.create({
   tearFooterWrapperMobile: {
     paddingHorizontal: 12,
     borderRadius: 22,
+  },
+  mainLineSection: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: SPACING.lg,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  mainLineSectionMobile: {
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  mainLineCard: {
+    flex: 1,
+    minWidth: 150,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFDF9',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1.5,
+    borderColor: '#E5D6C5',
+    ...SHADOWS.small,
+  },
+  mainLineCardMobile: {
+    minWidth: '47%',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  mainLineCardActive: {
+    backgroundColor: '#EADACA',
+    borderColor: '#7A5C45',
+  },
+  mainLineCardActivePink: {
+    backgroundColor: '#F9E6EC',
+    borderColor: '#C47D90',
+  },
+  mainLineEmojiCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mainLineEmoji: {
+    fontSize: 18,
+  },
+  mainLineTextCol: {
+    flex: 1,
+  },
+  mainLineTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#4A3728',
+  },
+  mainLineTitleActive: {
+    color: '#2B1D12',
+    fontWeight: '900',
+  },
+  mainLineSub: {
+    fontSize: 11.5,
+    color: '#846D5B',
+    marginTop: 1,
+    fontWeight: '600',
   },
 });

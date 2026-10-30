@@ -222,8 +222,8 @@ export function BoutiqueFooter({
             </View>
 
             <Text style={styles.brandBio}>
-              Chuyên móc khoá, thú bông, hoa len, túi xách và phụ kiện đan móc
-              thủ công 100% từ sợi len cotton cao cấp.
+              Chuyên sản phẩm Len thủ công & Kẽm nhung: móc khoá, thú bông, hoa
+              trang trí, túi xách và phụ kiện handmade chăm chút từng chi tiết.
             </Text>
 
             <View style={styles.statusRow}>
@@ -240,12 +240,17 @@ export function BoutiqueFooter({
             <TouchableOpacity
               style={styles.footerLinkBtn}
               onPress={() => handleCategoryPress('All')}>
-              <Text style={styles.footerLinkText}>✨ Tất cả sản phẩm (30 mẫu)</Text>
+              <Text style={styles.footerLinkText}>✨ Tất cả sản phẩm (25 mẫu)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.footerLinkBtn}
+              onPress={() => handleCategoryPress('VelvetWire')}>
+              <Text style={styles.footerLinkText}>🌸 Sản phẩm Kẽm nhung</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}
               onPress={() => handleCategoryPress('Keychains')}>
-              <Text style={styles.footerLinkText}>🔑 Móc khoá len đáng yêu</Text>
+              <Text style={styles.footerLinkText}>🔑 Móc khoá đáng yêu</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}

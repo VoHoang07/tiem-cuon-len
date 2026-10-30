@@ -43,6 +43,8 @@ export interface Product {
   image: string | null;
   gallery?: ProductGalleryItem[];
   category: Category;
+  subCategory?: Category;
+  craftLine?: 'len' | 'kem_nhung';
   material: string;
   color: string;
   selectedColorId?: string;
@@ -63,6 +65,7 @@ export interface Product {
 
 export type Category =
   | 'All'
+  | 'VelvetWire'
   | 'Keychains'
   | 'Yarn'
   | 'Crochet'

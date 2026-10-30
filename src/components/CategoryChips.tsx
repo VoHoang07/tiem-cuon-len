@@ -12,6 +12,7 @@ interface CategoryChipsProps {
 
 const CATEGORY_LABELS: Record<Category, string> = {
   All: 'Tất cả',
+  VelvetWire: 'Kẽm nhung',
   Keychains: 'Móc khoá',
   Yarn: 'Len cuộn',
   Crochet: 'Móc len',

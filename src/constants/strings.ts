@@ -155,6 +155,7 @@ export const CARD_RATING_FORMAT = '★ ';
 // These are injected into the generator templates.
 
 export const GEN_CATEGORY_INTRO: Record<string, string> = {
+  VelvetWire: 'Sản phẩm kẽm nhung thủ công mềm mịn này',
   Keychains: 'Chiếc móc khoá crochet nhỏ xinh này',
   Bags: 'Chiếc túi crochet thủ công này',
   Dolls: 'Món đồ chơi crochet đáng yêu này',

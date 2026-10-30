@@ -2,6 +2,8 @@ import { Category } from '@/types/product';
 
 export function getCategoryEmoji(category: string): string {
   switch (category) {
+    case 'VelvetWire':
+      return '🌸';
     case 'Keychains':
       return '🔑';
     case 'Yarn':
@@ -23,6 +25,8 @@ export function getCategoryLabel(category: string): string {
   switch (category) {
     case 'All':
       return 'Tất cả';
+    case 'VelvetWire':
+      return 'Kẽm nhung';
     case 'Keychains':
       return 'Móc khoá';
     case 'Yarn':

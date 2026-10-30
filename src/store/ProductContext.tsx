@@ -11,7 +11,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 
 const PAGE_SIZE = 50;
-const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v8';
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v9';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
 
 const RETIRED_PRODUCT_IDS = new Set([
@@ -305,7 +305,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       saveCachedProducts(next);
       return next;
     });
-    const { isFavorite, gallery, colorOptions, accessoryOptions, ...dbProduct } = product;
+    const { isFavorite, gallery, colorOptions, accessoryOptions, subCategory, craftLine, ...dbProduct } = product;
     supabase.from('products').insert(dbProduct).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm sản phẩm:', error.message);
     }, () => {});
@@ -317,7 +317,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       saveCachedProducts(next);
       return next;
     });
-    const { isFavorite, gallery, colorOptions, accessoryOptions, ...dbProduct } = product;
+    const { isFavorite, gallery, colorOptions, accessoryOptions, subCategory, craftLine, ...dbProduct } = product;
     supabase.from('products').update(dbProduct).eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa sản phẩm:', error.message);
     }, () => {});
