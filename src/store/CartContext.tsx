@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   useRef,
   type ReactNode,
 } from 'react';
@@ -275,17 +276,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const syncCartToSupabase = useCallback(
     async (productId: string, quantity: number | null) => {
       if (!user) return;
-      const baseId = getBaseProductId(productId);
       try {
         if (quantity === null || quantity <= 0) {
           await supabase
             .from('cart_items')
             .delete()
             .eq('userId', user.id)
-            .eq('productId', baseId);
+            .eq('productId', productId);
         } else {
           await supabase.from('cart_items').upsert(
-            { userId: user.id, productId: baseId, quantity },
+            { userId: user.id, productId, quantity },
             { onConflict: 'userId,productId' }
           );
         }
@@ -306,20 +306,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
         selectedAccessory: product.selectedAccessoryName,
       });
 
-      const nextCart = produceNewCart(
-        cart,
-        rehydrated.product,
-        quantity,
-        (q) => {
-          newQty = q;
-        }
-      );
-      setCart(nextCart);
-      persistCart(nextCart);
+      setCart((prev) => {
+        const nextCart = produceNewCart(
+          prev,
+          rehydrated.product,
+          quantity,
+          (q) => {
+            newQty = q;
+          }
+        );
+        persistCart(nextCart);
+        return nextCart;
+      });
 
       await syncCartToSupabase(rehydrated.product.id, newQty);
     },
-    [cart, persistCart, syncCartToSupabase]
+    [persistCart, syncCartToSupabase]
   );
 
   const removeFromCart = useCallback(
@@ -370,11 +372,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [user, persistCart]);
 
-  const cartTotal = cart.reduce(
-    (sum, ci) => sum + ci.product.price * ci.quantity,
-    0
+  const cartTotal = useMemo(
+    () => cart.reduce((sum, ci) => sum + ci.product.price * ci.quantity, 0),
+    [cart]
   );
-  const cartCount = cart.reduce((sum, ci) => sum + ci.quantity, 0);
+  const cartCount = useMemo(
+    () => cart.reduce((sum, ci) => sum + ci.quantity, 0),
+    [cart]
+  );
 
   return (
     <CartContext.Provider

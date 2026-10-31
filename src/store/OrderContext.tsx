@@ -10,12 +10,16 @@ import { Order, OrderStatus } from '@/types/order';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 
-const ORDERS_CACHE_KEY = 'tcl_orders_cache_v1';
+const ORDERS_CACHE_KEY_PREFIX = 'tcl_orders_cache_v2';
 
-function loadCachedOrders(): Order[] {
+function getOrdersCacheKey(userId?: string): string {
+  return `${ORDERS_CACHE_KEY_PREFIX}_${userId || 'guest'}`;
+}
+
+function loadCachedOrders(userId?: string): Order[] {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem(ORDERS_CACHE_KEY);
+      const raw = window.localStorage.getItem(getOrdersCacheKey(userId));
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed as Order[];
@@ -27,10 +31,10 @@ function loadCachedOrders(): Order[] {
   return [];
 }
 
-function saveCachedOrders(items: Order[]) {
+function saveCachedOrders(items: Order[], userId?: string) {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(ORDERS_CACHE_KEY, JSON.stringify(items));
+      window.localStorage.setItem(getOrdersCacheKey(userId), JSON.stringify(items));
     }
   } catch {
     // ignore
@@ -40,7 +44,7 @@ function saveCachedOrders(items: Order[]) {
 interface OrderContextType {
   orders: Order[];
   addOrder: (order: Order) => Promise<void>;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
   getOrdersByUser: (userId: string) => Order[];
   refetchOrders: () => Promise<void>;
@@ -50,7 +54,12 @@ const OrderContext = createContext<OrderContextType | null>(null);
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const { user, role } = useAuth();
-  const [orders, setOrders] = useState<Order[]>(() => loadCachedOrders());
+  const [orders, setOrders] = useState<Order[]>(() => loadCachedOrders(user?.id));
+
+  // Reset orders when user changes
+  useEffect(() => {
+    setOrders(loadCachedOrders(user?.id));
+  }, [user?.id]);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -60,7 +69,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         const { data, error } = await query;
         if (!error && data) {
           setOrders(data as Order[]);
-          saveCachedOrders(data as Order[]);
+          saveCachedOrders(data as Order[], user?.id);
         }
       } else if (user) {
         const { data, error } = await query.eq('userId', user.id);
@@ -72,7 +81,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             const merged = [...(data as Order[]), ...localOnly].sort(
               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
-            saveCachedOrders(merged);
+            saveCachedOrders(merged, user.id);
             return merged;
           });
         }
@@ -93,34 +102,32 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const addOrder = useCallback(async (order: Order) => {
     setOrders((prev) => {
       const next = [order, ...prev];
-      saveCachedOrders(next);
+      saveCachedOrders(next, user?.id);
       return next;
     });
     try {
-      const { error } = await supabase.from('orders').insert(order);
+      const { error } = await supabase.from('orders').upsert(order, { onConflict: 'id' });
       if (error) {
         console.error('[SUPABASE] Lỗi tạo đơn:', error.message);
-        // Retry once after 2s
-        setTimeout(async () => {
-          const { error: retryErr } = await supabase.from('orders').insert(order);
-          if (retryErr) console.error('[SUPABASE] Retry lỗi:', retryErr.message);
-        }, 2000);
       }
     } catch (e) {
       console.error('[SUPABASE] Network error:', e);
     }
-  }, []);
+  }, [user?.id]);
 
-  const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {
+  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
     setOrders((prev) => {
       const next = prev.map((o) => (o.id === orderId ? { ...o, status } : o));
-      saveCachedOrders(next);
+      saveCachedOrders(next, user?.id);
       return next;
     });
-    supabase.from('orders').update({ status }).eq('id', orderId).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi cập nhật đơn:', error.message);
-    }, () => {});
-  }, []);
+    try {
+      const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+      if (error) console.error('[SUPABASE] Lỗi cập nhật đơn:', error.message);
+    } catch {
+      // keep local update
+    }
+  }, [user?.id]);
 
   const getOrdersByUser = useCallback(
     (userId: string) => orders.filter((o) => o.userId === userId),
@@ -130,7 +137,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const deleteOrder = useCallback(async (orderId: string) => {
     setOrders((prev) => {
       const next = prev.filter((o) => o.id !== orderId);
-      saveCachedOrders(next);
+      saveCachedOrders(next, user?.id);
       return next;
     });
 
@@ -139,7 +146,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     } catch {
       // keep local deletion
     }
-  }, []);
+  }, [user?.id]);
 
   return (
     <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, deleteOrder, getOrdersByUser, refetchOrders }}>

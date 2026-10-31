@@ -272,7 +272,7 @@ export default function ProductDetailScreen() {
       return;
     }
     if (!isAuthenticated) {
-      router.push('/(auth)/login');
+      router.push('/login');
       return;
     }
     router.push({

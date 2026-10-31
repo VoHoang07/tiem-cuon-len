@@ -147,13 +147,13 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
           remoteReviewsByMockId.set(matchedMock.id, item.reviews);
         }
       }
-      // Capture admin-edited fields from remote (price, name, description, rating, stock)
+      // Capture admin-edited fields from remote (price, name, description, rating, quantity)
       const overrides: Partial<Product> = {};
       if (item.price !== undefined && item.price !== matchedMock.price) overrides.price = item.price;
       if (item.name && item.name !== matchedMock.name) overrides.name = item.name;
       if (item.description && item.description !== matchedMock.description) overrides.description = item.description;
       if (item.rating !== undefined && item.rating !== matchedMock.rating) overrides.rating = item.rating;
-      if (item.stock !== undefined && item.stock !== matchedMock.stock) overrides.stock = item.stock;
+      if (item.quantity !== undefined && item.quantity !== matchedMock.quantity) overrides.quantity = item.quantity;
       if (Object.keys(overrides).length > 0) {
         remoteOverridesByMockId.set(matchedMock.id, overrides);
       }

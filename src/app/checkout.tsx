@@ -137,7 +137,7 @@ export default function CheckoutScreen() {
     return 'pending_payment' as const;
   };
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (!selectedAddress) {
       Alert.alert('Thiếu địa chỉ', 'Vui lòng thêm địa chỉ giao hàng trước khi thanh toán.');
       return;
@@ -167,7 +167,7 @@ export default function CheckoutScreen() {
       createdAt: new Date().toISOString(),
     };
 
-    addOrder(order);
+    await addOrder(order);
 
     if (selectedPayment.type === 'cod') {
       if (!isBuyNow) clearCart(); // Only clear cart in cart mode
