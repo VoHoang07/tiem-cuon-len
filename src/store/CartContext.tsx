@@ -66,8 +66,10 @@ function rehydrateCartItem(ci: CartItem): CartItem {
     mock.accessoryOptions?.[0];
 
   const resolvedImage = colorOpt?.image || p.image || mock.image;
+  // Product's price already includes accessory priceDelta (set by buildVariantProduct).
+  // Only fall back to mock base price + delta when price is missing/zero.
   const resolvedPrice =
-    p.price && p.price >= mock.price
+    p.price && p.price > 0
       ? p.price
       : mock.price + (accOpt?.priceDelta ?? 0);
 
