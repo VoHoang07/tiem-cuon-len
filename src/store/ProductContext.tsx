@@ -128,6 +128,8 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
   }
 
   const remoteReviewsByMockId = new Map<string, Review[]>();
+  // Track remote overrides for mock products (price, name, description, etc.)
+  const remoteOverridesByMockId = new Map<string, Partial<Product>>();
   const customAdminProducts: Product[] = [];
   const seenCustomNames = new Set<string>();
 
@@ -145,6 +147,16 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
           remoteReviewsByMockId.set(matchedMock.id, item.reviews);
         }
       }
+      // Capture admin-edited fields from remote (price, name, description, rating, stock)
+      const overrides: Partial<Product> = {};
+      if (item.price !== undefined && item.price !== matchedMock.price) overrides.price = item.price;
+      if (item.name && item.name !== matchedMock.name) overrides.name = item.name;
+      if (item.description && item.description !== matchedMock.description) overrides.description = item.description;
+      if (item.rating !== undefined && item.rating !== matchedMock.rating) overrides.rating = item.rating;
+      if (item.stock !== undefined && item.stock !== matchedMock.stock) overrides.stock = item.stock;
+      if (Object.keys(overrides).length > 0) {
+        remoteOverridesByMockId.set(matchedMock.id, overrides);
+      }
       continue;
     }
 
@@ -159,11 +171,16 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
   for (const mp of MOCK_PRODUCTS) {
     if (deletedIds.has(mp.id)) continue;
     const remoteReviews = remoteReviewsByMockId.get(mp.id);
-    merged.push(
-      remoteReviews && remoteReviews.length > 0
-        ? { ...mp, reviews: remoteReviews }
-        : mp
-    );
+    const remoteOverrides = remoteOverridesByMockId.get(mp.id);
+    if (remoteOverrides || (remoteReviews && remoteReviews.length > 0)) {
+      merged.push({
+        ...mp,
+        ...(remoteOverrides || {}),
+        reviews: (remoteReviews && remoteReviews.length > 0) ? remoteReviews : mp.reviews,
+      });
+    } else {
+      merged.push(mp);
+    }
   }
 
   return merged;
@@ -317,16 +334,19 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     }, () => {});
   }, []);
 
-  const updateProduct = useCallback((id: string, product: Product) => {
+  const updateProduct = useCallback(async (id: string, product: Product) => {
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === id ? product : p));
       saveCachedProducts(next);
       return next;
     });
     const { isFavorite, gallery, colorOptions, accessoryOptions, subCategory, craftLine, ...dbProduct } = product;
-    supabase.from('products').update(dbProduct).eq('id', id).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa sản phẩm:', error.message);
-    }, () => {});
+    try {
+      const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
+      if (error) console.error('[SUPABASE] Lỗi sửa sản phẩm:', error.message);
+    } catch (e) {
+      console.error('[SUPABASE] Network error updating product:', e);
+    }
   }, []);
 
   const removeProduct = useCallback((id: string) => {
