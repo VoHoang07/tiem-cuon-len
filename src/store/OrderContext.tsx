@@ -39,7 +39,7 @@ function saveCachedOrders(items: Order[]) {
 
 interface OrderContextType {
   orders: Order[];
-  addOrder: (order: Order) => void;
+  addOrder: (order: Order) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   deleteOrder: (orderId: string) => Promise<void>;
   getOrdersByUser: (userId: string) => Order[];
@@ -58,22 +58,22 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
       if (role === 'admin') {
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
           setOrders(data as Order[]);
           saveCachedOrders(data as Order[]);
         }
       } else if (user) {
         const { data, error } = await query.eq('userId', user.id);
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
+          // Merge remote orders with local-only orders (not yet synced)
           setOrders((prev) => {
-            const merged = new Map<string, Order>();
-            for (const o of prev) merged.set(o.id, o);
-            for (const o of data as Order[]) merged.set(o.id, o);
-            const next = Array.from(merged.values()).sort(
+            const remoteIds = new Set((data as Order[]).map((o) => o.id));
+            const localOnly = prev.filter((o) => o.userId === user.id && !remoteIds.has(o.id));
+            const merged = [...(data as Order[]), ...localOnly].sort(
               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
-            saveCachedOrders(next);
-            return next;
+            saveCachedOrders(merged);
+            return merged;
           });
         }
       }
@@ -90,15 +90,25 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     await fetchOrders();
   }, [fetchOrders]);
 
-  const addOrder = useCallback((order: Order) => {
+  const addOrder = useCallback(async (order: Order) => {
     setOrders((prev) => {
       const next = [order, ...prev];
       saveCachedOrders(next);
       return next;
     });
-    supabase.from('orders').insert(order).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi tạo đơn:', error.message);
-    }, () => {});
+    try {
+      const { error } = await supabase.from('orders').insert(order);
+      if (error) {
+        console.error('[SUPABASE] Lỗi tạo đơn:', error.message);
+        // Retry once after 2s
+        setTimeout(async () => {
+          const { error: retryErr } = await supabase.from('orders').insert(order);
+          if (retryErr) console.error('[SUPABASE] Retry lỗi:', retryErr.message);
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('[SUPABASE] Network error:', e);
+    }
   }, []);
 
   const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {

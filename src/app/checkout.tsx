@@ -148,7 +148,7 @@ export default function CheckoutScreen() {
       return;
     }
 
-    const orderShortId = Date.now().toString().slice(-6);
+    const orderShortId = `${Date.now().toString().slice(-8)}-${Math.random().toString(36).slice(2, 6)}`;
     const orderId = `CUONLEN-${orderShortId}`;
     const status = getOrderStatus(selectedPayment.type);
 

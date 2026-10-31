@@ -25,6 +25,7 @@ import type { Order, OrderStatus } from '@/types/order';
 
 const STATUS_FILTERS: { key: 'ALL' | OrderStatus; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
+  { key: 'pending_payment', label: 'Chờ thanh toán' },
   { key: 'Đang xử lý', label: 'Đang xử lý' },
   { key: 'Đang giao', label: 'Đang giao' },
   { key: 'Hoàn thành', label: 'Hoàn thành' },

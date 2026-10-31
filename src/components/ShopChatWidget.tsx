@@ -20,6 +20,7 @@ import {
   ExternalLink,
   CheckCheck,
   Search,
+  Trash2,
 } from 'lucide-react-native';
 import { useChat } from '@/store/ChatContext';
 import { useShop } from '@/store/ShopContext';
@@ -55,6 +56,7 @@ export function ShopChatWidget() {
     activeConversationId,
     setActiveConversationId,
     markConversationRead,
+    deleteConversation,
     unreadCount,
   } = useChat();
   const { products } = useShop();
@@ -274,33 +276,50 @@ export function ShopChatWidget() {
                   const isSelected =
                     conv.conversationId === activeAdminConversation?.conversationId;
                   return (
-                    <TouchableOpacity
-                      key={conv.conversationId}
-                      style={[
-                        styles.adminTabPill,
-                        isSelected && styles.adminTabPillActive,
-                      ]}
-                      onPress={() => {
-                        setActiveConversationId(conv.conversationId);
-                        markConversationRead(conv.conversationId);
-                      }}
-                      activeOpacity={0.8}>
-                      <Text
+                    <View key={conv.conversationId} style={styles.adminTabWrap}>
+                      <TouchableOpacity
                         style={[
-                          styles.adminTabText,
-                          isSelected && styles.adminTabTextActive,
+                          styles.adminTabPill,
+                          isSelected && styles.adminTabPillActive,
                         ]}
-                        numberOfLines={1}>
-                        {conv.customerName}
-                      </Text>
-                      {conv.unreadForAdmin > 0 && (
-                        <View style={styles.adminTabBadge}>
-                          <Text style={styles.adminTabBadgeText}>
-                            {conv.unreadForAdmin}
-                          </Text>
-                        </View>
+                        onPress={() => {
+                          setActiveConversationId(conv.conversationId);
+                          markConversationRead(conv.conversationId);
+                        }}
+                        activeOpacity={0.8}>
+                        <Text
+                          style={[
+                            styles.adminTabText,
+                            isSelected && styles.adminTabTextActive,
+                          ]}
+                          numberOfLines={1}>
+                          {conv.customerName}
+                        </Text>
+                        {conv.unreadForAdmin > 0 && (
+                          <View style={styles.adminTabBadge}>
+                            <Text style={styles.adminTabBadgeText}>
+                              {conv.unreadForAdmin}
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                      {isSelected && (
+                        <TouchableOpacity
+                          style={styles.adminTabDeleteBtn}
+                          onPress={() => {
+                            if (typeof window !== 'undefined' && window.confirm) {
+                              if (window.confirm(`Xoá cuộc trò chuyện với ${conv.customerName}?`)) {
+                                deleteConversation(conv.conversationId);
+                              }
+                            } else {
+                              deleteConversation(conv.conversationId);
+                            }
+                          }}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <Trash2 size={11} color="#D32F2F" />
+                        </TouchableOpacity>
                       )}
-                    </TouchableOpacity>
+                    </View>
                   );
                 })}
               </ScrollView>
@@ -823,6 +842,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  adminTabWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   adminTabPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -860,6 +884,17 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '900',
     color: COLORS.white,
+  },
+  adminTabDeleteBtn: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FDF0ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#F5C9C0',
+    marginLeft: -2,
   },
 
   /* Messages Stream */

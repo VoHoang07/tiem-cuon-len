@@ -172,6 +172,7 @@ interface ChatContextType {
   activeConversationId: string | null;
   setActiveConversationId: (id: string | null) => void;
   markConversationRead: (conversationId: string) => void;
+  deleteConversation: (conversationId: string) => Promise<void>;
   unreadCount: number;
 }
 
@@ -271,22 +272,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Update read status on Supabase REST table
+  // Update read status on Supabase REST table (per-message, preserving existing read state)
   const patchReadStatusOnSupabase = useCallback(
-    async (msgIds: string[], readByAdmin: boolean, readByCustomer: boolean) => {
-      if (!supabaseUrl || !supabaseAnonKey || msgIds.length === 0) return;
-      const wardValue = `${readByAdmin ? '1' : '0'}|${readByCustomer ? '1' : '0'}`;
+    async (msgs: { id: string; readByAdmin: boolean; readByCustomer: boolean }[]) => {
+      if (!supabaseUrl || !supabaseAnonKey || msgs.length === 0) return;
       try {
         await Promise.all(
-          msgIds.map((id) =>
-            fetch(`${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(id)}`, {
+          msgs.map((m) =>
+            fetch(`${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(m.id)}`, {
               method: 'PATCH',
               headers: {
                 apikey: supabaseAnonKey,
                 Authorization: `Bearer ${supabaseAnonKey}`,
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ ward: wardValue }),
+              body: JSON.stringify({
+                ward: `${m.readByAdmin ? '1' : '0'}|${m.readByCustomer ? '1' : '0'}`,
+              }),
             })
           )
         );
@@ -499,19 +501,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const markConversationRead = useCallback(
     (conversationId: string) => {
-      const updatedIds: string[] = [];
+      const updatedMsgs: { id: string; readByAdmin: boolean; readByCustomer: boolean }[] = [];
       setMessages((prev) => {
         let changed = false;
         const next = prev.map((m) => {
           if (m.conversationId !== conversationId) return m;
           if (isAdmin && m.senderRole === 'customer' && !m.readByAdmin) {
             changed = true;
-            updatedIds.push(m.id);
+            updatedMsgs.push({ id: m.id, readByAdmin: true, readByCustomer: m.readByCustomer });
             return { ...m, readByAdmin: true };
           }
           if (!isAdmin && m.senderRole === 'admin' && !m.readByCustomer) {
             changed = true;
-            updatedIds.push(m.id);
+            updatedMsgs.push({ id: m.id, readByAdmin: m.readByAdmin, readByCustomer: true });
             return { ...m, readByCustomer: true };
           }
           return m;
@@ -529,11 +531,67 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return changed ? next : prev;
       });
 
-      if (updatedIds.length > 0) {
-        patchReadStatusOnSupabase(updatedIds, true, true);
+      if (updatedMsgs.length > 0) {
+        patchReadStatusOnSupabase(updatedMsgs);
       }
     },
     [isAdmin, patchReadStatusOnSupabase]
+  );
+
+  // Delete an entire conversation (admin only) — removes from local state, localStorage, and Supabase
+  const deleteConversation = useCallback(
+    async (conversationId: string) => {
+      const deletedIds: string[] = [];
+      setMessages((prev) => {
+        const next = prev.filter((m) => {
+          if (m.conversationId === conversationId) {
+            deletedIds.push(m.id);
+            return false;
+          }
+          return true;
+        });
+        saveLocalMessages(next);
+        return next;
+      });
+
+      // If we were viewing this conversation, switch to another
+      if (activeConversationId === conversationId) {
+        setActiveConversationId(null);
+      }
+
+      // Delete from Supabase
+      if (supabaseUrl && supabaseAnonKey && deletedIds.length > 0) {
+        try {
+          await Promise.all(
+            deletedIds.map((id) =>
+              fetch(
+                `${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(id)}&fullName=eq.${CHAT_PARTITION_KEY}`,
+                {
+                  method: 'DELETE',
+                  headers: {
+                    apikey: supabaseAnonKey,
+                    Authorization: `Bearer ${supabaseAnonKey}`,
+                  },
+                }
+              )
+            )
+          );
+        } catch {
+          // ignore network errors
+        }
+      }
+
+      // Broadcast deletion to other tabs
+      if (broadcastRef.current) {
+        try {
+          const remaining = loadLocalMessages();
+          broadcastRef.current.postMessage({ type: 'SYNC_MESSAGES', messages: remaining });
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [activeConversationId]
   );
 
   // Mark read automatically when widget is open
@@ -680,6 +738,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       activeConversationId,
       setActiveConversationId,
       markConversationRead,
+      deleteConversation,
       unreadCount,
     }),
     [
@@ -693,6 +752,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       myMessages,
       activeConversationId,
       markConversationRead,
+      deleteConversation,
       unreadCount,
     ]
   );

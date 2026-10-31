@@ -9,6 +9,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   'Đang chuẩn bị hàng': 'Đang chuẩn bị hàng',
   'Đang giao': 'Đang giao hàng',
   'Hoàn thành': 'Hoàn thành',
+  'Đã hủy': 'Đã hủy',
 };
 
 // Color scheme for status badges
@@ -20,6 +21,7 @@ export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
   'Đang chuẩn bị hàng': '#4A90D9',
   'Đang giao': '#4A90D9',
   'Hoàn thành': '#6BAF5C',
+  'Đã hủy': '#D32F2F',
 };
 
 // Admin progression: what's the next status after this one?
@@ -31,6 +33,7 @@ export const ORDER_STATUS_NEXT: Record<OrderStatus, OrderStatus | null> = {
   'Đang chuẩn bị hàng': 'Đang giao',
   'Đang giao': 'Hoàn thành',
   'Hoàn thành': null,
+  'Đã hủy': null,
 };
 
 // Map raw status to display label (safe fallback)

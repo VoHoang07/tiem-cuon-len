@@ -8,7 +8,8 @@ export type OrderStatus =
   | 'Đang xử lý'
   | 'Đang chuẩn bị hàng'
   | 'Đang giao'
-  | 'Hoàn thành';
+  | 'Hoàn thành'
+  | 'Đã hủy';
 
 export interface OrderItem {
   product: Product;
