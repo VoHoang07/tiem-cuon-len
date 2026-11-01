@@ -12,7 +12,7 @@ interface ShopContextType {
   cartHydrated: boolean;
   hasMore: boolean;
   addProduct: (product: Product) => void;
-  updateProduct: (id: string, product: Product) => void;
+  updateProduct: (id: string, product: Product) => Promise<void>;
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
   addToCart: (product: Product, quantity: number) => Promise<void>;

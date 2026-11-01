@@ -11,7 +11,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 
 const PAGE_SIZE = 50;
-const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v10';
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v11';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
 
 const RETIRED_PRODUCT_IDS = new Set([
@@ -147,14 +147,24 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
           remoteReviewsByMockId.set(matchedMock.id, item.reviews);
         }
       }
-      // Capture admin-edited fields from remote (price, name, description, rating, quantity)
-      const overrides: Partial<Product> = {};
-      if (item.price !== undefined && item.price !== matchedMock.price) overrides.price = item.price;
-      if (item.name && item.name !== matchedMock.name) overrides.name = item.name;
-      if (item.description && item.description !== matchedMock.description) overrides.description = item.description;
-      if (item.rating !== undefined && item.rating !== matchedMock.rating) overrides.rating = item.rating;
-      if (item.quantity !== undefined && item.quantity !== matchedMock.quantity) overrides.quantity = item.quantity;
-      if (Object.keys(overrides).length > 0) {
+      // Only apply admin field overrides when the remote row ID exactly matches the mock ID
+      // (prevents old legacy seeded rows with different IDs from overwriting mock products)
+      if (item.id === matchedMock.id) {
+        const overrides: Partial<Product> = {};
+        if (item.price !== undefined && Number(item.price) > 0) overrides.price = Number(item.price);
+        if (item.name) overrides.name = item.name;
+        if (item.description) overrides.description = item.description;
+        if (item.material) overrides.material = item.material;
+        if (item.color) overrides.color = item.color;
+        if (Array.isArray(item.tags) && item.tags.length > 0) overrides.tags = item.tags;
+        if (item.rating !== undefined) overrides.rating = item.rating;
+        if (item.quantity !== undefined) overrides.quantity = item.quantity;
+        if (
+          typeof item.image === 'string' &&
+          (item.image.startsWith('data:image/') || item.image.startsWith('http'))
+        ) {
+          overrides.image = item.image;
+        }
         remoteOverridesByMockId.set(matchedMock.id, overrides);
       }
       continue;
@@ -213,13 +223,35 @@ function saveCachedProducts(items: Product[]) {
   }
 }
 
+function toDbProduct(product: Product) {
+  const validImage =
+    typeof product.image === 'string' && !product.image.trim().startsWith('{')
+      ? product.image
+      : null;
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    price: Number(product.price),
+    image: validImage,
+    category: product.category,
+    material: product.material,
+    color: product.color,
+    quantity: Number(product.quantity),
+    rating: Number(product.rating ?? 5),
+    reviews: Array.isArray(product.reviews) ? product.reviews : [],
+    tags: Array.isArray(product.tags) ? product.tags : [],
+    createdAt: product.createdAt || new Date().toISOString(),
+  };
+}
+
 interface ProductContextType {
   products: Product[];
   isLoading: boolean;
   hasMore: boolean;
   loadMore: () => Promise<void>;
   addProduct: (product: Product) => void;
-  updateProduct: (id: string, product: Product) => void;
+  updateProduct: (id: string, product: Product) => Promise<void>;
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
   refetchProducts: () => Promise<void>;
@@ -328,8 +360,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       saveCachedProducts(next);
       return next;
     });
-    const { isFavorite, gallery, colorOptions, accessoryOptions, subCategory, craftLine, ...dbProduct } = product;
-    supabase.from('products').insert(dbProduct).then(({ error }) => {
+    const dbProduct = toDbProduct(product);
+    supabase.from('products').upsert(dbProduct, { onConflict: 'id' }).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm sản phẩm:', error.message);
     }, () => {});
   }, []);
@@ -340,7 +372,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       saveCachedProducts(next);
       return next;
     });
-    const { isFavorite, gallery, colorOptions, accessoryOptions, subCategory, craftLine, ...dbProduct } = product;
+    const dbProduct = toDbProduct(product);
     try {
       const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
       if (error) console.error('[SUPABASE] Lỗi sửa sản phẩm:', error.message);

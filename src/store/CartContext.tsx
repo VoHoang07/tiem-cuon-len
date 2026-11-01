@@ -12,6 +12,7 @@ import { Platform, AppState } from 'react-native';
 import { Product, CartItem } from '@/types/product';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
+import { useProducts } from '@/store/ProductContext';
 import { MOCK_PRODUCTS } from '@/data/products';
 
 interface CartContextType {
@@ -37,7 +38,7 @@ function getBaseProductId(productId: string, baseProductId?: string): string {
   return productId.split('__')[0];
 }
 
-function rehydrateCartItem(ci: CartItem): CartItem {
+function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem {
   if (!ci || !ci.product) return ci;
   const p = ci.product;
   const baseId = getBaseProductId(p.id, p.baseProductId);
@@ -45,33 +46,38 @@ function rehydrateCartItem(ci: CartItem): CartItem {
   const parsedColorId = p.selectedColorId || (parts.length >= 2 ? parts[1] : undefined);
   const parsedAccId = p.selectedAccessoryId || (parts.length >= 3 ? parts[2] : undefined);
 
+  const liveProduct = catalogProducts?.find((m) => m.id === baseId);
   const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
-  if (!mock) return ci;
+  const source = liveProduct || mock;
+  if (!source) return ci;
+
+  const colorOptions = source.colorOptions || mock?.colorOptions;
+  const accessoryOptions = source.accessoryOptions || mock?.accessoryOptions;
 
   const colorOpt =
-    mock.colorOptions?.find((c) => c.id === parsedColorId) ||
-    mock.colorOptions?.find(
+    colorOptions?.find((c) => c.id === parsedColorId) ||
+    colorOptions?.find(
       (c) =>
         c.name.toLowerCase() ===
         (p.selectedColorName || p.color || '').trim().toLowerCase()
     ) ||
-    mock.colorOptions?.[0];
+    colorOptions?.[0];
 
   const accOpt =
-    mock.accessoryOptions?.find((a) => a.id === parsedAccId) ||
-    mock.accessoryOptions?.find(
+    accessoryOptions?.find((a) => a.id === parsedAccId) ||
+    accessoryOptions?.find(
       (a) =>
         a.name.toLowerCase() === (p.selectedAccessoryName || '').trim().toLowerCase()
     ) ||
-    mock.accessoryOptions?.[0];
+    accessoryOptions?.[0];
 
-  const resolvedImage = colorOpt?.image || p.image || mock.image;
-  // Product's price already includes accessory priceDelta (set by buildVariantProduct).
-  // Only fall back to mock base price + delta when price is missing/zero.
-  const resolvedPrice =
-    p.price && p.price > 0
+  const resolvedImage = colorOpt?.image || p.image || source.image || mock?.image || null;
+  // Always prefer live catalog base price + accessory delta when available so admin price edits apply immediately
+  const resolvedPrice = liveProduct
+    ? liveProduct.price + (accOpt?.priceDelta ?? 0)
+    : p.price && p.price > 0
       ? p.price
-      : mock.price + (accOpt?.priceDelta ?? 0);
+      : source.price + (accOpt?.priceDelta ?? 0);
 
   return {
     ...ci,
@@ -81,6 +87,7 @@ function rehydrateCartItem(ci: CartItem): CartItem {
     product: {
       ...p,
       baseProductId: baseId,
+      name: liveProduct?.name || p.name,
       image: resolvedImage,
       price: resolvedPrice,
       selectedColorId: colorOpt?.id ?? parsedColorId,
@@ -95,6 +102,7 @@ function rehydrateCartItem(ci: CartItem): CartItem {
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { products: catalogProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartHydrated, setCartHydrated] = useState(false);
   const prevOwnerId = useRef<string>('');
@@ -108,14 +116,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return (parsed as CartItem[]).map(rehydrateCartItem);
+          return (parsed as CartItem[]).map((ci) =>
+            rehydrateCartItem(ci, catalogProducts)
+          );
         }
       }
     } catch {
       // ignore
     }
     return null;
-  }, [cartOwnerId]);
+  }, [cartOwnerId, catalogProducts]);
 
   const persistCart = useCallback(
     (items: CartItem[]) => {
@@ -130,6 +140,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [cartOwnerId]
   );
 
+  // Keep existing cart items' prices in sync whenever catalogProducts updates
+  useEffect(() => {
+    if (!catalogProducts || catalogProducts.length === 0) return;
+    setCart((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map((ci) => {
+        const updated = rehydrateCartItem(ci, catalogProducts);
+        if (
+          updated.product.price !== ci.product.price ||
+          updated.product.name !== ci.product.name
+        ) {
+          changed = true;
+          return updated;
+        }
+        return ci;
+      });
+      if (changed) {
+        persistCart(next);
+        return next;
+      }
+      return prev;
+    });
+  }, [catalogProducts, persistCart]);
+
   const fetchCart = useCallback(async () => {
     if (!user) return;
 
@@ -140,7 +175,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (rawGuest) {
           const parsed = JSON.parse(rawGuest);
           if (Array.isArray(parsed)) {
-            guestCart = (parsed as CartItem[]).map(rehydrateCartItem);
+            guestCart = (parsed as CartItem[]).map((ci) =>
+              rehydrateCartItem(ci, catalogProducts)
+            );
           }
           window.localStorage.removeItem('cart_guest');
         }
@@ -161,25 +198,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       if (data && data.length > 0) {
         const cartRows = data as { productId: string; quantity: number }[];
-        const productIds = [...new Set(cartRows.map((r) => r.productId))];
+        const baseProductIds = [
+          ...new Set(cartRows.map((r) => getBaseProductId(r.productId))),
+        ];
 
         const { data: products } = await supabase
           .from('products')
           .select('*')
-          .in('id', productIds);
+          .in('id', baseProductIds);
 
         const productMap = new Map((products ?? []).map((p) => [p.id, p]));
 
         baseItems = cartRows
           .map((ci) => {
             const baseId = getBaseProductId(ci.productId);
+            const live = catalogProducts.find((m) => m.id === baseId);
             const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
-            const product = (productMap.get(ci.productId) || mock) as Product | undefined;
+            const product = (live || productMap.get(baseId) || mock) as
+              | Product
+              | undefined;
             if (!product) return null;
-            return rehydrateCartItem({
-              product: { ...product, id: ci.productId },
-              quantity: ci.quantity,
-            });
+            return rehydrateCartItem(
+              {
+                product: { ...product, id: ci.productId },
+                quantity: ci.quantity,
+              },
+              catalogProducts
+            );
           })
           .filter((ci): ci is CartItem => ci !== null && ci.quantity > 0);
       }
@@ -205,7 +250,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setCart(baseItems);
     persistCart(baseItems);
     setCartHydrated(true);
-  }, [user, persistCart, hydrateCartFromStorage]);
+  }, [user, persistCart, hydrateCartFromStorage, catalogProducts]);
 
   useEffect(() => {
     if (
@@ -301,12 +346,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCart = useCallback(
     async (product: Product, quantity: number) => {
       let newQty = quantity;
-      const rehydrated = rehydrateCartItem({
-        product,
-        quantity,
-        selectedColor: product.selectedColorName || product.color,
-        selectedAccessory: product.selectedAccessoryName,
-      });
+      const rehydrated = rehydrateCartItem(
+        {
+          product,
+          quantity,
+          selectedColor: product.selectedColorName || product.color,
+          selectedAccessory: product.selectedAccessoryName,
+        },
+        catalogProducts
+      );
 
       setCart((prev) => {
         const nextCart = produceNewCart(
@@ -323,7 +371,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       await syncCartToSupabase(rehydrated.product.id, newQty);
     },
-    [persistCart, syncCartToSupabase]
+    [persistCart, syncCartToSupabase, catalogProducts]
   );
 
   const removeFromCart = useCallback(

@@ -188,7 +188,7 @@ export default function EditProductScreen() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) {
       Alert.alert(AP_REQUIRED_TITLE, AP_NAME_REQUIRED);
       return;
@@ -216,8 +216,36 @@ export default function EditProductScreen() {
 
     const parsedColors = parseColorOptionsInput(
       colorVariantsInput.trim() || color.trim()
+    ).map((pc, idx) => {
+      const existingMatch =
+        existingProduct.colorOptions?.find(
+          (ec) => ec.name.trim().toLowerCase() === pc.name.trim().toLowerCase()
+        ) || existingProduct.colorOptions?.[idx];
+      if (!existingMatch) return pc;
+      return {
+        ...existingMatch,
+        name: pc.name,
+        hex:
+          existingMatch.name.trim().toLowerCase() === pc.name.trim().toLowerCase()
+            ? existingMatch.hex
+            : pc.hex,
+      };
+    });
+
+    const parsedAccessories = parseAccessoryOptionsInput(accessoryVariantsInput).map(
+      (pa, idx) => {
+        const existingMatch =
+          existingProduct.accessoryOptions?.find(
+            (ea) => ea.name.trim().toLowerCase() === pa.name.trim().toLowerCase()
+          ) || existingProduct.accessoryOptions?.[idx];
+        if (!existingMatch) return pa;
+        return {
+          ...existingMatch,
+          name: pa.name,
+          priceDelta: pa.priceDelta,
+        };
+      }
     );
-    const parsedAccessories = parseAccessoryOptionsInput(accessoryVariantsInput);
 
     const updatedProduct: Product = {
       ...existingProduct,
@@ -241,7 +269,7 @@ export default function EditProductScreen() {
         .filter(Boolean),
     };
 
-    updateProduct(existingProduct.id, updatedProduct);
+    await updateProduct(existingProduct.id, updatedProduct);
     if (Platform.OS === 'web') {
       router.replace('/manage-products');
       return;
