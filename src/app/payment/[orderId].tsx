@@ -538,7 +538,7 @@ export default function PaymentScreen() {
   };
 
   const handleSimulateSepayWebhook = async () => {
-    if (!order) return;
+    if (!order || !isAdmin) return;
     setSimulatingSepay(true);
     try {
       const payload = {

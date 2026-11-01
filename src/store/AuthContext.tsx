@@ -12,6 +12,16 @@ import type { Session } from '@supabase/supabase-js';
 
 const AVATAR_STORAGE_PREFIX = '@tiem_cuon_len_avatar_';
 
+// Explicit allowlist of shop administrator emails to prevent client-side user_metadata role tampering
+const ADMIN_EMAILS = new Set([
+  'vohoang1327@gmail.com',
+  'khanhly30072007@gmail.com',
+]);
+
+function sanitizeInput(val: string, maxLen = 80): string {
+  return val.replace(/[<>]/g, '').trim().slice(0, maxLen);
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -39,11 +49,13 @@ const AuthContext = createContext<AuthContextType | null>(null);
 function toAuthUser(session: Session | null, localAvatar?: string | null): AuthUser | null {
   if (!session?.user) return null;
   const meta = session.user.user_metadata || {};
+  const email = (session.user.email ?? '').toLowerCase().trim();
+  const isVerifiedAdmin = ADMIN_EMAILS.has(email) && (meta.role === 'admin' || email === 'vohoang1327@gmail.com');
   return {
     id: session.user.id,
     email: session.user.email ?? '',
-    name: (meta.name as string) ?? '',
-    role: (meta.role as 'admin' | 'customer') ?? 'customer',
+    name: sanitizeInput((meta.name as string) ?? ''),
+    role: isVerifiedAdmin ? 'admin' : 'customer',
     avatar: localAvatar || (meta.avatar as string) || undefined,
   };
 }
@@ -104,9 +116,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState(0);
+
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     if (configError) {
       return { success: false, error: configError };
+    }
+    if (Date.now() < lockoutUntil) {
+      const waitSec = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      return { success: false, error: `Nhập sai quá nhiều lần. Vui lòng thử lại sau ${waitSec} giây.` };
     }
 
     try {
@@ -117,8 +136,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         if (__DEV__) console.log('[LOGIN ERROR]', error);
+        const nextFailed = failedAttempts + 1;
+        setFailedAttempts(nextFailed);
+        if (nextFailed >= 5) {
+          setLockoutUntil(Date.now() + 60000);
+          setFailedAttempts(0);
+        }
         return { success: false, error: 'Email hoặc mật khẩu không đúng.' };
       }
+      setFailedAttempts(0);
       if (data.session) {
         const localAvatar = await AsyncStorage.getItem(`${AVATAR_STORAGE_PREFIX}${data.session.user.id}`).catch(() => null);
         setUser(toAuthUser(data.session, localAvatar));
@@ -128,11 +154,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (__DEV__) console.log('[LOGIN ERROR]', err);
       return { success: false, error: NETWORK_ERROR_MSG };
     }
-  }, [configError]);
+  }, [configError, failedAttempts, lockoutUntil]);
 
   const register = useCallback(async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     if (configError) {
       return { success: false, error: configError };
+    }
+    if (Date.now() < lockoutUntil) {
+      return { success: false, error: 'Thao tác quá nhanh. Vui lòng thử lại sau ít phút.' };
+    }
+
+    const safeName = sanitizeInput(name);
+    if (!safeName) {
+      return { success: false, error: 'Tên hiển thị không hợp lệ.' };
     }
 
     try {
@@ -140,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: email.toLowerCase().trim(),
         password,
         options: {
-          data: { name: name.trim(), role: 'customer', avatar: 'capybara' },
+          data: { name: safeName, role: 'customer', avatar: 'capybara' },
         },
       });
 
@@ -180,7 +214,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = useCallback(async (name: string, avatar?: string) => {
     if (!user) return;
-    const trimmedName = name.trim();
+    const trimmedName = sanitizeInput(name);
+    if (!trimmedName) return;
     const nextAvatar = avatar ?? user.avatar;
     setUser((prev) => prev ? { ...prev, name: trimmedName, avatar: nextAvatar } : null);
     if (nextAvatar) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -73,7 +73,7 @@ export default function CheckoutScreen() {
   const { userAddresses, getDefaultAddress } = useAddresses();
   const { enabledMethods, defaultMethod, loading: pmLoading } = usePaymentMethods();
 
-  // Compute buyNow product
+  // Compute buyNow product (derive authoritative price from catalog + accessoryDelta, never trust URL price param)
   const buyNowProduct = useMemo(() => {
     if (!isBuyNow || !productId) return null;
     const base = products.find((p) => p.id === productId) ?? null;
@@ -81,8 +81,12 @@ export default function CheckoutScreen() {
     const matchedColor = base.colorOptions?.find(
       (c) => c.name.toLowerCase() === (selectedColor || '').trim().toLowerCase()
     );
+    const matchedAccessory = base.accessoryOptions?.find(
+      (a) => a.name.toLowerCase() === (selectedAccessory || '').trim().toLowerCase()
+    );
+    const accessoryDelta = matchedAccessory?.priceDelta ?? 0;
+    const authoritativePrice = Math.max(1000, Number(base.price) + Number(accessoryDelta));
     const suffixParts = [selectedColor, selectedAccessory].filter(Boolean);
-    const parsedPrice = unitPrice ? parseInt(unitPrice, 10) : NaN;
     return {
       ...base,
       name: suffixParts.length > 0 ? `${base.name} (${suffixParts.join(' - ')})` : base.name,
@@ -91,11 +95,11 @@ export default function CheckoutScreen() {
       selectedColorHex: matchedColor?.hex,
       selectedAccessoryName: selectedAccessory || undefined,
       image: matchedColor?.image || base.image,
-      price: !isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : base.price,
+      price: authoritativePrice,
     };
-  }, [isBuyNow, productId, products, selectedColor, selectedAccessory, unitPrice]);
+  }, [isBuyNow, productId, products, selectedColor, selectedAccessory]);
 
-  const buyNowQtyNum = parseInt(buyNowQty ?? '1', 10) || 1;
+  const buyNowQtyNum = Math.max(1, Math.min(99, parseInt(buyNowQty ?? '1', 10) || 1));
 
   // Compute checkout items based on mode
   const checkoutItems = useMemo(() => {
@@ -111,7 +115,9 @@ export default function CheckoutScreen() {
 
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  const lastOrderAtRef = useRef<number>(0);
 
   // Set default payment method when data loads
   useEffect(() => {
@@ -139,6 +145,20 @@ export default function CheckoutScreen() {
   };
 
   const handlePayment = async () => {
+    if (isSubmittingOrder) return;
+    if (!user?.id) {
+      Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt hàng.');
+      router.replace('/login');
+      return;
+    }
+    if (Date.now() - lastOrderAtRef.current < 15000) {
+      Alert.alert('Thao tác quá nhanh', 'Vui lòng đợi 15 giây trước khi tạo đơn hàng tiếp theo.');
+      return;
+    }
+    if (checkoutItems.length === 0 || checkoutTotal <= 0) {
+      Alert.alert('Giỏ hàng trống', 'Không có sản phẩm hợp lệ để thanh toán.');
+      return;
+    }
     if (!selectedAddress) {
       Alert.alert('Thiếu địa chỉ', 'Vui lòng thêm địa chỉ giao hàng trước khi thanh toán.');
       return;
@@ -148,6 +168,9 @@ export default function CheckoutScreen() {
       Alert.alert('Chưa chọn', 'Vui lòng chọn phương thức thanh toán.');
       return;
     }
+
+    setIsSubmittingOrder(true);
+    lastOrderAtRef.current = Date.now();
 
     const orderShortId = `${Date.now().toString().slice(-8)}-${Math.random().toString(36).slice(2, 6)}`;
     const orderId = `CUONLEN-${orderShortId}`;

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { PaymentMethod, PaymentMethodInput, type PaymentMethodType } from '@/types/payment-method';
 import { supabase } from '@/services/supabase';
+import { useAuth } from '@/store/AuthContext';
 
 const PAYMENT_CACHE_KEY = 'tcl_payment_methods_v3';
 
@@ -98,6 +99,7 @@ interface PaymentMethodsContextType {
 const PaymentMethodsContext = createContext<PaymentMethodsContextType | null>(null);
 
 export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
+  const { role } = useAuth();
   const [methods, setMethods] = useState<PaymentMethod[]>(() => loadCachedMethods());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +150,7 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
   const defaultMethod = methods.find((m) => m.is_default === true) ?? enabledMethods[0];
 
   const addMethod = useCallback(async (input: PaymentMethodInput) => {
+    if (role !== 'admin') return;
     const optimistic: PaymentMethod = {
       ...input,
       id: `pm_${Date.now()}`,
@@ -176,9 +179,10 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
     } catch {
       // keep optimistic
     }
-  }, []);
+  }, [role]);
 
   const updateMethod = useCallback(async (id: string, data: Partial<PaymentMethod>) => {
+    if (role !== 'admin') return;
     const payload = { ...data, updated_at: new Date().toISOString() };
     setMethods((prev) => {
       const next = prev.map((m) => (m.id === id ? { ...m, ...data } : m));
@@ -191,9 +195,10 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-  }, []);
+  }, [role]);
 
   const deleteMethod = useCallback(async (id: string) => {
+    if (role !== 'admin') return;
     setMethods((prev) => {
       const next = prev.filter((m) => m.id !== id);
       saveCachedMethods(next);
@@ -205,9 +210,10 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-  }, []);
+  }, [role]);
 
   const setDefault = useCallback(async (id: string) => {
+    if (role !== 'admin') return;
     setMethods((prev) => {
       const next = prev.map((m) => ({ ...m, is_default: m.id === id }));
       saveCachedMethods(next);
@@ -226,7 +232,7 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-  }, []);
+  }, [role]);
 
   const getMethodByType = useCallback(
     (type: PaymentMethodType) =>

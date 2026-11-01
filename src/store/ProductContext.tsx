@@ -9,6 +9,7 @@ import {
 import { Product, Review } from '@/types/product';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
+import { useAuth } from '@/store/AuthContext';
 
 const PAGE_SIZE = 50;
 const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v11';
@@ -260,6 +261,7 @@ interface ProductContextType {
 const ProductContext = createContext<ProductContextType | null>(null);
 
 export function ProductProvider({ children }: { children: ReactNode }) {
+  const { role } = useAuth();
   const [products, setProducts] = useState<Product[]>(() => loadCachedProducts());
   const [loaded, setLoaded] = useState(true);
   const [hasMore, setHasMore] = useState(false);
@@ -371,6 +373,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   }, [fetchProducts]);
 
   const addProduct = useCallback((product: Product) => {
+    if (role !== 'admin') return;
     setProducts((prev) => {
       const next = [product, ...prev];
       saveCachedProducts(next);
@@ -380,9 +383,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     supabase.from('products').upsert(dbProduct, { onConflict: 'id' }).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm sản phẩm:', error.message);
     }, () => {});
-  }, []);
+  }, [role]);
 
   const updateProduct = useCallback(async (id: string, product: Product) => {
+    if (role !== 'admin') return;
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === id ? product : p));
       saveCachedProducts(next);
@@ -395,9 +399,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('[SUPABASE] Network error updating product:', e);
     }
-  }, []);
+  }, [role]);
 
   const removeProduct = useCallback((id: string) => {
+    if (role !== 'admin') return;
     const deleted = getDeletedIds();
     deleted.add(id);
     saveDeletedIds(deleted);
@@ -409,13 +414,23 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     supabase.from('products').delete().eq('id', id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá sản phẩm:', error.message);
     }, () => {});
-  }, []);
+  }, [role]);
 
   const addReview = useCallback((productId: string, review: Review) => {
+    const safeRating = Math.max(1, Math.min(5, Number(review.rating) || 5));
+    const safeComment = String(review.comment || '').replace(/[<>]/g, '').trim().slice(0, 500);
+    const safeUserName = String(review.userName || 'Khách hàng').replace(/[<>]/g, '').trim().slice(0, 80);
+    if (!safeComment) return;
+    const sanitizedReview: Review = {
+      ...review,
+      userName: safeUserName,
+      rating: safeRating,
+      comment: safeComment,
+    };
     setProducts((prev) =>
       prev.map((p) => {
         if (p.id !== productId) return p;
-        const newReviews = [...p.reviews, review];
+        const newReviews = [...p.reviews, sanitizedReview];
         const avgRating = newReviews.reduce((sum, r) => sum + r.rating, 0) / newReviews.length;
         const updated = { ...p, reviews: newReviews, rating: Math.round(avgRating * 10) / 10 };
         supabase.from('products').update({ reviews: newReviews, rating: updated.rating }).eq('id', productId).then(({ error }) => {

@@ -193,6 +193,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const isChannelSubscribedRef = useRef(false);
   const lastNewestCustomerMsgIdRef = useRef<string | null>(null);
   const deletedConvIdsRef = useRef<Set<string>>(new Set());
+  const lastSentAtRef = useRef<number>(0);
 
   // Determine active Client conversation ID and persist it for seamless testing
   const myConversationId = useMemo(() => {
@@ -571,6 +572,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Delete an entire conversation (admin only) — removes from local state, localStorage, and Supabase
   const deleteConversation = useCallback(
     async (conversationId: string) => {
+      if (!isAdmin) return;
       deletedConvIdsRef.current.add(conversationId);
       setTimeout(() => {
         deletedConvIdsRef.current.delete(conversationId);
@@ -629,7 +631,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [activeConversationId]
+    [activeConversationId, isAdmin]
   );
 
   // Mark read automatically when widget is open
@@ -648,11 +650,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       product?: PingedProduct | null,
       targetConversationId?: string
     ) => {
-      const trimmed = text.trim();
+      const now = Date.now();
+      if (!isAdmin && now - lastSentAtRef.current < 1000) return;
+      const trimmed = text.replace(/[<>]/g, '').trim().slice(0, 500);
       const attachedProduct = sanitizeProduct(
         product !== undefined ? product : pendingProduct
       );
       if (!trimmed && !attachedProduct) return;
+      lastSentAtRef.current = now;
 
       const convId = isAdmin
         ? targetConversationId ||

@@ -123,25 +123,27 @@ export function AddressProvider({ children }: { children: ReactNode }) {
   }, [addresses]);
 
   const updateAddress = useCallback((id: string, data: Partial<Address>) => {
+    if (!user?.id) return;
     setAddresses((prev) => {
       const next = prev.map((a) => (a.id === id ? { ...a, ...data } : a));
-      if (user?.id) saveCachedAddresses(user.id, next);
+      saveCachedAddresses(user.id, next);
       return next;
     });
 
-    supabase.from('addresses').update(data).eq('id', id).then(({ error }) => {
+    supabase.from('addresses').update(data).eq('id', id).eq('userId', user.id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa địa chỉ:', error.message);
     }, () => {});
   }, [user]);
 
   const removeAddress = useCallback((id: string) => {
+    if (!user?.id) return;
     setAddresses((prev) => {
       const next = prev.filter((a) => a.id !== id);
-      if (user?.id) saveCachedAddresses(user.id, next);
+      saveCachedAddresses(user.id, next);
       return next;
     });
 
-    supabase.from('addresses').delete().eq('id', id).then(({ error }) => {
+    supabase.from('addresses').delete().eq('id', id).eq('userId', user.id).then(({ error }) => {
       if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá địa chỉ:', error.message);
     }, () => {});
   }, [user]);

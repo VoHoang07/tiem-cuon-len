@@ -74,13 +74,41 @@ module.exports = async function handler(req, res) {
     }
 
     const transferAmount = Number(body.transferAmount || body.amount || 0);
-    const code = String(body.code || '');
-    const content = String(body.content || '');
-    const description = String(body.description || '');
-    const gateway = String(body.gateway || 'Ngân hàng');
-    const accountNumber = String(body.accountNumber || '');
-    const referenceCode = String(body.referenceCode || '');
-    const transactionDate = String(body.transactionDate || new Date().toISOString());
+    const code = String(body.code || '').slice(0, 200);
+    const content = String(body.content || '').slice(0, 300);
+    const description = String(body.description || '').slice(0, 300);
+    const gateway = String(body.gateway || 'Ngân hàng').slice(0, 80);
+    const accountNumber = String(body.accountNumber || '').replace(/[^0-9]/g, '').slice(0, 30);
+    const referenceCode = String(body.referenceCode || '').slice(0, 100);
+    const transactionDate = String(body.transactionDate || new Date().toISOString()).slice(0, 60);
+
+    // Optional webhook secret check if configured in Vercel environment
+    const webhookSecret = process.env.SEPAY_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const authHeader = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');
+      if (!authHeader.includes(webhookSecret)) {
+        return res.status(401).json({ success: false, message: 'Unauthorized webhook' });
+      }
+    }
+
+    // Reject zero/negative or non-numeric transfer amounts immediately
+    if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        ignored: true,
+        reason: 'Invalid transferAmount (must be > 0)',
+      });
+    }
+
+    // Validate recipient bank account if provided
+    const ALLOWED_ACCOUNTS = new Set(['107888618456', '3387966507']);
+    if (accountNumber && !ALLOWED_ACCOUNTS.has(accountNumber)) {
+      return res.status(400).json({
+        success: false,
+        ignored: true,
+        reason: 'Unrecognized recipient accountNumber',
+      });
+    }
 
     const rawText = `${code} ${content} ${description}`.toUpperCase();
     const compactText = rawText.replace(/[^A-Z0-9]/g, '');
@@ -109,7 +137,7 @@ module.exports = async function handler(req, res) {
         const isMatched =
           compactText.includes(orderIdCompact) ||
           rawText.includes(orderIdUpper) ||
-          (shortDigits.length >= 5 && rawText.includes(shortDigits));
+          (shortDigits.length >= 8 && rawText.includes(shortDigits));
 
         if (isMatched) {
           matchedOrder = order;
@@ -123,10 +151,11 @@ module.exports = async function handler(req, res) {
 
     if (matchedOrder) {
       const expectedTotal = Number(matchedOrder.total || 0);
+      // Strict amount verification: transferAmount must be positive and >= expectedTotal
       const amountValid =
-        transferAmount <= 0 ||
-        transferAmount >= expectedTotal ||
-        Math.abs(transferAmount - expectedTotal) <= 1000;
+        expectedTotal > 0 &&
+        transferAmount >= expectedTotal &&
+        matchedOrder.status === 'pending_payment';
 
       if (amountValid) {
         newStatus = 'Đang xử lý';

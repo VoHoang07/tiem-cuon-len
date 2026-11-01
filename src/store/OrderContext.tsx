@@ -146,13 +146,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       saveCachedOrders(next, user?.id);
       return next;
     });
+    if (role !== 'admin') return;
     try {
       const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
       if (error) console.error('[SUPABASE] Lỗi cập nhật đơn:', error.message);
     } catch {
       // keep local update
     }
-  }, [user?.id]);
+  }, [user?.id, role]);
 
   const getOrdersByUser = useCallback(
     (userId: string) => orders.filter((o) => o.userId === userId),
@@ -160,6 +161,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteOrder = useCallback(async (orderId: string) => {
+    if (!user?.id) return;
     deletedOrderIdsRef.current.add(orderId);
     setOrders((prev) => {
       const next = prev.filter((o) => o.id !== orderId);
@@ -168,11 +170,16 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      await supabase.from('orders').delete().eq('id', orderId);
+      const query = supabase.from('orders').delete().eq('id', orderId);
+      if (role !== 'admin') {
+        await query.eq('userId', user.id);
+      } else {
+        await query;
+      }
     } catch {
       // keep local deletion
     }
-  }, [user?.id]);
+  }, [user?.id, role]);
 
   return (
     <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, deleteOrder, getOrdersByUser, refetchOrders }}>
