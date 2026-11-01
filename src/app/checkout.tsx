@@ -30,6 +30,7 @@ import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
+import { sendOrderNotification } from '@/utils/sendOrderNotification';
 import {
   CHECKOUT_TITLE,
   CHECKOUT_DELIVERY,
@@ -168,6 +169,22 @@ export default function CheckoutScreen() {
     };
 
     await addOrder(order);
+
+    // Send email notification to shop owner (fire-and-forget, don't block checkout)
+    sendOrderNotification({
+      orderId,
+      customerName: selectedAddress.fullName,
+      customerPhone: selectedAddress.phone,
+      customerAddress: `${selectedAddress.detailAddress}, ${selectedAddress.ward}, ${selectedAddress.district}, ${selectedAddress.city}`,
+      items: checkoutItems.map((ci) => ({
+        name: ci.product.name,
+        quantity: ci.quantity,
+        price: ci.product.price,
+      })),
+      total: checkoutTotal,
+      paymentMethod: selectedPayment.title,
+      createdAt: order.createdAt,
+    }).catch(() => {}); // silently ignore email errors
 
     if (selectedPayment.type === 'cod') {
       if (!isBuyNow) clearCart(); // Only clear cart in cart mode
