@@ -1,8 +1,8 @@
 import { formatVND } from './formatCurrency';
 
-const EMAILJS_SERVICE_ID = process.env.EXPO_PUBLIC_EMAILJS_SERVICE_ID ?? '';
-const EMAILJS_TEMPLATE_ID = process.env.EXPO_PUBLIC_EMAILJS_TEMPLATE_ID ?? '';
-const EMAILJS_PUBLIC_KEY = process.env.EXPO_PUBLIC_EMAILJS_PUBLIC_KEY ?? '';
+const EMAILJS_SERVICE_ID = process.env.EXPO_PUBLIC_EMAILJS_SERVICE_ID || 'service_fk9anb7';
+const EMAILJS_TEMPLATE_ID = process.env.EXPO_PUBLIC_EMAILJS_TEMPLATE_ID || 'template_q41v0ct';
+const EMAILJS_PUBLIC_KEY = process.env.EXPO_PUBLIC_EMAILJS_PUBLIC_KEY || 'kT2DQJicRXPdQjvb3';
 
 interface OrderNotificationData {
   orderId: string;
@@ -49,6 +49,7 @@ export async function sendOrderNotification(data: OrderNotificationData): Promis
     order_date: orderDate,
     // EmailJS template variable for subject
     subject: `🧶 Đơn hàng mới #${data.orderId} — ${data.customerName}`,
+    email: 'khanhly30072007@gmail.com',
   };
 
   try {
