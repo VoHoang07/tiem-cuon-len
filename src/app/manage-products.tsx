@@ -35,21 +35,10 @@ import { Product, Category } from '@/types/product';
 export default function ManageProductsScreen() {
   const router = useRouter();
   const { products, removeProduct } = useShop();
-  const { role } = useAuth();
+  const { role, isLoading } = useAuth();
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
-
-  // Access control: redirect customer to home
-  if (role !== 'admin') {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedText}>Bạn không có quyền truy cập</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   const filteredProducts = useMemo(() => {
     let list = [...products];
@@ -75,6 +64,17 @@ export default function ManageProductsScreen() {
     () => products.filter((p) => p.quantity <= 2).length,
     [products]
   );
+
+  // Access control: redirect customer to home
+  if (!isLoading && role !== 'admin') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedText}>Bạn không có quyền truy cập</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleDelete = (product: Product) => {
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
