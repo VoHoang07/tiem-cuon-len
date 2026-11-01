@@ -192,6 +192,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const supabaseChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isChannelSubscribedRef = useRef(false);
   const lastNewestCustomerMsgIdRef = useRef<string | null>(null);
+  const deletedConvIdsRef = useRef<Set<string>>(new Set());
 
   // Determine active Client conversation ID and persist it for seamless testing
   const myConversationId = useMemo(() => {
@@ -237,7 +238,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const remoteList: ChatMessage[] = [];
       for (const r of rows) {
         const parsed = rowToChatMessage(r);
-        if (parsed) remoteList.push(parsed);
+        if (parsed && !deletedConvIdsRef.current.has(parsed.conversationId)) {
+          remoteList.push(parsed);
+        }
       }
 
       setMessages((prev) => {
@@ -246,7 +249,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Keep only brand-new local messages (< 10s old) that haven't finished POSTing yet;
         // any older message missing from remoteList was deleted on the server
         const localInFlight = prev.filter(
-          (m) => !remoteIds.has(m.id) && now - new Date(m.createdAt).getTime() < 10000
+          (m) =>
+            !deletedConvIdsRef.current.has(m.conversationId) &&
+            !remoteIds.has(m.id) &&
+            now - new Date(m.createdAt).getTime() < 10000
         );
         const merged = mergeMessageLists(localInFlight, remoteList);
         if (messagesSignature(merged) === messagesSignature(prev)) {
@@ -565,6 +571,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Delete an entire conversation (admin only) — removes from local state, localStorage, and Supabase
   const deleteConversation = useCallback(
     async (conversationId: string) => {
+      deletedConvIdsRef.current.add(conversationId);
+      setTimeout(() => {
+        deletedConvIdsRef.current.delete(conversationId);
+      }, 12000);
       setMessages((prev) => {
         const next = prev.filter((m) => m.conversationId !== conversationId);
         saveLocalMessages(next);

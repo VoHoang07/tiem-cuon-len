@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
 import { Order, OrderStatus } from '@/types/order';
@@ -55,6 +56,7 @@ const OrderContext = createContext<OrderContextType | null>(null);
 export function OrderProvider({ children }: { children: ReactNode }) {
   const { user, role } = useAuth();
   const [orders, setOrders] = useState<Order[]>(() => loadCachedOrders(user?.id));
+  const deletedOrderIdsRef = useRef<Set<string>>(new Set());
 
   // Reset orders when user changes
   useEffect(() => {
@@ -68,8 +70,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       if (role === 'admin') {
         const { data, error } = await query;
         if (!error && data) {
-          setOrders(data as Order[]);
-          saveCachedOrders(data as Order[], user?.id);
+          const filtered = (data as Order[]).filter((o) => !deletedOrderIdsRef.current.has(o.id));
+          setOrders(filtered);
+          saveCachedOrders(filtered, user?.id);
         }
       } else if (user) {
         const { data, error } = await query.eq('userId', user.id);
@@ -77,15 +80,17 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           // Merge remote orders with only brand-new in-flight local orders (< 10s old)
           // so orders deleted by Admin on the server are also removed on the client
           setOrders((prev) => {
-            const remoteIds = new Set((data as Order[]).map((o) => o.id));
+            const remoteRows = (data as Order[]).filter((o) => !deletedOrderIdsRef.current.has(o.id));
+            const remoteIds = new Set(remoteRows.map((o) => o.id));
             const now = Date.now();
             const localInFlight = prev.filter(
               (o) =>
                 o.userId === user.id &&
+                !deletedOrderIdsRef.current.has(o.id) &&
                 !remoteIds.has(o.id) &&
                 now - new Date(o.createdAt).getTime() < 10000
             );
-            const merged = [...(data as Order[]), ...localInFlight].sort(
+            const merged = [...remoteRows, ...localInFlight].sort(
               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
             saveCachedOrders(merged, user.id);
@@ -155,6 +160,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteOrder = useCallback(async (orderId: string) => {
+    deletedOrderIdsRef.current.add(orderId);
     setOrders((prev) => {
       const next = prev.filter((o) => o.id !== orderId);
       saveCachedOrders(next, user?.id);
