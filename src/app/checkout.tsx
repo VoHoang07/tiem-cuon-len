@@ -175,7 +175,14 @@ export default function CheckoutScreen() {
       orderId,
       customerName: selectedAddress.fullName,
       customerPhone: selectedAddress.phone,
-      customerAddress: `${selectedAddress.detailAddress}, ${selectedAddress.ward}, ${selectedAddress.district}, ${selectedAddress.city}`,
+      customerAddress: [
+        selectedAddress.detailAddress,
+        selectedAddress.ward,
+        selectedAddress.district,
+        selectedAddress.city,
+      ]
+        .filter(Boolean)
+        .join(', '),
       items: checkoutItems.map((ci) => ({
         name: ci.product.name,
         quantity: ci.quantity,
@@ -291,8 +298,14 @@ export default function CheckoutScreen() {
                     <Text style={styles.addressName}>{selectedAddress?.fullName}</Text>
                     <Text style={styles.addressPhone}>{selectedAddress?.phone}</Text>
                     <Text style={styles.addressDetail}>
-                      {selectedAddress?.detailAddress}, {selectedAddress?.ward},{' '}
-                      {selectedAddress?.district}, {selectedAddress?.city}
+                      {[
+                        selectedAddress?.detailAddress,
+                        selectedAddress?.ward,
+                        selectedAddress?.district,
+                        selectedAddress?.city,
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
                     </Text>
                   </View>
                   <ChevronRight size={20} color={COLORS.lightText} />
@@ -315,8 +328,9 @@ export default function CheckoutScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.altAddressName}>{addr.fullName}</Text>
                           <Text style={styles.altAddressDetail}>
-                            {addr.detailAddress}, {addr.ward}, {addr.district},{' '}
-                            {addr.city}
+                            {[addr.detailAddress, addr.ward, addr.district, addr.city]
+                              .filter(Boolean)
+                              .join(', ')}
                           </Text>
                         </View>
                         {selectedAddressId === addr.id && (

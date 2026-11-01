@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ShoppingBag, ChevronRight, Trash2, Home, ArrowRightCircle } from 'lucide-react-native';
+import { ChevronLeft, ShoppingBag, ChevronRight, Trash2, Home, ArrowRightCircle, QrCode } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { useAuth } from '@/store/AuthContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
@@ -126,17 +126,28 @@ export default function OrdersScreen() {
           </TouchableOpacity>
 
           <View style={styles.actionRow}>
-            {isAdmin && nextStatus ? (
-              <TouchableOpacity
-                style={styles.advanceBtn}
-                onPress={() => updateOrderStatus(item.id, nextStatus)}
-                activeOpacity={0.8}>
-                <ArrowRightCircle size={15} color="#3D2B1F" />
-                <Text style={styles.advanceBtnText}>
-                  Chuyển: {getOrderStatusLabel(nextStatus)}
-                </Text>
-              </TouchableOpacity>
-            ) : <View />}
+            <View style={styles.actionLeft}>
+              {item.status === 'pending_payment' && (
+                <TouchableOpacity
+                  style={styles.payNowBtn}
+                  onPress={() => router.push(`/payment/${item.id}`)}
+                  activeOpacity={0.8}>
+                  <QrCode size={14} color="#FAF5EE" />
+                  <Text style={styles.payNowBtnText}>Thanh toán QR</Text>
+                </TouchableOpacity>
+              )}
+              {isAdmin && nextStatus ? (
+                <TouchableOpacity
+                  style={styles.advanceBtn}
+                  onPress={() => updateOrderStatus(item.id, nextStatus)}
+                  activeOpacity={0.8}>
+                  <ArrowRightCircle size={15} color="#3D2B1F" />
+                  <Text style={styles.advanceBtnText}>
+                    Chuyển: {getOrderStatusLabel(nextStatus)}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
 
             <TouchableOpacity
               style={styles.deleteBtn}
@@ -378,6 +389,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingBottom: 12,
     paddingTop: 4,
+  },
+  actionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  payNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#3D2B1F',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  payNowBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FAF5EE',
   },
   advanceBtn: {
     flexDirection: 'row',

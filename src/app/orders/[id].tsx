@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Package } from 'lucide-react-native';
+import { ChevronLeft, Package, QrCode } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { useAuth } from '@/store/AuthContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
@@ -61,15 +61,25 @@ export default function OrderDetailScreen() {
                 {getOrderStatusLabel(order.status)}
               </Text>
             </View>
-            {isAdmin && nextStatus && (
-              <TouchableOpacity
-                style={styles.updateStatusBtn}
-                onPress={() => updateOrderStatus(order.id, nextStatus)}>
-                <Text style={styles.updateStatusText}>
-                  Chuyển: {getOrderStatusLabel(nextStatus)}
-                </Text>
-              </TouchableOpacity>
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {order.status === 'pending_payment' && (
+                <TouchableOpacity
+                  style={styles.payNowBtn}
+                  onPress={() => router.push(`/payment/${order.id}`)}>
+                  <QrCode size={15} color="#FAF5EE" />
+                  <Text style={styles.payNowText}>Thanh toán QR</Text>
+                </TouchableOpacity>
+              )}
+              {isAdmin && nextStatus && (
+                <TouchableOpacity
+                  style={styles.updateStatusBtn}
+                  onPress={() => updateOrderStatus(order.id, nextStatus)}>
+                  <Text style={styles.updateStatusText}>
+                    Chuyển: {getOrderStatusLabel(nextStatus)}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
 
@@ -192,6 +202,16 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
   statusText: { fontSize: 14, fontWeight: '700' },
+  payNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#3D2B1F',
+    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  payNowText: { fontSize: 13, fontWeight: '700', color: '#FAF5EE' },
   updateStatusBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: 12,
