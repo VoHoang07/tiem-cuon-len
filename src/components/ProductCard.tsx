@@ -221,7 +221,11 @@ export function ProductCard({
               <Text style={styles.ratingText}>{product.rating}</Text>
             </View>
             <Text style={styles.stockText}>
-              {product.quantity > 0 ? `Kho: ${product.quantity}` : 'Hết hàng'}
+              {product.quantity > 0
+                ? isAdmin
+                  ? `Kho: ${product.quantity}`
+                  : '🧶 Đặt làm theo mẫu'
+                : 'Tạm ngưng nhận'}
             </Text>
           </View>
 

@@ -528,7 +528,9 @@ export default function ProductDetailScreen() {
               <Text style={styles.quietMetaDot}>•</Text>
               <Text style={styles.quietMetaText}>
                 {product.quantity > 0
-                  ? `Còn ${product.quantity} sản phẩm`
+                  ? isAdmin
+                    ? `Còn ${product.quantity} sản phẩm`
+                    : '🧶 Đặt đan thủ công theo mẫu (1–3 ngày)'
                   : 'Tạm hết hàng'}
               </Text>
             </View>

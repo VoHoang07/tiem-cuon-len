@@ -413,24 +413,27 @@ export default function CheckoutScreen() {
             <Text style={styles.sectionTitle}>Đơn vị vận chuyển</Text>
             <Text style={styles.freeshipBadge}>Freeship đơn từ 199k</Text>
           </View>
+          <Text style={styles.madeToOrderBanner}>
+            🧶 Sản phẩm handmade được tiệm đan/làm mới theo đúng màu & phụ kiện bạn chọn (hoàn thiện 1–3 ngày rồi mới gửi ship).
+          </Text>
 
           {[
             {
               id: 'standard' as const,
               title: isHCM ? 'Giao Tiết Kiệm Nội thành (Goship / GHTK)' : 'Giao Tiết Kiệm Toàn quốc (Goship / GHTK)',
-              sub: isHCM ? 'Dự kiến nhận sau 1–2 ngày • Lấy hàng tận nơi' : 'Dự kiến nhận sau 2–4 ngày • Giao tận tay',
+              sub: isHCM ? 'Ship 1–2 ngày sau khi tiệm đan xong mẫu' : 'Ship 2–4 ngày sau khi tiệm đan xong mẫu',
               fee: standardShippingFee,
             },
             {
               id: 'express' as const,
-              title: 'Giao Hỏa Tốc trong ngày (Ahamove / Grab)',
-              sub: 'Nhận nhanh trong 2–4 giờ tại TP. Hồ Chí Minh',
+              title: 'Giao Hỏa Tốc ngay khi hoàn thiện (Grab / Ahamove)',
+              sub: 'Shipper giao ngay trong 2h sau khi tiệm làm xong sản phẩm',
               fee: isHCM ? 30000 : 40000,
             },
             {
               id: 'pickup' as const,
               title: 'Nhận trực tiếp tại Tiệm / Tự đặt ship',
-              sub: 'Không tính phí vận chuyển (0₫)',
+              sub: 'Tiệm nhắn bạn qua lấy khi đan xong • Không tính phí ship (0₫)',
               fee: 0,
             },
           ].map((opt) => {
@@ -812,6 +815,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
+  },
+  madeToOrderBanner: {
+    fontSize: 12.5,
+    color: '#5C4033',
+    backgroundColor: '#FAF3E8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 10,
+    lineHeight: 18,
+    fontWeight: '600',
   },
   shippingSubtext: {
     fontSize: 12,
