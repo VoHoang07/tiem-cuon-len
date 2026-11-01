@@ -241,7 +241,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
 
       setMessages((prev) => {
-        const merged = mergeMessageLists(prev, remoteList);
+        const remoteIds = new Set(remoteList.map((m) => m.id));
+        const now = Date.now();
+        // Keep only brand-new local messages (< 10s old) that haven't finished POSTing yet;
+        // any older message missing from remoteList was deleted on the server
+        const localInFlight = prev.filter(
+          (m) => !remoteIds.has(m.id) && now - new Date(m.createdAt).getTime() < 10000
+        );
+        const merged = mergeMessageLists(localInFlight, remoteList);
         if (messagesSignature(merged) === messagesSignature(prev)) {
           return prev;
         }
@@ -334,10 +341,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             });
           } else if (ev.data?.type === 'SYNC_MESSAGES' && Array.isArray(ev.data.messages)) {
             setMessages((prev) => {
-              const merged = mergeMessageLists(prev, ev.data.messages);
-              if (messagesSignature(merged) === messagesSignature(prev)) return prev;
-              saveLocalMessages(merged);
-              return merged;
+              const incomingList = ev.data.messages as ChatMessage[];
+              if (messagesSignature(incomingList) === messagesSignature(prev)) return prev;
+              saveLocalMessages(incomingList);
+              return incomingList;
+            });
+          } else if (ev.data?.type === 'DELETE_CONVERSATION' && ev.data.conversationId) {
+            const targetConvId = String(ev.data.conversationId);
+            setMessages((prev) => {
+              const next = prev.filter((m) => m.conversationId !== targetConvId);
+              saveLocalMessages(next);
+              return next;
             });
           }
         };
@@ -371,7 +385,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           saveLocalMessages(merged);
           return merged;
         });
-      }).subscribe((status) => {
+      })
+        .on('broadcast', { event: 'delete_conversation' }, (payload) => {
+          const targetConvId = payload?.payload?.conversationId as string | undefined;
+          if (!targetConvId) return;
+          setMessages((prev) => {
+            const next = prev.filter((m) => m.conversationId !== targetConvId);
+            saveLocalMessages(next);
+            return next;
+          });
+        })
+        .subscribe((status) => {
         isChannelSubscribedRef.current = status === 'SUBSCRIBED';
       });
       supabaseChannelRef.current = ch;
@@ -541,15 +565,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Delete an entire conversation (admin only) — removes from local state, localStorage, and Supabase
   const deleteConversation = useCallback(
     async (conversationId: string) => {
-      const deletedIds: string[] = [];
       setMessages((prev) => {
-        const next = prev.filter((m) => {
-          if (m.conversationId === conversationId) {
-            deletedIds.push(m.id);
-            return false;
-          }
-          return true;
-        });
+        const next = prev.filter((m) => m.conversationId !== conversationId);
         saveLocalMessages(next);
         return next;
       });
@@ -559,35 +576,46 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setActiveConversationId(null);
       }
 
-      // Delete from Supabase
-      if (supabaseUrl && supabaseAnonKey && deletedIds.length > 0) {
+      // Broadcast deletion immediately to other tabs and Supabase Realtime
+      if (broadcastRef.current) {
         try {
-          await Promise.all(
-            deletedIds.map((id) =>
-              fetch(
-                `${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(id)}&fullName=eq.${CHAT_PARTITION_KEY}`,
-                {
-                  method: 'DELETE',
-                  headers: {
-                    apikey: supabaseAnonKey,
-                    Authorization: `Bearer ${supabaseAnonKey}`,
-                  },
-                }
-              )
-            )
-          );
+          broadcastRef.current.postMessage({
+            type: 'DELETE_CONVERSATION',
+            conversationId,
+          });
         } catch {
-          // ignore network errors
+          // ignore
+        }
+      }
+      if (supabaseChannelRef.current && isChannelSubscribedRef.current) {
+        try {
+          supabaseChannelRef.current.send({
+            type: 'broadcast',
+            event: 'delete_conversation',
+            payload: { conversationId },
+          });
+        } catch {
+          // ignore
         }
       }
 
-      // Broadcast deletion to other tabs
-      if (broadcastRef.current) {
+      // Delete all messages of this conversation from Supabase by partition + conversationId (city column)
+      if (supabaseUrl && supabaseAnonKey) {
         try {
-          const remaining = loadLocalMessages();
-          broadcastRef.current.postMessage({ type: 'SYNC_MESSAGES', messages: remaining });
+          await fetch(
+            `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}&city=eq.${encodeURIComponent(
+              conversationId
+            )}`,
+            {
+              method: 'DELETE',
+              headers: {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+              },
+            }
+          );
         } catch {
-          // ignore
+          // ignore network errors
         }
       }
     },

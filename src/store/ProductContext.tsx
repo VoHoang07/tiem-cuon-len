@@ -317,21 +317,37 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchProducts(0)
-      .then((data) => {
-        if (cancelled) return;
-        if (data && data.length > 0) {
-          const merged = mergeWithMockProducts(data);
-          setProducts(merged);
-          saveCachedProducts(merged);
-        }
-        setLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) setLoaded(true);
-      });
+    const syncProducts = () => {
+      fetchProducts(0)
+        .then((data) => {
+          if (cancelled) return;
+          if (data) {
+            const merged = mergeWithMockProducts(data);
+            setProducts(merged);
+            saveCachedProducts(merged);
+          }
+          setLoaded(true);
+        })
+        .catch(() => {
+          if (!cancelled) setLoaded(true);
+        });
+    };
+
+    syncProducts();
+    const timer = setInterval(syncProducts, 10000);
+    const handleFocus = () => {
+      syncProducts();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocus);
+    }
+
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleFocus);
+      }
     };
   }, [fetchProducts]);
 
@@ -347,7 +363,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const refetchProducts = useCallback(async () => {
     setPage(0);
     const data = await fetchProducts(0);
-    if (data && data.length > 0) {
+    if (data) {
       const merged = mergeWithMockProducts(data);
       setProducts(merged);
       saveCachedProducts(merged);

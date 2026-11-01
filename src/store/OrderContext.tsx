@@ -74,11 +74,18 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       } else if (user) {
         const { data, error } = await query.eq('userId', user.id);
         if (!error && data) {
-          // Merge remote orders with local-only orders (not yet synced)
+          // Merge remote orders with only brand-new in-flight local orders (< 10s old)
+          // so orders deleted by Admin on the server are also removed on the client
           setOrders((prev) => {
             const remoteIds = new Set((data as Order[]).map((o) => o.id));
-            const localOnly = prev.filter((o) => o.userId === user.id && !remoteIds.has(o.id));
-            const merged = [...(data as Order[]), ...localOnly].sort(
+            const now = Date.now();
+            const localInFlight = prev.filter(
+              (o) =>
+                o.userId === user.id &&
+                !remoteIds.has(o.id) &&
+                now - new Date(o.createdAt).getTime() < 10000
+            );
+            const merged = [...(data as Order[]), ...localInFlight].sort(
               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
             saveCachedOrders(merged, user.id);
@@ -93,6 +100,19 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchOrders();
+    const timer = setInterval(fetchOrders, 4000);
+    const handleFocus = () => {
+      fetchOrders();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocus);
+    }
+    return () => {
+      clearInterval(timer);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleFocus);
+      }
+    };
   }, [fetchOrders]);
 
   const refetchOrders = useCallback(async () => {
