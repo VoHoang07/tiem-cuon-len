@@ -109,11 +109,12 @@ export default function CheckoutScreen() {
     return cart;
   }, [isBuyNow, buyNowProduct, buyNowQtyNum, cart]);
 
-  const checkoutTotal = useMemo(() => {
+  const subtotal = useMemo(() => {
     return checkoutItems.reduce((sum, ci) => sum + ci.product.price * ci.quantity, 0);
   }, [checkoutItems]);
 
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
+  const [shippingOption, setShippingOption] = useState<'standard' | 'express' | 'pickup'>('standard');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
@@ -129,6 +130,38 @@ export default function CheckoutScreen() {
   const selectedAddress =
     userAddresses.find((a) => a.id === selectedAddressId) ??
     getDefaultAddress();
+
+  const isHCM = useMemo(() => {
+    const cityNorm = (selectedAddress?.city || '').toLowerCase();
+    return (
+      !cityNorm ||
+      cityNorm.includes('hồ chí minh') ||
+      cityNorm.includes('ho chi minh') ||
+      cityNorm.includes('hcm') ||
+      cityNorm.includes('sài gòn')
+    );
+  }, [selectedAddress?.city]);
+
+  const standardShippingFee = useMemo(() => {
+    if (subtotal >= 199000) return 0;
+    return isHCM ? 15000 : 25000;
+  }, [subtotal, isHCM]);
+
+  const shippingFee = useMemo(() => {
+    if (shippingOption === 'pickup') return 0;
+    if (shippingOption === 'express') return isHCM ? 30000 : 40000;
+    return standardShippingFee;
+  }, [shippingOption, isHCM, standardShippingFee]);
+
+  const shippingMethodLabel = useMemo(() => {
+    if (shippingOption === 'pickup') return 'Nhận tại Tiệm / Tự đặt ship (0₫)';
+    if (shippingOption === 'express') return 'Giao Hỏa Tốc 2h (Grab/Ahamove)';
+    return isHCM
+      ? 'Giao Tiết Kiệm Nội thành TP.HCM (Goship/GHTK)'
+      : 'Giao Tiết Kiệm Liên tỉnh (Goship/GHTK)';
+  }, [shippingOption, isHCM]);
+
+  const checkoutTotal = subtotal + shippingFee;
 
   useEffect(() => {
     if (!selectedAddressId && userAddresses.length > 0) {
@@ -206,13 +239,20 @@ export default function CheckoutScreen() {
       ]
         .filter(Boolean)
         .join(', '),
-      items: checkoutItems.map((ci) => ({
-        name: ci.product.name,
-        quantity: ci.quantity,
-        price: ci.product.price,
-      })),
+      items: [
+        ...checkoutItems.map((ci) => ({
+          name: ci.product.name,
+          quantity: ci.quantity,
+          price: ci.product.price,
+        })),
+        {
+          name: `🚚 Vận chuyển: ${shippingMethodLabel}`,
+          quantity: 1,
+          price: shippingFee,
+        },
+      ],
       total: checkoutTotal,
-      paymentMethod: selectedPayment.title,
+      paymentMethod: `${selectedPayment.title} • ${shippingMethodLabel}`,
       createdAt: order.createdAt,
     }).catch(() => {}); // silently ignore email errors
 
@@ -367,6 +407,60 @@ export default function CheckoutScreen() {
           )}
         </View>
 
+        {/* Shipping Carrier Selection */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Đơn vị vận chuyển</Text>
+            <Text style={styles.freeshipBadge}>Freeship đơn từ 199k</Text>
+          </View>
+
+          {[
+            {
+              id: 'standard' as const,
+              title: isHCM ? 'Giao Tiết Kiệm Nội thành (Goship / GHTK)' : 'Giao Tiết Kiệm Toàn quốc (Goship / GHTK)',
+              sub: isHCM ? 'Dự kiến nhận sau 1–2 ngày • Lấy hàng tận nơi' : 'Dự kiến nhận sau 2–4 ngày • Giao tận tay',
+              fee: standardShippingFee,
+            },
+            {
+              id: 'express' as const,
+              title: 'Giao Hỏa Tốc trong ngày (Ahamove / Grab)',
+              sub: 'Nhận nhanh trong 2–4 giờ tại TP. Hồ Chí Minh',
+              fee: isHCM ? 30000 : 40000,
+            },
+            {
+              id: 'pickup' as const,
+              title: 'Nhận trực tiếp tại Tiệm / Tự đặt ship',
+              sub: 'Không tính phí vận chuyển (0₫)',
+              fee: 0,
+            },
+          ].map((opt) => {
+            const active = shippingOption === opt.id;
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[styles.paymentOption, active && styles.paymentOptionSelected]}
+                onPress={() => setShippingOption(opt.id)}
+                activeOpacity={0.8}>
+                <View style={[styles.paymentOptionLeft, { flex: 1 }]}>
+                  <View style={[styles.paymentIconWrap, { backgroundColor: '#6BAF5C18' }]}>
+                    <Truck size={20} color="#6BAF5C" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.paymentText}>{opt.title}</Text>
+                    <Text style={styles.shippingSubtext}>{opt.sub}</Text>
+                  </View>
+                </View>
+                <View style={styles.shippingRight}>
+                  <Text style={[styles.shippingFeeTag, opt.fee === 0 && { color: '#4E8C40' }]}>
+                    {opt.fee === 0 ? 'Miễn phí' : formatVND(opt.fee)}
+                  </Text>
+                  {active && <Check size={18} color={COLORS.primary} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {/* Payment Method — dynamic from Supabase */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{CHECKOUT_PAYMENT}</Text>
@@ -435,6 +529,22 @@ export default function CheckoutScreen() {
               </Text>
             </View>
           ))}
+          <View style={styles.divider} />
+          <View style={styles.subRow}>
+            <Text style={styles.subLabel}>Tạm tính ({checkoutItems.length} món)</Text>
+            <Text style={styles.subValue}>{formatVND(subtotal)}</Text>
+          </View>
+          <View style={styles.subRow}>
+            <Text style={styles.subLabel}>Phí vận chuyển</Text>
+            <Text style={[styles.subValue, shippingFee === 0 && { color: '#4E8C40' }]}>
+              {shippingFee === 0 ? 'Miễn phí (0₫)' : formatVND(shippingFee)}
+            </Text>
+          </View>
+          {shippingOption === 'standard' && subtotal < 199000 && (
+            <Text style={styles.freeshipHint}>
+              💡 Mua thêm {formatVND(199000 - subtotal)} để được Miễn phí vận chuyển!
+            </Text>
+          )}
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
@@ -694,6 +804,57 @@ const styles = StyleSheet.create({
   summaryQtyText: { fontSize: 12, color: COLORS.mediumText, marginTop: 1 },
   itemPrice: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.sm },
+  freeshipBadge: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#4E8C40',
+    backgroundColor: '#EAF6E8',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  shippingSubtext: {
+    fontSize: 12,
+    color: COLORS.mediumText,
+    marginTop: 2,
+  },
+  shippingRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  shippingFeeTag: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.darkText,
+  },
+  subRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  subLabel: {
+    fontSize: 14,
+    color: COLORS.mediumText,
+    fontWeight: '600',
+  },
+  subValue: {
+    fontSize: 14,
+    color: COLORS.darkText,
+    fontWeight: '700',
+  },
+  freeshipHint: {
+    fontSize: 12,
+    color: '#6E5239',
+    backgroundColor: '#FAF3E8',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 4,
+    fontWeight: '600',
+  },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
   totalLabel: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
   totalValue: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
