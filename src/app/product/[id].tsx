@@ -104,43 +104,56 @@ export default function ProductDetailScreen() {
     [product]
   );
 
-  // Build clean gallery from distinct variant photos + 1 close-up stitch view
+  // Build clean gallery from all distinct color variant photos + extra gallery angles + close-up stitch view
   const galleryItems: ProductGalleryItem[] = useMemo(() => {
     if (!product) return [];
-    if (product.gallery && product.gallery.length > 0) {
-      return product.gallery;
-    }
 
     const items: ProductGalleryItem[] = [];
     const c0 = colorOptions[0];
-    const c1 = colorOptions[1];
     const a0 = accessoryOptions[0];
-    const a1 = accessoryOptions[1];
 
-    items.push({
-      id: 'g1',
-      label: c0 ? c0.name : 'Góc chính',
-      angleTag: c0 ? c0.name : 'Góc chính',
-      image: c0?.image || product.image,
-      colorId: c0?.id,
-      accessoryId: a0?.id,
-      zoomMode: 'normal',
-    });
+    if (colorOptions.length > 0) {
+      colorOptions.forEach((c, idx) => {
+        const img = c.image || (idx === 0 ? product.image : undefined);
+        if (img) {
+          items.push({
+            id: `g_color_${c.id || idx}`,
+            label: c.name,
+            angleTag: c.name,
+            image: img,
+            colorId: c.id,
+            accessoryId: accessoryOptions[idx]?.id ?? a0?.id,
+            zoomMode: 'normal',
+          });
+        }
+      });
+    }
 
-    if (c1 && c1.image) {
+    if (items.length === 0) {
       items.push({
-        id: 'g2',
-        label: c1.name,
-        angleTag: c1.name,
-        image: c1.image,
-        colorId: c1.id,
-        accessoryId: a1?.id ?? a0?.id,
+        id: 'g_main',
+        label: c0 ? c0.name : 'Góc chính',
+        angleTag: c0 ? c0.name : 'Góc chính',
+        image: c0?.image || product.image,
+        colorId: c0?.id,
+        accessoryId: a0?.id,
         zoomMode: 'normal',
       });
     }
 
+    if (product.gallery && product.gallery.length > 0) {
+      product.gallery.forEach((g, idx) => {
+        if (g.image) {
+          items.push({
+            ...g,
+            id: g.id || `g_extra_${idx}`,
+          });
+        }
+      });
+    }
+
     items.push({
-      id: 'g3',
+      id: 'g_closeup',
       label: 'Cận cảnh mũi móc',
       angleTag: 'Cận cảnh',
       image: c0?.image || product.image,
@@ -324,6 +337,8 @@ export default function ProductDetailScreen() {
   const isCloseupZoom = currentGalleryItem?.zoomMode === 'closeup';
   const activeDisplayImage = isCloseupZoom
     ? activeColor?.image || currentGalleryItem?.image || product.image
+    : currentGalleryItem && !currentGalleryItem.colorId && currentGalleryItem.image
+    ? currentGalleryItem.image
     : activeColor?.image || currentGalleryItem?.image || product.image;
   const relatedNumColumns = windowWidth >= 900 ? 4 : windowWidth >= 620 ? 3 : 2;
 

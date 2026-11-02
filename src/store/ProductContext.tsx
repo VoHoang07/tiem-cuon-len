@@ -14,6 +14,51 @@ import { useAuth } from '@/store/AuthContext';
 const PAGE_SIZE = 50;
 const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v11';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
+const VARIANTS_META_PREFIX = '__tcl_variants_v1__:';
+
+function hydrateDbProduct(raw: Product): Product {
+  if (!raw || !Array.isArray(raw.tags)) return raw;
+  const cleanTags: string[] = [];
+  let parsedMeta: {
+    colorOptions?: Product['colorOptions'];
+    accessoryOptions?: Product['accessoryOptions'];
+    gallery?: Product['gallery'];
+  } | null = null;
+
+  for (const tag of raw.tags) {
+    if (typeof tag === 'string' && tag.startsWith(VARIANTS_META_PREFIX)) {
+      try {
+        parsedMeta = JSON.parse(tag.slice(VARIANTS_META_PREFIX.length));
+      } catch {
+        // ignore malformed metadata
+      }
+    } else if (typeof tag === 'string') {
+      cleanTags.push(tag);
+    }
+  }
+
+  if (!parsedMeta) {
+    return raw;
+  }
+
+  return {
+    ...raw,
+    tags: cleanTags,
+    colorOptions:
+      Array.isArray(parsedMeta.colorOptions) && parsedMeta.colorOptions.length > 0
+        ? parsedMeta.colorOptions
+        : raw.colorOptions,
+    accessoryOptions:
+      Array.isArray(parsedMeta.accessoryOptions) &&
+      parsedMeta.accessoryOptions.length > 0
+        ? parsedMeta.accessoryOptions
+        : raw.accessoryOptions,
+    gallery:
+      Array.isArray(parsedMeta.gallery) && parsedMeta.gallery.length > 0
+        ? parsedMeta.gallery
+        : raw.gallery,
+  };
+}
 
 const RETIRED_PRODUCT_IDS = new Set([
   'keychain-duck-5',
@@ -134,7 +179,8 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
   const customAdminProducts: Product[] = [];
   const seenCustomNames = new Set<string>();
 
-  for (const item of remoteOrCached) {
+  for (const rawItem of remoteOrCached) {
+    const item = hydrateDbProduct(rawItem);
     if (!item || deletedIds.has(item.id) || RETIRED_PRODUCT_IDS.has(item.id)) {
       continue;
     }
@@ -165,6 +211,28 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
           (item.image.startsWith('data:image/') || item.image.startsWith('http'))
         ) {
           overrides.image = item.image;
+        }
+        if (Array.isArray(item.colorOptions) && item.colorOptions.length > 0) {
+          overrides.colorOptions = item.colorOptions.map((co, idx) => {
+            const mockCo =
+              matchedMock.colorOptions?.find(
+                (mc) => mc.id === co.id || mc.name.toLowerCase() === co.name.toLowerCase()
+              ) || matchedMock.colorOptions?.[idx];
+            return {
+              ...co,
+              image:
+                typeof co.image === 'string' &&
+                (co.image.startsWith('data:image/') || co.image.startsWith('http'))
+                  ? co.image
+                  : mockCo?.image,
+            };
+          });
+        }
+        if (Array.isArray(item.accessoryOptions) && item.accessoryOptions.length > 0) {
+          overrides.accessoryOptions = item.accessoryOptions;
+        }
+        if (Array.isArray(item.gallery) && item.gallery.length > 0) {
+          overrides.gallery = item.gallery;
         }
         remoteOverridesByMockId.set(matchedMock.id, overrides);
       }
@@ -229,6 +297,68 @@ function toDbProduct(product: Product) {
     typeof product.image === 'string' && !product.image.trim().startsWith('{')
       ? product.image
       : null;
+
+  const cleanTags = Array.isArray(product.tags)
+    ? product.tags.filter(
+        (t) => typeof t === 'string' && !t.startsWith(VARIANTS_META_PREFIX)
+      )
+    : [];
+
+  const serializableColors = Array.isArray(product.colorOptions)
+    ? product.colorOptions.map((c) => ({
+        id: c.id,
+        name: c.name,
+        hex: c.hex,
+        image:
+          typeof c.image === 'string' &&
+          (c.image.startsWith('data:image/') || c.image.startsWith('http'))
+            ? c.image
+            : undefined,
+      }))
+    : undefined;
+
+  const serializableAccessories = Array.isArray(product.accessoryOptions)
+    ? product.accessoryOptions.map((a) => ({
+        id: a.id,
+        name: a.name,
+        emoji: a.emoji,
+        priceDelta: Number(a.priceDelta || 0),
+      }))
+    : undefined;
+
+  const serializableGallery = Array.isArray(product.gallery)
+    ? product.gallery
+        .filter(
+          (g) =>
+            typeof g.image === 'string' &&
+            (g.image.startsWith('data:image/') || g.image.startsWith('http'))
+        )
+        .map((g) => ({
+          id: g.id,
+          label: g.label,
+          angleTag: g.angleTag,
+          image: g.image,
+          colorId: g.colorId,
+          accessoryId: g.accessoryId,
+          zoomMode: g.zoomMode,
+        }))
+    : undefined;
+
+  const finalTags = [...cleanTags];
+  if (
+    (serializableColors && serializableColors.length > 0) ||
+    (serializableAccessories && serializableAccessories.length > 0) ||
+    (serializableGallery && serializableGallery.length > 0)
+  ) {
+    finalTags.push(
+      `${VARIANTS_META_PREFIX}${JSON.stringify({
+        colorOptions: serializableColors,
+        accessoryOptions: serializableAccessories,
+        gallery: serializableGallery,
+      })}`
+    );
+  }
+
   return {
     id: product.id,
     name: product.name,
@@ -241,7 +371,7 @@ function toDbProduct(product: Product) {
     quantity: Number(product.quantity),
     rating: Number(product.rating ?? 5),
     reviews: Array.isArray(product.reviews) ? product.reviews : [],
-    tags: Array.isArray(product.tags) ? product.tags : [],
+    tags: finalTags,
     createdAt: product.createdAt || new Date().toISOString(),
   };
 }

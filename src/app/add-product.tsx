@@ -16,14 +16,22 @@ import { Camera, ChevronLeft, Sparkles, Image as ImageIcon, X } from 'lucide-rea
 import * as ImagePicker from 'expo-image-picker';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
-import { Product, Category, Review } from '@/types/product';
+import {
+  Product,
+  Category,
+  ProductColorOption,
+  ProductAccessoryOption,
+  ProductGalleryItem,
+} from '@/types/product';
 import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
 import {
   generateProductDescription,
   inferCategory,
-  parseColorOptionsInput,
-  parseAccessoryOptionsInput,
 } from '@/utils/generateProductDescription';
+import {
+  ProductVariantsEditor,
+  compressDataUriIfWeb,
+} from '@/components/ProductVariantsEditor';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   AP_TITLE,
@@ -75,11 +83,20 @@ export default function AddProductScreen() {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState<Category>('Crochet');
-  const [material, setMaterial] = useState('');
-  const [color, setColor] = useState('');
-  const [colorVariantsInput, setColorVariantsInput] = useState('');
-  const [accessoryVariantsInput, setAccessoryVariantsInput] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [material, setMaterial] = useState('Len Cotton Milk');
+  const [color, setColor] = useState('Kem Sữa');
+  const [colorOptions, setColorOptions] = useState<ProductColorOption[]>([
+    { id: 'c_1', name: 'Kem Sữa', hex: '#F5EBE0' },
+    { id: 'c_2', name: 'Hồng Phấn', hex: '#F4ACB7' },
+    { id: 'c_3', name: 'Xanh Bơ', hex: '#B7E4C7' },
+  ]);
+  const [accessoryOptions, setAccessoryOptions] = useState<ProductAccessoryOption[]>([
+    { id: 'a_1', name: 'Ôm dâu tây đỏ', emoji: '🍓', priceDelta: 0 },
+    { id: 'a_2', name: 'Đeo nơ lụa cổ', emoji: '🎀', priceDelta: 0 },
+    { id: 'a_3', name: 'Hộp quà mica + Đèn LED', emoji: '🎁', priceDelta: 15000 },
+  ]);
+  const [extraPhotos, setExtraPhotos] = useState<string[]>([]);
+  const [quantity, setQuantity] = useState('20');
   const [tags, setTags] = useState('');
   const [description, setDescription] = useState('');
   const [generated, setGenerated] = useState(false);
@@ -108,7 +125,9 @@ export default function AddProductScreen() {
       base64: true,
     });
     if (!result.canceled && result.assets[0]?.base64) {
-      setImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      const rawUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      const compressed = await compressDataUriIfWeb(rawUri);
+      setImage(compressed);
     }
   };
 
@@ -119,13 +138,15 @@ export default function AddProductScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.5,
+      quality: 0.6,
       allowsEditing: true,
-      aspect: [4, 5],
+      aspect: [1, 1],
       base64: true,
     });
     if (!result.canceled && result.assets[0]?.base64) {
-      setImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      const rawUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      const compressed = await compressDataUriIfWeb(rawUri);
+      setImage(compressed);
     }
   };
 
@@ -158,11 +179,20 @@ export default function AddProductScreen() {
     setName('');
     setPrice('');
     setCategory('Crochet');
-    setMaterial('');
-    setColor('');
-    setColorVariantsInput('');
-    setAccessoryVariantsInput('');
-    setQuantity('');
+    setMaterial('Len Cotton Milk');
+    setColor('Kem Sữa');
+    setColorOptions([
+      { id: 'c_1', name: 'Kem Sữa', hex: '#F5EBE0' },
+      { id: 'c_2', name: 'Hồng Phấn', hex: '#F4ACB7' },
+      { id: 'c_3', name: 'Xanh Bơ', hex: '#B7E4C7' },
+    ]);
+    setAccessoryOptions([
+      { id: 'a_1', name: 'Ôm dâu tây đỏ', emoji: '🍓', priceDelta: 0 },
+      { id: 'a_2', name: 'Đeo nơ lụa cổ', emoji: '🎀', priceDelta: 0 },
+      { id: 'a_3', name: 'Hộp quà mica + Đèn LED', emoji: '🎁', priceDelta: 15000 },
+    ]);
+    setExtraPhotos([]);
+    setQuantity('20');
     setTags('');
     setDescription('');
     setGenerated(false);
@@ -177,40 +207,74 @@ export default function AddProductScreen() {
       Alert.alert(AP_REQUIRED_TITLE, AP_PRICE_REQUIRED);
       return;
     }
-    if (!material.trim()) {
-      Alert.alert(AP_REQUIRED_TITLE, AP_MATERIAL_REQUIRED);
-      return;
-    }
-    if (!color.trim()) {
-      Alert.alert(AP_REQUIRED_TITLE, AP_COLOR_REQUIRED);
-      return;
-    }
-    if (!quantity.trim() || isNaN(Number(quantity)) || Number(quantity) <= 0) {
-      Alert.alert(AP_REQUIRED_TITLE, AP_QUANTITY_REQUIRED);
-      return;
-    }
-    if (!description.trim()) {
-      Alert.alert(AP_REQUIRED_TITLE, AP_DESC_REQUIRED);
-      return;
-    }
+    const cleanColors = colorOptions
+      .filter((c) => c.name.trim().length > 0)
+      .map((c, idx) => ({
+        ...c,
+        id: c.id || `c_${idx + 1}`,
+        name: c.name.trim(),
+      }));
 
-    const parsedColors = parseColorOptionsInput(
-      colorVariantsInput.trim() || color.trim()
-    );
-    const parsedAccessories = parseAccessoryOptionsInput(accessoryVariantsInput);
+    const effectiveMainColor =
+      color.trim() || cleanColors[0]?.name || 'Kem Sữa';
+    const effectiveMaterial = material.trim() || 'Len Cotton Milk';
+    const effectiveQty =
+      quantity.trim() && !isNaN(Number(quantity)) && Number(quantity) > 0
+        ? Number(quantity)
+        : 20;
+
+    const effectiveDesc =
+      description.trim() ||
+      generateProductDescription({
+        name: name.trim(),
+        category,
+        material: effectiveMaterial,
+        color: effectiveMainColor,
+        tags: tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+      });
+
+    const cleanAccessories = accessoryOptions
+      .filter((a) => a.name.trim().length > 0)
+      .map((a, idx) => ({
+        ...a,
+        id: a.id || `a_${idx + 1}`,
+        name: a.name.trim(),
+        priceDelta: Number(a.priceDelta || 0),
+      }));
+
+    const primaryImage =
+      image || cleanColors.find((c) => Boolean(c.image))?.image || null;
+
+    const finalColorOptions = cleanColors.map((c, idx) => ({
+      ...c,
+      image: c.image || (idx === 0 && primaryImage ? primaryImage : undefined),
+    }));
+
+    const builtGallery: ProductGalleryItem[] = extraPhotos.map((uri, idx) => ({
+      id: `g_extra_${idx + 1}`,
+      label: `Góc chụp #${idx + 2}`,
+      angleTag: `Góc #${idx + 2}`,
+      image: uri,
+      zoomMode: 'normal',
+    }));
 
     const newProduct: Product = {
       id: `user_${Date.now()}`,
       name: name.trim(),
-      description: description.trim(),
+      description: effectiveDesc,
       price: Number(price),
-      image,
+      image: primaryImage,
       category,
-      material: material.trim(),
-      color: color.trim(),
-      colorOptions: parsedColors.length > 0 ? parsedColors : undefined,
-      accessoryOptions: parsedAccessories.length > 0 ? parsedAccessories : undefined,
-      quantity: Number(quantity),
+      material: effectiveMaterial,
+      color: effectiveMainColor,
+      colorOptions: finalColorOptions.length > 0 ? finalColorOptions : undefined,
+      accessoryOptions:
+        cleanAccessories.length > 0 ? cleanAccessories : undefined,
+      gallery: builtGallery.length > 0 ? builtGallery : undefined,
+      quantity: effectiveQty,
       rating: 5,
       reviews: [],
       isFavorite: false,
@@ -366,18 +430,19 @@ export default function AddProductScreen() {
             placeholder={AP_COLOR_PLACEHOLDER}
           />
 
-          <FormField
-            label="Các màu tuỳ chọn (cách nhau bằng dấu phẩy)"
-            value={colorVariantsInput}
-            onChangeText={setColorVariantsInput}
-            placeholder="VD: Kem Sữa, Hồng Đào, Xanh Bơ, Tím Khoai Môn"
-          />
-
-          <FormField
-            label="Phụ kiện phối kèm (cách nhau bằng dấu phẩy)"
-            value={accessoryVariantsInput}
-            onChangeText={setAccessoryVariantsInput}
-            placeholder="VD: Ôm dâu tây, Đeo nơ lụa (+5k), Đội mũ hoa (+10k)"
+          <ProductVariantsEditor
+            colorOptions={colorOptions}
+            onChangeColorOptions={(next) => {
+              setColorOptions(next);
+              if (next[0]?.name && !color.trim()) {
+                setColor(next[0].name);
+              }
+            }}
+            accessoryOptions={accessoryOptions}
+            onChangeAccessoryOptions={setAccessoryOptions}
+            extraPhotos={extraPhotos}
+            onChangeExtraPhotos={setExtraPhotos}
+            mainImage={image}
           />
 
           <FormField

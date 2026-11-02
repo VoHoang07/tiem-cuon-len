@@ -16,14 +16,23 @@ import { Camera, ChevronLeft, Sparkles, Image as ImageIcon, X } from 'lucide-rea
 import * as ImagePicker from 'expo-image-picker';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
-import { Product, Category } from '@/types/product';
+import {
+  Product,
+  Category,
+  ProductColorOption,
+  ProductAccessoryOption,
+  ProductGalleryItem,
+} from '@/types/product';
 import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
 import {
   generateProductDescription,
   inferCategory,
-  parseColorOptionsInput,
-  parseAccessoryOptionsInput,
+  inferColorHex,
 } from '@/utils/generateProductDescription';
+import {
+  ProductVariantsEditor,
+  compressDataUriIfWeb,
+} from '@/components/ProductVariantsEditor';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import {
   AP_TITLE,
@@ -76,8 +85,9 @@ export default function EditProductScreen() {
   const [category, setCategory] = useState<Category>('Crochet');
   const [material, setMaterial] = useState('');
   const [color, setColor] = useState('');
-  const [colorVariantsInput, setColorVariantsInput] = useState('');
-  const [accessoryVariantsInput, setAccessoryVariantsInput] = useState('');
+  const [colorOptions, setColorOptions] = useState<ProductColorOption[]>([]);
+  const [accessoryOptions, setAccessoryOptions] = useState<ProductAccessoryOption[]>([]);
+  const [extraPhotos, setExtraPhotos] = useState<string[]>([]);
   const [quantity, setQuantity] = useState('');
   const [tags, setTags] = useState('');
   const [description, setDescription] = useState('');
@@ -91,17 +101,28 @@ export default function EditProductScreen() {
       setCategory(existingProduct.category);
       setMaterial(existingProduct.material);
       setColor(existingProduct.color);
-      setColorVariantsInput(
-        existingProduct.colorOptions?.map((c) => c.name).join(', ') ?? ''
+      setColorOptions(
+        existingProduct.colorOptions && existingProduct.colorOptions.length > 0
+          ? existingProduct.colorOptions
+          : [
+              {
+                id: 'c_1',
+                name: existingProduct.color || 'Kem Sữa',
+                hex: inferColorHex(existingProduct.color || 'Kem Sữa', 0),
+                image: existingProduct.image,
+              },
+            ]
       );
-      setAccessoryVariantsInput(
-        existingProduct.accessoryOptions
-          ?.map((a) =>
-            a.priceDelta && a.priceDelta > 0
-              ? `${a.name} (+${Math.round(a.priceDelta / 1000)}k)`
-              : a.name
+      setAccessoryOptions(existingProduct.accessoryOptions ?? []);
+      setExtraPhotos(
+        existingProduct.gallery
+          ?.filter(
+            (g) =>
+              typeof g.image === 'string' &&
+              !g.colorId &&
+              g.zoomMode !== 'closeup'
           )
-          .join(', ') ?? ''
+          .map((g) => g.image as string) ?? []
       );
       setQuantity(existingProduct.quantity.toString());
       setTags(existingProduct.tags.join(', '));
@@ -143,7 +164,9 @@ export default function EditProductScreen() {
       base64: true,
     });
     if (!result.canceled && result.assets[0]?.base64) {
-      setImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      const rawUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      const compressed = await compressDataUriIfWeb(rawUri);
+      setImage(compressed);
     }
   };
 
@@ -154,13 +177,15 @@ export default function EditProductScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.7,
+      quality: 0.6,
       allowsEditing: true,
-      aspect: [4, 5],
+      aspect: [1, 1],
       base64: true,
     });
     if (!result.canceled && result.assets[0]?.base64) {
-      setImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      const rawUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      const compressed = await compressDataUriIfWeb(rawUri);
+      setImage(compressed);
     }
   };
 
@@ -214,38 +239,33 @@ export default function EditProductScreen() {
       return;
     }
 
-    const parsedColors = parseColorOptionsInput(
-      colorVariantsInput.trim() || color.trim()
-    ).map((pc, idx) => {
-      const existingMatch =
-        existingProduct.colorOptions?.find(
-          (ec) => ec.name.trim().toLowerCase() === pc.name.trim().toLowerCase()
-        ) || existingProduct.colorOptions?.[idx];
-      if (!existingMatch) return pc;
-      return {
-        ...existingMatch,
-        name: pc.name,
-        hex:
-          existingMatch.name.trim().toLowerCase() === pc.name.trim().toLowerCase()
-            ? existingMatch.hex
-            : pc.hex,
-      };
-    });
+    const cleanColors = colorOptions
+      .filter((c) => c.name.trim().length > 0)
+      .map((c, idx) => ({
+        ...c,
+        id: c.id || `c_${idx + 1}`,
+        name: c.name.trim(),
+      }));
 
-    const parsedAccessories = parseAccessoryOptionsInput(accessoryVariantsInput).map(
-      (pa, idx) => {
-        const existingMatch =
-          existingProduct.accessoryOptions?.find(
-            (ea) => ea.name.trim().toLowerCase() === pa.name.trim().toLowerCase()
-          ) || existingProduct.accessoryOptions?.[idx];
-        if (!existingMatch) return pa;
-        return {
-          ...existingMatch,
-          name: pa.name,
-          priceDelta: pa.priceDelta,
-        };
-      }
-    );
+    const cleanAccessories = accessoryOptions
+      .filter((a) => a.name.trim().length > 0)
+      .map((a, idx) => ({
+        ...a,
+        id: a.id || `a_${idx + 1}`,
+        name: a.name.trim(),
+        priceDelta: Number(a.priceDelta || 0),
+      }));
+
+    const builtGallery: ProductGalleryItem[] = extraPhotos.map((uri, idx) => ({
+      id: `g_extra_${idx + 1}`,
+      label: `Góc chụp #${idx + 2}`,
+      angleTag: `Góc #${idx + 2}`,
+      image: uri,
+      zoomMode: 'normal',
+    }));
+
+    const effectiveMainColor =
+      color.trim() || cleanColors[0]?.name || existingProduct.color;
 
     const updatedProduct: Product = {
       ...existingProduct,
@@ -255,13 +275,13 @@ export default function EditProductScreen() {
       image,
       category,
       material: material.trim(),
-      color: color.trim(),
+      color: effectiveMainColor,
       colorOptions:
-        parsedColors.length > 0 ? parsedColors : existingProduct.colorOptions,
+        cleanColors.length > 0 ? cleanColors : existingProduct.colorOptions,
       accessoryOptions:
-        parsedAccessories.length > 0
-          ? parsedAccessories
-          : existingProduct.accessoryOptions,
+        cleanAccessories.length > 0 ? cleanAccessories : [],
+      gallery:
+        builtGallery.length > 0 ? builtGallery : existingProduct.gallery,
       quantity: Number(quantity),
       tags: tags
         .split(',')
@@ -366,18 +386,22 @@ export default function EditProductScreen() {
 
           <FormField label={AP_MATERIAL} value={material} onChangeText={setMaterial} placeholder={AP_MATERIAL_PLACEHOLDER} />
           <FormField label={AP_COLOR_FIELD} value={color} onChangeText={setColor} placeholder={AP_COLOR_PLACEHOLDER} />
-          <FormField
-            label="Các màu tuỳ chọn (cách nhau bằng dấu phẩy)"
-            value={colorVariantsInput}
-            onChangeText={setColorVariantsInput}
-            placeholder="VD: Kem Sữa, Hồng Đào, Xanh Bơ, Tím Khoai Môn"
+
+          <ProductVariantsEditor
+            colorOptions={colorOptions}
+            onChangeColorOptions={(next) => {
+              setColorOptions(next);
+              if (next[0]?.name && !color.trim()) {
+                setColor(next[0].name);
+              }
+            }}
+            accessoryOptions={accessoryOptions}
+            onChangeAccessoryOptions={setAccessoryOptions}
+            extraPhotos={extraPhotos}
+            onChangeExtraPhotos={setExtraPhotos}
+            mainImage={image}
           />
-          <FormField
-            label="Phụ kiện phối kèm (cách nhau bằng dấu phẩy)"
-            value={accessoryVariantsInput}
-            onChangeText={setAccessoryVariantsInput}
-            placeholder="VD: Ôm dâu tây, Đeo nơ lụa (+5k), Đội mũ hoa (+10k)"
-          />
+
           <FormField label={AP_QUANTITY} value={quantity} onChangeText={setQuantity} placeholder={AP_QUANTITY_PLACEHOLDER} keyboardType="numeric" />
           <FormField label={AP_TAGS_LABEL} value={tags} onChangeText={setTags} placeholder={AP_TAGS_PLACEHOLDER} />
 
