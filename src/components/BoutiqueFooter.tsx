@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   ShieldCheck,
   HelpCircle,
+  Share2,
 } from 'lucide-react-native';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
@@ -26,6 +27,7 @@ import { useShop } from '@/store/ShopContext';
 import { useOrders } from '@/store/OrderContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { Category } from '@/types/product';
+import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
 
 interface BoutiqueFooterProps {
   onSelectCategory?: (category: Category) => void;
@@ -42,6 +44,7 @@ export function BoutiqueFooter({
   const { products } = useShop();
   const { orders } = useOrders();
   const isAdmin = role === 'admin';
+  const [showShareModal, setShowShareModal] = React.useState(false);
 
   const { width: rawWindowWidth } = useWindowDimensions();
   const windowWidth =
@@ -331,6 +334,11 @@ export function BoutiqueFooter({
                 </TouchableOpacity>
               </>
             )}
+            <TouchableOpacity
+              style={styles.footerLinkBtn}
+              onPress={() => setShowShareModal(true)}>
+              <Text style={styles.footerLinkText}>🔗 Chia sẻ link Web qua Zalo / FB</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -341,6 +349,13 @@ export function BoutiqueFooter({
           </Text>
 
           <View style={styles.bottomActionsRow}>
+            <TouchableOpacity
+              style={styles.policyLink}
+              onPress={() => setShowShareModal(true)}>
+              <Share2 size={13} color={COLORS.mediumText} />
+              <Text style={styles.policyLinkText}>Chia sẻ Web</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.policyLink}
               onPress={() => router.push('/privacy')}>
@@ -365,6 +380,17 @@ export function BoutiqueFooter({
           </View>
         </View>
       </View>
+
+      <ShareModal
+        visible={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        type="website"
+        title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
+        subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
+        priceText="Freeship đơn từ 199.000₫"
+        url={PUBLIC_SHOP_URL}
+        shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Tặng kèm hộp quà & thiệp viết tay miễn phí, freeship đơn từ 199k!`}
+      />
     </View>
   );
 }

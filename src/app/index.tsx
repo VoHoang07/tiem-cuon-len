@@ -27,11 +27,13 @@ import {
   ShoppingBag,
   PlusCircle,
   CreditCard,
+  Share2,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { ProductCard } from '@/components/ProductCard';
+import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
 import { CategoryChips } from '@/components/CategoryChips';
 import { SectionHeader } from '@/components/SectionHeader';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -136,6 +138,7 @@ export default function HomeScreen() {
   const [searchFocused, setSearchFocused] = useState(false);
   const search = useDebounce(searchInput, 300);
   const [refreshing, setRefreshing] = useState(false);
+  const [showShareWebModal, setShowShareWebModal] = useState(false);
 
   // Deduplicate products by normalized name so identical DB entries don't repeat
   const uniqueProducts = useMemo(() => {
@@ -271,6 +274,14 @@ export default function HomeScreen() {
           {isDesktop && SearchBarBlock}
 
           <View style={styles.headerActions}>
+            {/* Share Website Button (both Admin & Customer) */}
+            <TouchableOpacity
+              style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
+              onPress={() => setShowShareWebModal(true)}
+              activeOpacity={0.75}>
+              <Share2 size={isMobile ? 16 : 18} color={COLORS.darkText} />
+            </TouchableOpacity>
+
             {isAdmin ? (
               <>
                 {/* Admin: Add Product Quick Button */}
@@ -638,7 +649,7 @@ export default function HomeScreen() {
                   ? HOME_ALL_PRODUCTS
                   : getCategoryLabel(selectedCategory)
           }
-          subtitle={`${filteredProducts.length} sản phẩm sẵn sàng giao ngay`}
+          subtitle={`${filteredProducts.length} mẫu nhận đặt đan thủ công theo yêu cầu`}
         />
 
         {/* Category Filter Chips */}
@@ -770,6 +781,17 @@ export default function HomeScreen() {
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
+      />
+
+      <ShareModal
+        visible={showShareWebModal}
+        onClose={() => setShowShareWebModal(false)}
+        type="website"
+        title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
+        subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
+        priceText="Freeship đơn từ 199.000₫"
+        url={PUBLIC_SHOP_URL}
+        shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Tặng kèm hộp quà & thiệp viết tay miễn phí, freeship đơn từ 199k!`}
       />
     </SafeAreaView>
   );

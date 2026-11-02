@@ -10,7 +10,7 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Heart, Plus, Check, Edit3, MessageCircle } from 'lucide-react-native';
+import { Heart, Plus, Check, Edit3, MessageCircle, Share2 } from 'lucide-react-native';
 import { Product } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { useShop } from '@/store/ShopContext';
@@ -18,6 +18,7 @@ import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
+import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
 
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
@@ -50,6 +51,7 @@ export function ProductCard({
       : 1024;
   const fav = isFavorite(product.id);
   const [justAdded, setJustAdded] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScale = useRef(new Animated.Value(1)).current;
@@ -236,7 +238,20 @@ export function ProductCard({
             <View style={styles.cardActionBtnsRow}>
               <TouchableOpacity
                 style={styles.pingCardBtn}
-                onPress={() => openChatWithProduct(product)}
+                onPress={(e: any) => {
+                  e?.stopPropagation?.();
+                  setShowShareModal(true);
+                }}
+                activeOpacity={0.75}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Share2 size={13.5} color="#3D2B1F" strokeWidth={2.3} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.pingCardBtn}
+                onPress={(e: any) => {
+                  e?.stopPropagation?.();
+                  openChatWithProduct(product);
+                }}
                 activeOpacity={0.75}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                 <MessageCircle size={14} color="#3D2B1F" strokeWidth={2.3} />
@@ -276,6 +291,20 @@ export function ProductCard({
           </View>
         </View>
       </Pressable>
+
+      <ShareModal
+        visible={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        type="product"
+        title={product.name}
+        subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt làm theo mẫu`}
+        priceText={formatVND(product.price)}
+        url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
+        image={product.image}
+        shareText={`🧶 ${product.name} (${formatVND(
+          product.price
+        )})\n✨ Đan móc thủ công tỉ mỉ theo mẫu tại Tiệm Cuộn Len, tặng kèm hộp quà & thiệp viết tay!`}
+      />
     </Animated.View>
   );
 }

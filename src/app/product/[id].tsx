@@ -24,6 +24,7 @@ import {
   Trash2,
   MessageCircle,
   ShoppingCart,
+  Share2,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
@@ -36,6 +37,7 @@ import {
   ProductGalleryItem,
 } from '@/types/product';
 import { ProductCard } from '@/components/ProductCard';
+import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
@@ -81,6 +83,7 @@ export default function ProductDetailScreen() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const product = products.find((p) => p.id === id);
 
@@ -357,31 +360,40 @@ export default function ProductDetailScreen() {
             )}
           </View>
 
-          {!isAdmin && (
-            <View style={styles.topBarRight}>
-              <TouchableOpacity
-                style={styles.iconCircleBtn}
-                onPress={() => toggleFavorite(product.id)}>
-                <Heart
-                  size={18}
-                  color={fav ? COLORS.error : '#4A3728'}
-                  fill={fav ? COLORS.error : 'transparent'}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconCircleBtn}
-                onPress={() => router.push('/cart')}>
-                <ShoppingCart size={18} color="#4A3728" />
-                {cartCount > 0 && (
-                  <View style={styles.cartBadge}>
-                    <Text style={styles.cartBadgeText}>
-                      {cartCount > 99 ? '99+' : cartCount}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
+          <View style={styles.topBarRight}>
+            <TouchableOpacity
+              style={styles.sharePillBtn}
+              onPress={() => setShowShareModal(true)}
+              activeOpacity={0.8}>
+              <Share2 size={15} color="#4A3728" />
+              <Text style={styles.sharePillText}>Chia sẻ</Text>
+            </TouchableOpacity>
+            {!isAdmin && (
+              <>
+                <TouchableOpacity
+                  style={styles.iconCircleBtn}
+                  onPress={() => toggleFavorite(product.id)}>
+                  <Heart
+                    size={18}
+                    color={fav ? COLORS.error : '#4A3728'}
+                    fill={fav ? COLORS.error : 'transparent'}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconCircleBtn}
+                  onPress={() => router.push('/cart')}>
+                  <ShoppingCart size={18} color="#4A3728" />
+                  {cartCount > 0 && (
+                    <View style={styles.cartBadge}>
+                      <Text style={styles.cartBadgeText}>
+                        {cartCount > 99 ? '99+' : cartCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
 
         {/* 2. Clean 2-Column Boutique Card */}
@@ -697,6 +709,12 @@ export default function ProductDetailScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.adminActionBtn}
+                    onPress={() => setShowShareModal(true)}>
+                    <Share2 size={14} color="#4A3728" />
+                    <Text style={styles.adminActionText}>Chia sẻ mẫu</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.adminActionBtn}
                     onPress={() => openChatWithProduct(buildVariantProduct())}>
                     <MessageCircle size={14} color="#4A3728" />
                     <Text style={styles.adminActionText}>Gửi vào chat</Text>
@@ -711,15 +729,26 @@ export default function ProductDetailScreen() {
                   </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity
-                  style={styles.chatLinkBtn}
-                  onPress={() => openChatWithProduct(buildVariantProduct())}
-                  activeOpacity={0.75}>
-                  <MessageCircle size={15} color="#6E5239" />
-                  <Text style={styles.chatLinkText}>
-                    Nhắn tiệm tư vấn hoặc đặt phối màu riêng cho mẫu này ›
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ gap: 8 }}>
+                  <TouchableOpacity
+                    style={styles.chatLinkBtn}
+                    onPress={() => openChatWithProduct(buildVariantProduct())}
+                    activeOpacity={0.75}>
+                    <MessageCircle size={15} color="#6E5239" />
+                    <Text style={styles.chatLinkText}>
+                      Nhắn tiệm tư vấn hoặc đặt phối màu riêng cho mẫu này ›
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.chatLinkBtn}
+                    onPress={() => setShowShareModal(true)}
+                    activeOpacity={0.75}>
+                    <Share2 size={15} color="#6E5239" />
+                    <Text style={styles.chatLinkText}>
+                      Chia sẻ mẫu này qua Zalo, Facebook, Messenger, Threads ›
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           </View>
@@ -873,6 +902,31 @@ export default function ProductDetailScreen() {
           </View>
         </View>
       )}
+
+      {/* Multi-Platform Share Modal */}
+      <ShareModal
+        visible={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        type="product"
+        title={
+          selectedColor || selectedAccessory
+            ? `${product.name} (${[selectedColor?.name, selectedAccessory?.name]
+                .filter(Boolean)
+                .join(' + ')})`
+            : product.name
+        }
+        subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt đan thủ công theo mẫu (1–3 ngày)`}
+        priceText={formatVND(effectiveUnitPrice)}
+        url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
+        image={activeDisplayImage || product.image}
+        shareText={`🧶 ${product.name}${
+          selectedColor ? ` - Màu: ${selectedColor.name}` : ''
+        }${
+          selectedAccessory ? ` - Phụ kiện: ${selectedAccessory.name}` : ''
+        } (${formatVND(
+          effectiveUnitPrice
+        )})\n✨ Đan móc thủ công tỉ mỉ theo mẫu tại Tiệm Cuộn Len, tặng kèm hộp quà & thiệp viết tay!`}
+      />
     </SafeAreaView>
   );
 }
@@ -957,6 +1011,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  sharePillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#F2ECE1',
+    borderWidth: 1,
+    borderColor: '#E2D5C5',
+  },
+  sharePillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4A3728',
   },
   iconCircleBtn: {
     width: 36,
