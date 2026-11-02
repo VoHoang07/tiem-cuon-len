@@ -104,7 +104,7 @@ export default function ProductDetailScreen() {
     [product]
   );
 
-  // Build clean gallery from all distinct color variant photos + extra gallery angles + close-up stitch view
+  // Build clean gallery from all distinct color variant photos + extra gallery angles
   const galleryItems: ProductGalleryItem[] = useMemo(() => {
     if (!product) return [];
 
@@ -114,7 +114,7 @@ export default function ProductDetailScreen() {
 
     if (colorOptions.length > 0) {
       colorOptions.forEach((c, idx) => {
-        const img = c.image || (idx === 0 ? product.image : undefined);
+        const img = c.image || product.image;
         if (img) {
           items.push({
             id: `g_color_${c.id || idx}`,
@@ -129,12 +129,12 @@ export default function ProductDetailScreen() {
       });
     }
 
-    if (items.length === 0) {
+    if (items.length === 0 && product.image) {
       items.push({
         id: 'g_main',
         label: c0 ? c0.name : 'Góc chính',
         angleTag: c0 ? c0.name : 'Góc chính',
-        image: c0?.image || product.image,
+        image: product.image,
         colorId: c0?.id,
         accessoryId: a0?.id,
         zoomMode: 'normal',
@@ -152,15 +152,17 @@ export default function ProductDetailScreen() {
       });
     }
 
-    items.push({
-      id: 'g_closeup',
-      label: 'Cận cảnh mũi móc',
-      angleTag: 'Cận cảnh',
-      image: c0?.image || product.image,
-      colorId: c0?.id,
-      accessoryId: a0?.id,
-      zoomMode: 'closeup',
-    });
+    if (items.length === 1 && items[0]?.image) {
+      items.push({
+        id: 'g_closeup',
+        label: 'Cận cảnh mũi móc',
+        angleTag: 'Cận cảnh',
+        image: items[0].image,
+        colorId: c0?.id,
+        accessoryId: a0?.id,
+        zoomMode: 'closeup',
+      });
+    }
 
     return items;
   }, [product, colorOptions, accessoryOptions]);
@@ -335,11 +337,8 @@ export default function ProductDetailScreen() {
   };
 
   const isCloseupZoom = currentGalleryItem?.zoomMode === 'closeup';
-  const activeDisplayImage = isCloseupZoom
-    ? activeColor?.image || currentGalleryItem?.image || product.image
-    : currentGalleryItem && !currentGalleryItem.colorId && currentGalleryItem.image
-    ? currentGalleryItem.image
-    : activeColor?.image || currentGalleryItem?.image || product.image;
+  const activeDisplayImage =
+    currentGalleryItem?.image || activeColor?.image || product.image;
   const relatedNumColumns = windowWidth >= 900 ? 4 : windowWidth >= 620 ? 3 : 2;
 
   return (
