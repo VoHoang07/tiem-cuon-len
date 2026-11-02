@@ -31,11 +31,13 @@ import {
 import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { useAuth } from '@/store/AuthContext';
+import { useShop } from '@/store/ShopContext';
 import { supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { type PaymentMethod } from '@/types/payment-method';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import { getOrderStatusLabel } from '@/constants/orderStatus';
+import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
 
 interface VietQRBankApp {
   appId: string;
@@ -270,11 +272,15 @@ function DirectBankLink({
 }
 
 export default function PaymentScreen() {
-  const { orderId: paramOrderId } = useLocalSearchParams<{ orderId: string }>();
+  const { orderId: paramOrderId, buyNow: paramBuyNow } = useLocalSearchParams<{
+    orderId: string;
+    buyNow?: string;
+  }>();
   const router = useRouter();
   const { orders, updateOrderStatus, refetchOrders } = useOrders();
   const { enabledMethods } = usePaymentMethods();
   const { role } = useAuth();
+  const { clearCart } = useShop();
   const isAdmin = role === 'admin';
 
   const order = orders.find((o) => o.id === paramOrderId);
@@ -391,6 +397,15 @@ export default function PaymentScreen() {
     const timer = setInterval(checkOrderPaymentStatus, 2500);
     return () => clearInterval(timer);
   }, [order, confirmed, checkOrderPaymentStatus]);
+
+  // Only send email notification & clear cart AFTER payment is confirmed
+  useEffect(() => {
+    if (!confirmed || !order) return;
+    sendOrderNotificationForOrder(order).catch(() => {});
+    if (paramBuyNow !== '1') {
+      clearCart();
+    }
+  }, [confirmed, order, paramBuyNow, clearCart]);
 
   // Detect & sort banking apps for the user's device when pressing "Chuyển khoản"
   const handleOpenBankSelector = async () => {

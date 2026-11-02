@@ -30,7 +30,7 @@ import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
-import { sendOrderNotification } from '@/utils/sendOrderNotification';
+import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
 import {
   CHECKOUT_TITLE,
   CHECKOUT_DELIVERY,
@@ -230,44 +230,20 @@ export default function CheckoutScreen() {
 
     await addOrder(order);
 
-    // Send email notification to shop owner (fire-and-forget, don't block checkout)
-    sendOrderNotification({
-      orderId,
-      customerName: selectedAddress.fullName,
-      customerPhone: selectedAddress.phone,
-      customerAddress: [
-        selectedAddress.detailAddress,
-        selectedAddress.ward,
-        selectedAddress.district,
-        selectedAddress.city,
-      ]
-        .filter(Boolean)
-        .join(', '),
-      items: [
-        ...checkoutItems.map((ci) => ({
-          name: ci.product.name,
-          quantity: ci.quantity,
-          price: ci.product.price,
-        })),
-        {
-          name: `🚚 Vận chuyển: ${shippingMethodLabel}`,
-          quantity: 1,
-          price: shippingFee,
-        },
-      ],
-      total: checkoutTotal,
-      paymentMethod: `${selectedPayment.title} • ${shippingMethodLabel}`,
-      createdAt: order.createdAt,
-    }).catch(() => {}); // silently ignore email errors
-
     if (selectedPayment.type === 'cod') {
-      if (!isBuyNow) clearCart(); // Only clear cart in cart mode
+      // COD order is finalized immediately -> notify shop owner & clear cart
+      sendOrderNotificationForOrder(order).catch(() => {});
+      if (!isBuyNow) clearCart();
       setSubmitted(true);
     } else {
-      if (!isBuyNow) clearCart(); // Only clear cart in cart mode
-      router.replace(`/payment/${orderId}`);
+      // Bank Transfer / QR: Do NOT send email yet!
+      // Email & cart clearing happen only AFTER payment is confirmed on /payment/[orderId]
+      router.replace({
+        pathname: `/payment/${orderId}` as any,
+        params: isBuyNow ? { buyNow: '1' } : undefined,
+      });
     }
-    };
+  };
 
     const renderCODSuccess = () => (
     <SafeAreaView style={styles.safe}>
@@ -571,8 +547,8 @@ export default function CheckoutScreen() {
           <Text style={styles.payBtnText}>
             {hasAddress
               ? selectedPayment?.type === 'cod'
-                ? 'Đặt hàng COD'
-                : `Thanh toán ${formatVND(checkoutTotal)}`
+                ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
+                : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
               : 'Thêm địa chỉ để thanh toán'}
           </Text>
         </TouchableOpacity>
