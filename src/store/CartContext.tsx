@@ -188,9 +188,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     // Prefer rich localStorage cart (which preserves exact color & accessory variants)
     const localCart = hydrateCartFromStorage();
-    let baseItems: CartItem[] = localCart && localCart.length > 0 ? localCart : [];
+    let baseItems: CartItem[] = localCart !== null ? localCart : [];
 
-    if (baseItems.length === 0) {
+    if (localCart === null && baseItems.length === 0) {
       const { data } = await supabase
         .from('cart_items')
         .select('productId, quantity')
@@ -407,6 +407,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = useCallback(() => {
     setCart([]);
     persistCart([]);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem('cart_guest');
+      }
+    } catch {
+      // ignore
+    }
     if (user) {
       supabase
         .from('cart_items')

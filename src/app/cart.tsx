@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,14 +19,14 @@ import {
   Trash2,
   ShoppingBag,
   Home,
+  RotateCcw,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
-import { BOTTOM_NAV_SPACER } from '@/constants/layout';
 import { formatVND } from '@/utils/formatCurrency';
-import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
+import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import {
   CART_TITLE,
   CART_CLEAR_ALL,
@@ -44,8 +45,26 @@ import type { CartItem } from '@/types/product';
 export default function CartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { cart, removeFromCart, updateCartQuantity, cartTotal, clearCart, cartHydrated } = useShop();
+  const { width: rawWidth } = useWindowDimensions();
+  const windowWidth =
+    rawWidth > 0
+      ? rawWidth
+      : typeof window !== 'undefined' && window.innerWidth > 0
+        ? window.innerWidth
+        : 1024;
+  const isMobile = windowWidth < 640;
+
+  const {
+    cart,
+    addToCart,
+    removeFromCart,
+    updateCartQuantity,
+    cartTotal,
+    clearCart,
+    cartHydrated,
+  } = useShop();
   const { isAuthenticated } = useAuth();
+  const [lastClearedItems, setLastClearedItems] = useState<CartItem[]>([]);
 
   const handleCheckout = () => {
     if (cart.length === 0) {
@@ -63,10 +82,18 @@ export default function CartScreen() {
   };
 
   const handleClearCart = () => {
-    Alert.alert('Xóa giỏ hàng', 'Bạn có chắc muốn xóa toàn bộ giỏ hàng?', [
-      { text: 'Hủy', style: 'cancel' },
-      { text: 'Xóa', style: 'destructive', onPress: () => clearCart() },
-    ]);
+    if (cart.length === 0) return;
+    setLastClearedItems([...cart]);
+    clearCart();
+  };
+
+  const handleUndoClearCart = async () => {
+    if (lastClearedItems.length === 0) return;
+    const itemsToRestore = [...lastClearedItems];
+    setLastClearedItems([]);
+    for (const item of itemsToRestore) {
+      await addToCart(item.product, item.quantity);
+    }
   };
 
   const renderRightActions = (item: CartItem) => (
@@ -88,7 +115,7 @@ export default function CartScreen() {
 
     return (
       <Swipeable renderRightActions={() => renderRightActions(item)}>
-        <View style={styles.cartItem}>
+        <View style={[styles.cartItem, isMobile && styles.cartItemMobile]}>
           <View style={styles.itemImage}>
             {item.product.image ? (
               <Image
@@ -148,21 +175,30 @@ export default function CartScreen() {
             </Text>
           </View>
           <View style={styles.itemActions}>
-            <View style={styles.qtyControl}>
+            <View style={styles.qtyAndDeleteRow}>
+              <View style={styles.qtyControl}>
+                <TouchableOpacity
+                  style={styles.qtyBtn}
+                  onPress={() =>
+                    updateCartQuantity(item.product.id, item.quantity - 1)
+                  }>
+                  <Minus size={14} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.qtyText}>{item.quantity}</Text>
+                <TouchableOpacity
+                  style={styles.qtyBtn}
+                  onPress={() =>
+                    updateCartQuantity(item.product.id, item.quantity + 1)
+                  }>
+                  <Plus size={14} color={COLORS.primary} />
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
-                style={styles.qtyBtn}
-                onPress={() =>
-                  updateCartQuantity(item.product.id, item.quantity - 1)
-                }>
-                <Minus size={14} color={COLORS.primary} />
-              </TouchableOpacity>
-              <Text style={styles.qtyText}>{item.quantity}</Text>
-              <TouchableOpacity
-                style={styles.qtyBtn}
-                onPress={() =>
-                  updateCartQuantity(item.product.id, item.quantity + 1)
-                }>
-                <Plus size={14} color={COLORS.primary} />
+                style={styles.deleteItemBtn}
+                onPress={() => removeFromCart(item.product.id)}
+                activeOpacity={0.7}
+                accessibilityLabel="Xóa sản phẩm khỏi giỏ hàng">
+                <Trash2 size={15} color={COLORS.error} />
               </TouchableOpacity>
             </View>
             <Text style={styles.itemTotal}>
@@ -175,18 +211,29 @@ export default function CartScreen() {
   };
 
   const ListHeader = (
-    <View style={styles.header}>
+    <View style={[styles.header, isMobile && styles.headerMobile]}>
       <View style={styles.headerLeft}>
-        <TouchableOpacity onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/');
+          }}
+          style={styles.backBtn}>
           <ChevronLeft size={24} color={COLORS.darkText} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+        <TouchableOpacity
+          style={styles.homeBtn}
+          onPress={() => router.replace('/')}>
           <Home size={20} color={COLORS.darkText} />
         </TouchableOpacity>
       </View>
       <Text style={styles.headerTitle}>{CART_TITLE}</Text>
       {cart.length > 0 ? (
-        <TouchableOpacity onPress={handleClearCart}>
+        <TouchableOpacity
+          style={styles.clearBtn}
+          onPress={handleClearCart}
+          activeOpacity={0.75}>
+          <Trash2 size={14} color={COLORS.error} />
           <Text style={styles.clearText}>{CART_CLEAR_ALL}</Text>
         </TouchableOpacity>
       ) : (
@@ -196,7 +243,7 @@ export default function CartScreen() {
   );
 
   const ListFooter = cart.length > 0 ? (
-    <View style={styles.summary}>
+    <View style={[styles.summary, isMobile && styles.summaryMobile]}>
       <Text style={styles.summaryTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Tạm tính</Text>
@@ -220,6 +267,20 @@ export default function CartScreen() {
     </View>
   ) : (
     <View style={styles.emptyCart}>
+      {lastClearedItems.length > 0 && (
+        <View style={styles.undoBanner}>
+          <Text style={styles.undoText}>
+            Đã xóa {lastClearedItems.length} sản phẩm khỏi giỏ hàng
+          </Text>
+          <TouchableOpacity
+            style={styles.undoBtn}
+            onPress={handleUndoClearCart}
+            activeOpacity={0.8}>
+            <RotateCcw size={13} color={COLORS.white} />
+            <Text style={styles.undoBtnText}>Hoàn tác</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <ShoppingBag size={64} color={COLORS.lightText} />
       <Text style={styles.emptyTitle}>{CART_EMPTY_TITLE}</Text>
       <Text style={styles.emptySubtext}>{CART_EMPTY_SUBTEXT}</Text>
@@ -240,22 +301,31 @@ export default function CartScreen() {
         ListHeaderComponent={ListHeader}
         ListFooterComponent={ListFooter}
         ListEmptyComponent={ListEmpty}
-        contentContainerStyle={cart.length === 0 ? styles.listEmpty : styles.listContent}
+        contentContainerStyle={
+          cart.length === 0 ? styles.listEmpty : styles.listContent
+        }
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Checkout Bar */}
+      {/* Centered Checkout Bar */}
       {cart.length > 0 && (
-        <View style={[styles.checkoutBar, { paddingBottom: SPACING.lg + Math.max(insets.bottom, 0) }]}>
-          <View>
-            <Text style={styles.totalText}>{CHECKOUT_TOTAL}</Text>
-            <Text style={styles.totalAmount}>{formatVND(cartTotal)}</Text>
+        <View style={styles.checkoutBarOuter} pointerEvents="box-none">
+          <View
+            style={[
+              styles.checkoutBar,
+              isMobile && styles.checkoutBarMobile,
+              { paddingBottom: SPACING.lg + Math.max(insets.bottom, 0) },
+            ]}>
+            <View>
+              <Text style={styles.totalText}>{CHECKOUT_TOTAL}</Text>
+              <Text style={styles.totalAmount}>{formatVND(cartTotal)}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.checkoutBtn}
+              onPress={handleCheckout}>
+              <Text style={styles.checkoutBtnText}>{CHECKOUT_TITLE}</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.checkoutBtn}
-            onPress={handleCheckout}>
-            <Text style={styles.checkoutBtnText}>{CHECKOUT_TITLE}</Text>
-          </TouchableOpacity>
         </View>
       )}
 
@@ -287,6 +357,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+  },
+  headerMobile: {
+    paddingHorizontal: 12,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -320,10 +393,56 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: COLORS.darkText,
   },
+  clearBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#FFF1F0',
+    borderWidth: 1,
+    borderColor: '#F5C4C0',
+  },
   clearText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: COLORS.error,
+  },
+  undoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 10,
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 14,
+    marginBottom: 12,
+    ...SHADOWS.small,
+  },
+  undoText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.darkText,
+  },
+  undoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  undoBtnText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: COLORS.white,
   },
   emptyCart: {
     alignItems: 'center',
@@ -380,6 +499,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     ...SHADOWS.small,
   },
+  cartItemMobile: {
+    marginHorizontal: 12,
+  },
   itemImage: {
     width: 70,
     height: 70,
@@ -418,6 +540,7 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.md,
     justifyContent: 'center',
     gap: 4,
+    minWidth: 0,
   },
   itemName: {
     fontSize: 15,
@@ -471,6 +594,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingLeft: SPACING.sm,
   },
+  qtyAndDeleteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   qtyControl: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -491,6 +619,16 @@ const styles = StyleSheet.create({
     minWidth: 20,
     textAlign: 'center',
   },
+  deleteItemBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#FFF1F0',
+    borderWidth: 1,
+    borderColor: '#F5C4C0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   itemTotal: {
     fontSize: 14,
     fontWeight: '800',
@@ -503,6 +641,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     ...SHADOWS.small,
+  },
+  summaryMobile: {
+    marginHorizontal: 12,
   },
   summaryTitle: {
     fontSize: 18,
@@ -540,14 +681,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: COLORS.primary,
   },
-  checkoutBar: {
+  checkoutBarOuter: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  checkoutBar: {
     width: '100%',
     maxWidth: 840,
-    alignSelf: 'center',
     backgroundColor: '#FFFDF9',
     flexDirection: 'row',
     alignItems: 'center',
@@ -559,6 +703,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5D6C5',
     ...SHADOWS.large,
+  },
+  checkoutBarMobile: {
+    paddingHorizontal: 14,
   },
   totalText: {
     fontSize: 13,

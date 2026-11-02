@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +30,10 @@ export default function AddressesScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const handleDelete = (id: string) => {
+    if (Platform.OS === 'web') {
+      removeAddress(id);
+      return;
+    }
     Alert.alert('Xóa địa chỉ', 'Bạn có chắc muốn xóa địa chỉ này?', [
       { text: 'Hủy', style: 'cancel' },
       { text: 'Xóa', style: 'destructive', onPress: () => removeAddress(id) },
