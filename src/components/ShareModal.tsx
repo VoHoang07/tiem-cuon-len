@@ -21,6 +21,7 @@ import {
   FileText,
   Sparkles,
 } from 'lucide-react-native';
+import { useAuth } from '@/store/AuthContext';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 
 export const PUBLIC_SHOP_URL = 'https://www.tiemcuonlen.shop';
@@ -59,9 +60,15 @@ export function ShareModal({
   image,
   type = 'product',
 }: ShareModalProps) {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
   const [copiedType, setCopiedType] = useState<'url' | 'caption' | string | null>(null);
 
-  const fullPostText = `${shareText}\n👉 Xem chi tiết & đặt mẫu tại: ${url}`;
+  // Admin gets full marketing post; Client gets clean simple link for friends
+  const fullAdminPostText = `${shareText}\n👉 Xem chi tiết & đặt mẫu tại: ${url}`;
+  const simpleClientShareText = priceText
+    ? `${title} (${priceText}) — ${url}`
+    : `${title} — ${url}`;
 
   const copyToClipboard = async (text: string, tag: string) => {
     try {
@@ -74,7 +81,7 @@ export function ShareModal({
     setCopiedType(tag);
     setTimeout(() => {
       setCopiedType((prev) => (prev === tag ? null : prev));
-    }, 2400);
+    }, 2200);
   };
 
   const openExternalUrl = async (targetUrl: string) => {
@@ -88,7 +95,8 @@ export function ShareModal({
   };
 
   const handleNativeShare = async () => {
-    await copyToClipboard(fullPostText, 'native');
+    const payloadText = isAdmin ? fullAdminPostText : simpleClientShareText;
+    await copyToClipboard(isAdmin ? fullAdminPostText : url, 'native');
     if (
       Platform.OS === 'web' &&
       typeof navigator !== 'undefined' &&
@@ -97,7 +105,7 @@ export function ShareModal({
       try {
         await navigator.share({
           title,
-          text: shareText,
+          text: isAdmin ? shareText : title,
           url,
         });
         return;
@@ -106,12 +114,198 @@ export function ShareModal({
     try {
       await Share.share({
         title,
-        message: fullPostText,
+        message: payloadText,
         url,
       });
     } catch {}
   };
 
+  /* ------------------------------------------------------------------ */
+  /* 1. CLIENT VIEW: Ultra-compact & minimal for sending to friends     */
+  /* ------------------------------------------------------------------ */
+  if (!isAdmin) {
+    const clientQuickApps = [
+      {
+        id: 'zalo',
+        label: 'Zalo',
+        badge: 'Zalo',
+        bg: '#E8F4FF',
+        color: '#0068FF',
+        border: '#B8DCFF',
+        onPress: async () => {
+          await copyToClipboard(url, 'zalo');
+          await openExternalUrl('https://chat.zalo.me');
+        },
+      },
+      {
+        id: 'messenger',
+        label: 'Messenger',
+        badge: 'Msg',
+        bg: '#F2EEFF',
+        color: '#7C3AED',
+        border: '#DDD2FF',
+        onPress: async () => {
+          await copyToClipboard(url, 'messenger');
+          await openExternalUrl('https://www.messenger.com');
+        },
+      },
+      {
+        id: 'facebook',
+        label: 'Facebook',
+        badge: 'FB',
+        bg: '#EBF3FF',
+        color: '#1877F2',
+        border: '#C2DCFF',
+        onPress: async () => {
+          const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+            url
+          )}`;
+          await openExternalUrl(fbUrl);
+        },
+      },
+      {
+        id: 'telegram',
+        label: 'Telegram',
+        badge: 'TG',
+        bg: '#EAF6FD',
+        color: '#0284C7',
+        border: '#BAE0F9',
+        onPress: async () => {
+          const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(
+            url
+          )}&text=${encodeURIComponent(title)}`;
+          await openExternalUrl(tgUrl);
+        },
+      },
+      {
+        id: 'native',
+        label: 'Khác',
+        badge: '•••',
+        bg: '#F3ECE2',
+        color: '#4A3728',
+        border: '#DFD2C3',
+        onPress: handleNativeShare,
+      },
+    ];
+
+    return (
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={onClose}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.clientSheet}
+            onPress={(e) => e.stopPropagation()}>
+            {/* Minimal Header */}
+            <View style={styles.clientHeader}>
+              <Text style={styles.clientHeaderTitle}>Gửi cho bạn bè</Text>
+              <TouchableOpacity
+                style={styles.closeBtnSmall}
+                onPress={onClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={16} color="#4A3728" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Compact Product Row */}
+            <View style={styles.clientPreviewRow}>
+              {image ? (
+                <Image
+                  source={
+                    typeof image === 'string' ? { uri: image } : (image as any)
+                  }
+                  style={styles.clientThumb}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.clientEmojiThumb}>
+                  <Text style={{ fontSize: 20 }}>🧶</Text>
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.clientTitle} numberOfLines={1}>
+                  {title}
+                </Text>
+                {priceText ? (
+                  <Text style={styles.clientPrice}>{priceText}</Text>
+                ) : null}
+              </View>
+            </View>
+
+            {/* 1-Click Copy Link Bar */}
+            <View style={styles.clientLinkBar}>
+              <Text style={styles.clientLinkText} numberOfLines={1}>
+                {url}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.clientCopyBtn,
+                  copiedType === 'url' && styles.copyLinkBtnActive,
+                ]}
+                onPress={() => copyToClipboard(url, 'url')}
+                activeOpacity={0.8}>
+                {copiedType === 'url' ? (
+                  <>
+                    <Check size={13} color="#FFF" />
+                    <Text style={styles.clientCopyBtnText}>Đã chép</Text>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={13} color="#FFF" />
+                    <Text style={styles.clientCopyBtnText}>Chép link</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Compact Row of Apps */}
+            <View style={styles.clientAppsRow}>
+              {clientQuickApps.map((app) => {
+                const isCopied = copiedType === app.id;
+                return (
+                  <TouchableOpacity
+                    key={app.id}
+                    style={styles.clientAppItem}
+                    onPress={app.onPress}
+                    activeOpacity={0.78}>
+                    <View
+                      style={[
+                        styles.clientAppCircle,
+                        {
+                          backgroundColor: app.bg,
+                          borderColor: app.border,
+                        },
+                      ]}>
+                      <Text
+                        style={[
+                          styles.clientAppBadgeText,
+                          { color: app.color },
+                        ]}>
+                        {isCopied ? '✓' : app.badge}
+                      </Text>
+                    </View>
+                    <Text style={styles.clientAppLabel} numberOfLines={1}>
+                      {isCopied ? 'Đã chép' : app.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    );
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 2. ADMIN / SERVER VIEW: Full Marketing & Multi-Platform Toolkit    */
+  /* ------------------------------------------------------------------ */
   const platforms: PlatformOption[] = [
     {
       id: 'facebook',
@@ -122,7 +316,7 @@ export function ShareModal({
       textColor: '#1877F2',
       borderColor: '#C2DCFF',
       onPress: async () => {
-        await copyToClipboard(fullPostText, 'facebook');
+        await copyToClipboard(fullAdminPostText, 'facebook');
         const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
           url
         )}&quote=${encodeURIComponent(shareText)}`;
@@ -138,7 +332,7 @@ export function ShareModal({
       textColor: '#0068FF',
       borderColor: '#B8DCFF',
       onPress: async () => {
-        await copyToClipboard(fullPostText, 'zalo');
+        await copyToClipboard(fullAdminPostText, 'zalo');
         await openExternalUrl('https://chat.zalo.me');
       },
     },
@@ -151,7 +345,7 @@ export function ShareModal({
       textColor: '#7C3AED',
       borderColor: '#DDD2FF',
       onPress: async () => {
-        await copyToClipboard(fullPostText, 'messenger');
+        await copyToClipboard(fullAdminPostText, 'messenger');
         await openExternalUrl('https://www.messenger.com');
       },
     },
@@ -165,7 +359,7 @@ export function ShareModal({
       borderColor: '#D8D1C7',
       onPress: async () => {
         const threadsUrl = `https://www.threads.net/intent/post?text=${encodeURIComponent(
-          fullPostText
+          fullAdminPostText
         )}`;
         await openExternalUrl(threadsUrl);
       },
@@ -194,7 +388,7 @@ export function ShareModal({
       textColor: '#DB2777',
       borderColor: '#FBCFE8',
       onPress: async () => {
-        await copyToClipboard(fullPostText, 'tiktok_ig');
+        await copyToClipboard(fullAdminPostText, 'tiktok_ig');
       },
     },
   ];
@@ -222,11 +416,11 @@ export function ShareModal({
               <View>
                 <Text style={styles.headerTitle}>
                   {type === 'website'
-                    ? 'Chia sẻ Tiệm Cuộn Len'
-                    : 'Chia sẻ mẫu sản phẩm'}
+                    ? 'Chia sẻ Tiệm Cuộn Len (Admin)'
+                    : 'Chia sẻ mẫu sản phẩm (Admin)'}
                 </Text>
                 <Text style={styles.headerSubtitle}>
-                  Lan toả đồ thủ công xinh xắn qua các nền tảng
+                  Công cụ đăng bài & gửi mẫu nhanh cho chủ tiệm
                 </Text>
               </View>
             </View>
@@ -306,7 +500,7 @@ export function ShareModal({
                 styles.captionBox,
                 copiedType === 'caption' && styles.captionBoxActive,
               ]}
-              onPress={() => copyToClipboard(fullPostText, 'caption')}
+              onPress={() => copyToClipboard(fullAdminPostText, 'caption')}
               activeOpacity={0.82}>
               <View style={styles.captionHeaderRow}>
                 <View style={styles.captionBadgeRow}>
@@ -332,7 +526,7 @@ export function ShareModal({
                 </View>
               </View>
               <Text style={styles.captionPreviewText} numberOfLines={3}>
-                {fullPostText}
+                {fullAdminPostText}
               </Text>
             </TouchableOpacity>
 
@@ -402,11 +596,138 @@ export function ShareModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(38, 26, 18, 0.52)',
+    backgroundColor: 'rgba(38, 26, 18, 0.48)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: SPACING.md,
   },
+
+  /* ---- Minimal Client Styles ---- */
+  clientSheet: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FAF7F2',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5D8C8',
+    padding: 15,
+    gap: 12,
+    ...SHADOWS.medium,
+  },
+  clientHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  clientHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  closeBtnSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F0E7DC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFDF9',
+    padding: 9,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#EAE0D3',
+  },
+  clientThumb: {
+    width: 42,
+    height: 42,
+    borderRadius: 9,
+    backgroundColor: '#F3ECE2',
+  },
+  clientEmojiThumb: {
+    width: 42,
+    height: 42,
+    borderRadius: 9,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  clientPrice: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#7A5230',
+    marginTop: 2,
+  },
+  clientLinkBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2D4C4',
+    paddingLeft: 11,
+    paddingRight: 5,
+    paddingVertical: 5,
+    gap: 8,
+  },
+  clientLinkText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#6E5A4B',
+  },
+  clientCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#4A3728',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  clientCopyBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  clientAppsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 2,
+  },
+  clientAppItem: {
+    alignItems: 'center',
+    gap: 5,
+    flex: 1,
+  },
+  clientAppCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientAppBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '900',
+  },
+  clientAppLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4A3728',
+  },
+
+  /* ---- Full Admin Styles ---- */
   sheet: {
     width: '100%',
     maxWidth: 480,

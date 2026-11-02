@@ -361,15 +361,21 @@ export default function ProductDetailScreen() {
           </View>
 
           <View style={styles.topBarRight}>
-            <TouchableOpacity
-              style={styles.sharePillBtn}
-              onPress={() => setShowShareModal(true)}
-              activeOpacity={0.8}>
-              <Share2 size={15} color="#4A3728" />
-              <Text style={styles.sharePillText}>Chia sẻ</Text>
-            </TouchableOpacity>
-            {!isAdmin && (
+            {isAdmin ? (
+              <TouchableOpacity
+                style={styles.sharePillBtn}
+                onPress={() => setShowShareModal(true)}
+                activeOpacity={0.8}>
+                <Share2 size={15} color="#4A3728" />
+                <Text style={styles.sharePillText}>Chia sẻ</Text>
+              </TouchableOpacity>
+            ) : (
               <>
+                <TouchableOpacity
+                  style={styles.iconCircleBtn}
+                  onPress={() => setShowShareModal(true)}>
+                  <Share2 size={17} color="#4A3728" />
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.iconCircleBtn}
                   onPress={() => toggleFavorite(product.id)}>
@@ -729,26 +735,15 @@ export default function ProductDetailScreen() {
                   </TouchableOpacity>
                 </View>
               ) : (
-                <View style={{ gap: 8 }}>
-                  <TouchableOpacity
-                    style={styles.chatLinkBtn}
-                    onPress={() => openChatWithProduct(buildVariantProduct())}
-                    activeOpacity={0.75}>
-                    <MessageCircle size={15} color="#6E5239" />
-                    <Text style={styles.chatLinkText}>
-                      Nhắn tiệm tư vấn hoặc đặt phối màu riêng cho mẫu này ›
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.chatLinkBtn}
-                    onPress={() => setShowShareModal(true)}
-                    activeOpacity={0.75}>
-                    <Share2 size={15} color="#6E5239" />
-                    <Text style={styles.chatLinkText}>
-                      Chia sẻ mẫu này qua Zalo, Facebook, Messenger, Threads ›
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  style={styles.chatLinkBtn}
+                  onPress={() => openChatWithProduct(buildVariantProduct())}
+                  activeOpacity={0.75}>
+                  <MessageCircle size={15} color="#6E5239" />
+                  <Text style={styles.chatLinkText}>
+                    Nhắn tiệm tư vấn hoặc đặt phối màu riêng cho mẫu này ›
+                  </Text>
+                </TouchableOpacity>
               )}
             </View>
           </View>
