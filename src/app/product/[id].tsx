@@ -559,10 +559,10 @@ export default function ProductDetailScreen() {
               </Text>
               <Text style={styles.quietMetaDot}>•</Text>
               <Text style={styles.quietMetaText}>
-                {product.quantity > 0
-                  ? isAdmin
-                    ? `Còn ${product.quantity} sản phẩm`
-                    : '🧶 Đặt đan thủ công theo mẫu (1–3 ngày)'
+                {product.isMadeToOrder !== false
+                  ? '🧶 Sản phẩm Order (Đặt làm 1–3 ngày)'
+                  : product.quantity > 0
+                  ? `📦 Có sẵn ${product.quantity} sản phẩm`
                   : 'Tạm hết hàng'}
               </Text>
             </View>

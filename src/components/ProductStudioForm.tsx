@@ -194,8 +194,15 @@ export function ProductStudioForm({
   const [material, setMaterial] = useState(
     initialProduct?.material ?? 'Len Cotton Milk'
   );
+  const [isMadeToOrder, setIsMadeToOrder] = useState<boolean>(
+    initialProduct?.isMadeToOrder !== undefined
+      ? initialProduct.isMadeToOrder
+      : true
+  );
   const [quantity, setQuantity] = useState(
-    initialProduct?.quantity !== undefined ? String(initialProduct.quantity) : '20'
+    initialProduct?.quantity !== undefined && initialProduct.quantity < 900
+      ? String(initialProduct.quantity)
+      : '10'
   );
   const [description, setDescription] = useState(
     initialProduct?.description ?? ''
@@ -448,10 +455,11 @@ export function ProductStudioForm({
 
     const finalMaterial = material.trim() || 'Len Cotton Milk';
     const finalMainColor = normalizedColors[0]?.name || 'Kem Sữa';
-    const finalQty =
-      quantity.trim() && !isNaN(Number(quantity)) && Number(quantity) >= 0
-        ? Number(quantity)
-        : 20;
+    const finalQty = isMadeToOrder
+      ? 999
+      : quantity.trim() && !isNaN(Number(quantity)) && Number(quantity) >= 0
+      ? Number(quantity)
+      : 10;
 
     const finalDesc =
       description.trim() ||
@@ -479,6 +487,7 @@ export function ProductStudioForm({
       colorOptions: normalizedColors,
       accessoryOptions: cleanAccessories,
       gallery: builtGallery,
+      isMadeToOrder,
       quantity: finalQty,
       rating: initialProduct?.rating ?? 5,
       reviews: initialProduct?.reviews ?? [],
@@ -736,9 +745,9 @@ export function ProductStudioForm({
               />
             </View>
 
-            {/* Price + Quantity + Material on 1 compact row */}
+            {/* Price + Material on 1 compact row */}
             <View style={styles.compactRow}>
-              <View style={[styles.fieldBlock, { flex: 1.2 }]}>
+              <View style={[styles.fieldBlock, { flex: 1 }]}>
                 <Text style={styles.fieldLabel}>Giá bán (VNĐ) *</Text>
                 <TextInput
                   style={styles.priceInput}
@@ -749,18 +758,7 @@ export function ProductStudioForm({
                   keyboardType="numeric"
                 />
               </View>
-              <View style={[styles.fieldBlock, { flex: 0.7 }]}>
-                <Text style={styles.fieldLabel}>Số lượng</Text>
-                <TextInput
-                  style={styles.stdInput}
-                  value={quantity}
-                  onChangeText={setQuantity}
-                  placeholder="20"
-                  placeholderTextColor={COLORS.lightText}
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.fieldBlock, { flex: 1.3 }]}>
+              <View style={[styles.fieldBlock, { flex: 1.2 }]}>
                 <Text style={styles.fieldLabel}>Chất liệu</Text>
                 <TextInput
                   style={styles.stdInput}
@@ -769,6 +767,58 @@ export function ProductStudioForm({
                   placeholder="Len Cotton Milk"
                   placeholderTextColor={COLORS.lightText}
                 />
+              </View>
+            </View>
+
+            {/* Stock / Order Mode Selector (Synchronized with Client) */}
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Hình thức & Số lượng</Text>
+              <View style={styles.stockModeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.stockModePill,
+                    isMadeToOrder && styles.stockModePillActive,
+                  ]}
+                  onPress={() => setIsMadeToOrder(true)}
+                  activeOpacity={0.8}>
+                  <Text
+                    style={[
+                      styles.stockModeText,
+                      isMadeToOrder && styles.stockModeTextActive,
+                    ]}>
+                    🧶 Sản phẩm Order (Đặt làm 1–3 ngày)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.stockModePill,
+                    !isMadeToOrder && styles.stockModePillActive,
+                  ]}
+                  onPress={() => setIsMadeToOrder(false)}
+                  activeOpacity={0.8}>
+                  <Text
+                    style={[
+                      styles.stockModeText,
+                      !isMadeToOrder && styles.stockModeTextActive,
+                    ]}>
+                    📦 Có sẵn tại tiệm
+                  </Text>
+                </TouchableOpacity>
+
+                {!isMadeToOrder && (
+                  <View style={styles.stockQtyInlineWrap}>
+                    <Text style={styles.stockQtyInlineLabel}>SL:</Text>
+                    <TextInput
+                      style={styles.stockQtyInlineInput}
+                      value={quantity}
+                      onChangeText={setQuantity}
+                      placeholder="10"
+                      placeholderTextColor={COLORS.lightText}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                )}
               </View>
             </View>
 
@@ -1345,6 +1395,58 @@ const styles = StyleSheet.create({
   compactRow: {
     flexDirection: 'row',
     gap: 10,
+  },
+  stockModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  stockModePill: {
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FAF6F0',
+    borderWidth: 1,
+    borderColor: '#E6DDD0',
+  },
+  stockModePillActive: {
+    backgroundColor: '#F1E7DA',
+    borderColor: '#6E4F37',
+    borderWidth: 1.5,
+  },
+  stockModeText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#5C4738',
+  },
+  stockModeTextActive: {
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  stockQtyInlineWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FAF6F0',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#6E4F37',
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+  },
+  stockQtyInlineLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#5C4738',
+  },
+  stockQtyInlineInput: {
+    minWidth: 42,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#3D2B1F',
+    paddingVertical: 2,
+    textAlign: 'center',
   },
   priceInput: {
     backgroundColor: '#FAF6F0',

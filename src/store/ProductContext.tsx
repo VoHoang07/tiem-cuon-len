@@ -23,6 +23,7 @@ function hydrateDbProduct(raw: Product): Product {
     colorOptions?: Product['colorOptions'];
     accessoryOptions?: Product['accessoryOptions'];
     gallery?: Product['gallery'];
+    isMadeToOrder?: boolean;
   } | null = null;
 
   for (const tag of raw.tags) {
@@ -57,6 +58,10 @@ function hydrateDbProduct(raw: Product): Product {
       Array.isArray(parsedMeta.gallery) && parsedMeta.gallery.length > 0
         ? parsedMeta.gallery
         : raw.gallery,
+    isMadeToOrder:
+      typeof parsedMeta.isMadeToOrder === 'boolean'
+        ? parsedMeta.isMadeToOrder
+        : raw.isMadeToOrder,
   };
 }
 
@@ -234,6 +239,9 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
         if (Array.isArray(item.gallery) && item.gallery.length > 0) {
           overrides.gallery = item.gallery;
         }
+        if (typeof item.isMadeToOrder === 'boolean') {
+          overrides.isMadeToOrder = item.isMadeToOrder;
+        }
         remoteOverridesByMockId.set(matchedMock.id, overrides);
       }
       continue;
@@ -348,13 +356,15 @@ function toDbProduct(product: Product) {
   if (
     (serializableColors && serializableColors.length > 0) ||
     (serializableAccessories && serializableAccessories.length > 0) ||
-    (serializableGallery && serializableGallery.length > 0)
+    (serializableGallery && serializableGallery.length > 0) ||
+    typeof product.isMadeToOrder === 'boolean'
   ) {
     finalTags.push(
       `${VARIANTS_META_PREFIX}${JSON.stringify({
         colorOptions: serializableColors,
         accessoryOptions: serializableAccessories,
         gallery: serializableGallery,
+        isMadeToOrder: product.isMadeToOrder,
       })}`
     );
   }

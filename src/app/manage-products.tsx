@@ -124,9 +124,19 @@ export default function ManageProductsScreen() {
             {formatVND(item.price)}
           </Text>
           <View style={styles.productMeta}>
-            <View style={[styles.stockPill, item.quantity <= 2 && styles.stockPillLow]}>
-              <Text style={[styles.productStock, item.quantity <= 2 && styles.productStockLow]}>
-                Kho: {item.quantity}
+            <View
+              style={[
+                styles.stockPill,
+                item.isMadeToOrder === false && item.quantity <= 2 && styles.stockPillLow,
+              ]}>
+              <Text
+                style={[
+                  styles.productStock,
+                  item.isMadeToOrder === false && item.quantity <= 2 && styles.productStockLow,
+                ]}>
+                {item.isMadeToOrder !== false
+                  ? '🧶 Sản phẩm Order'
+                  : `Kho: ${item.quantity}`}
               </Text>
             </View>
             <Text style={styles.productCategory}>

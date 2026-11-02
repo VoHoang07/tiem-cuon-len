@@ -55,6 +55,7 @@ export interface Product {
   selectedAccessoryEmoji?: string;
   colorOptions?: ProductColorOption[];
   accessoryOptions?: ProductAccessoryOption[];
+  isMadeToOrder?: boolean;
   quantity: number;
   rating: number;
   reviews: Review[];
