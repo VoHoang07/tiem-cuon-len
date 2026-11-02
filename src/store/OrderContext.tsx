@@ -35,7 +35,10 @@ function loadCachedOrders(userId?: string): Order[] {
 
 function ordersSignature(items: Order[]): string {
   return items
-    .map((o) => `${o.id}:${o.status}:${o.total}:${o.items?.length || 0}`)
+    .map(
+      (o) =>
+        `${o.id}:${o.status}:${o.total}:${o.items?.length || 0}:${o.shippingAddress?.shippingCarrier || ''}:${o.shippingAddress?.trackingCode || ''}`
+    )
     .join('|');
 }
 
@@ -54,6 +57,14 @@ interface OrderContextType {
   orders: Order[];
   addOrder: (order: Order) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  updateOrderShipping: (
+    orderId: string,
+    payload: {
+      status?: OrderStatus;
+      shippingCarrier?: string;
+      trackingCode?: string;
+    }
+  ) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
   getOrdersByUser: (userId: string) => Order[];
   refetchOrders: () => Promise<void>;
@@ -170,6 +181,70 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id, role]);
 
+  const updateOrderShipping = useCallback(
+    async (
+      orderId: string,
+      payload: {
+        status?: OrderStatus;
+        shippingCarrier?: string;
+        trackingCode?: string;
+      }
+    ) => {
+      if (role !== 'admin') return;
+      let updatedAddress: Order['shippingAddress'] | null = null;
+      let updatedStatus: OrderStatus | undefined = payload.status;
+
+      setOrders((prev) => {
+        const next = prev.map((o) => {
+          if (o.id !== orderId) return o;
+          const nextAddr: Order['shippingAddress'] = {
+            ...o.shippingAddress,
+            shippingCarrier:
+              payload.shippingCarrier !== undefined
+                ? payload.shippingCarrier.trim()
+                : o.shippingAddress?.shippingCarrier,
+            trackingCode:
+              payload.trackingCode !== undefined
+                ? payload.trackingCode.trim()
+                : o.shippingAddress?.trackingCode,
+            shippedAt:
+              payload.trackingCode || payload.status === 'Đang giao'
+                ? o.shippingAddress?.shippedAt || new Date().toISOString()
+                : o.shippingAddress?.shippedAt,
+          };
+          updatedAddress = nextAddr;
+          const nextStat = payload.status ?? o.status;
+          updatedStatus = nextStat;
+          return {
+            ...o,
+            status: nextStat,
+            shippingAddress: nextAddr,
+          };
+        });
+        saveCachedOrders(next, user?.id);
+        return next;
+      });
+
+      if (!updatedAddress) return;
+      try {
+        const updateRow: Record<string, unknown> = {
+          shippingAddress: updatedAddress,
+        };
+        if (updatedStatus) {
+          updateRow.status = updatedStatus;
+        }
+        const { error } = await supabase
+          .from('orders')
+          .update(updateRow)
+          .eq('id', orderId);
+        if (error) console.error('[SUPABASE] Lỗi cập nhật vận đơn:', error.message);
+      } catch {
+        // keep optimistic local update
+      }
+    },
+    [user?.id, role]
+  );
+
   const getOrdersByUser = useCallback(
     (userId: string) => orders.filter((o) => o.userId === userId),
     [orders]
@@ -201,11 +276,20 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       orders,
       addOrder,
       updateOrderStatus,
+      updateOrderShipping,
       deleteOrder,
       getOrdersByUser,
       refetchOrders,
     }),
-    [orders, addOrder, updateOrderStatus, deleteOrder, getOrdersByUser, refetchOrders]
+    [
+      orders,
+      addOrder,
+      updateOrderStatus,
+      updateOrderShipping,
+      deleteOrder,
+      getOrdersByUser,
+      refetchOrders,
+    ]
   );
 
   return (

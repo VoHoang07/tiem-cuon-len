@@ -8,4 +8,9 @@ export interface Address {
   ward: string;
   detailAddress: string;
   isDefault: boolean;
+  shippingMethod?: string;
+  shippingFee?: number;
+  shippingCarrier?: string;
+  trackingCode?: string;
+  shippedAt?: string;
 }

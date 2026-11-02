@@ -218,7 +218,11 @@ export default function CheckoutScreen() {
         price: ci.product.price,
       })),
       total: checkoutTotal,
-      shippingAddress: selectedAddress,
+      shippingAddress: {
+        ...selectedAddress,
+        shippingMethod: shippingMethodLabel,
+        shippingFee,
+      },
       paymentMethod: selectedPayment.title,
       status,
       createdAt: new Date().toISOString(),

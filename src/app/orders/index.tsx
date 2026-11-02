@@ -12,11 +12,29 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ShoppingBag, ChevronRight, Trash2, Home, ArrowRightCircle, QrCode } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
+import { Linking } from 'react-native';
+import {
+  ChevronLeft,
+  ShoppingBag,
+  ChevronRight,
+  Trash2,
+  Home,
+  ArrowRightCircle,
+  QrCode,
+  Copy,
+  Check,
+  Truck,
+} from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { useAuth } from '@/store/AuthContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
+import {
+  formatShippingSlipForClipboard,
+  getCarrierTrackingUrl,
+  getCodCollectAmount,
+} from '@/utils/shippingTracker';
 import {
   getOrderStatusLabel,
   getOrderStatusColor,
@@ -39,6 +57,16 @@ export default function OrdersScreen() {
   const { user, role } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  const handleCopySlip = async (order: Order) => {
+    const text = formatShippingSlipForClipboard(order);
+    await Clipboard.setStringAsync(text);
+    setCopiedOrderId(order.id);
+    setTimeout(() => {
+      setCopiedOrderId((prev) => (prev === order.id ? null : prev));
+    }, 2000);
+  };
 
   const isAdmin = role === 'admin';
   const { width: rawWidth } = useWindowDimensions();
@@ -87,6 +115,12 @@ export default function OrdersScreen() {
 
   const renderItem = ({ item }: { item: Order }) => {
     const nextStatus = ORDER_STATUS_NEXT[item.status];
+    const carrier = item.shippingAddress?.shippingCarrier;
+    const trackingCode = item.shippingAddress?.trackingCode;
+    const trackingUrl = getCarrierTrackingUrl(carrier, trackingCode);
+    const codAmount = getCodCollectAmount(item);
+    const isCopied = copiedOrderId === item.id;
+
     return (
       <View style={styles.constrained}>
         <View style={[styles.orderCard, isMobile && styles.orderCardMobile]}>
@@ -117,12 +151,50 @@ export default function OrdersScreen() {
               <Text style={styles.orderDate}>
                 {new Date(item.createdAt).toLocaleDateString('vi-VN')} • {item.paymentMethod}
               </Text>
+
+              {/* Shipping & Tracking Pill */}
+              <View style={styles.shippingMetaRow}>
+                {trackingCode ? (
+                  <View style={styles.trackingBadge}>
+                    <Truck size={12} color="#2E7D32" />
+                    <Text style={styles.trackingBadgeText} numberOfLines={1}>
+                      {carrier ? `${carrier}: ` : 'Mã vận đơn: '}
+                      {trackingCode}
+                    </Text>
+                  </View>
+                ) : item.shippingAddress?.shippingMethod ? (
+                  <View style={styles.shipMethodBadge}>
+                    <Truck size={12} color="#5C4332" />
+                    <Text style={styles.shipMethodBadgeText} numberOfLines={1}>
+                      {item.shippingAddress.shippingMethod}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {isAdmin && (
+                  <View
+                    style={[
+                      styles.codBadge,
+                      codAmount === 0 && styles.codBadgePaid,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.codBadgeText,
+                        codAmount === 0 && styles.codBadgeTextPaid,
+                      ]}>
+                      {codAmount > 0
+                        ? `Thu COD: ${formatVND(codAmount)}`
+                        : 'Thu COD: 0₫ (Đã CK)'}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             <View style={styles.orderFooter}>
               <Text style={styles.orderTotal}>{formatVND(item.total)}</Text>
               <View style={styles.detailHint}>
-                <Text style={styles.detailHintText}>Chi tiết</Text>
+                <Text style={styles.detailHintText}>Chi tiết & Vận đơn</Text>
                 <ChevronRight size={17} color={COLORS.lightText} />
               </View>
             </View>
@@ -139,6 +211,34 @@ export default function OrdersScreen() {
                   <Text style={styles.payNowBtnText}>Thanh toán QR</Text>
                 </TouchableOpacity>
               )}
+              {isAdmin && (
+                <TouchableOpacity
+                  style={[styles.copySlipBtn, isCopied && styles.copySlipBtnDone]}
+                  onPress={() => handleCopySlip(item)}
+                  activeOpacity={0.8}>
+                  {isCopied ? (
+                    <Check size={14} color="#2E7D32" />
+                  ) : (
+                    <Copy size={13.5} color="#3D2B1F" />
+                  )}
+                  <Text
+                    style={[
+                      styles.copySlipBtnText,
+                      isCopied && { color: '#2E7D32' },
+                    ]}>
+                    {isCopied ? 'Đã chép đơn Ship' : 'Chép đơn Ship'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {!isAdmin && trackingCode && trackingUrl ? (
+                <TouchableOpacity
+                  style={styles.trackOrderBtn}
+                  onPress={() => Linking.openURL(trackingUrl)}
+                  activeOpacity={0.8}>
+                  <Truck size={14} color="#2E7D32" />
+                  <Text style={styles.trackOrderBtnText}>Tra cứu vận đơn</Text>
+                </TouchableOpacity>
+              ) : null}
               {isAdmin && nextStatus ? (
                 <TouchableOpacity
                   style={styles.advanceBtn}
@@ -383,6 +483,64 @@ const styles = StyleSheet.create({
   customerName: { fontSize: 13.5, fontWeight: '800', color: COLORS.primary, marginBottom: 4 },
   orderItems: { fontSize: 13.5, color: COLORS.darkText, lineHeight: 19, fontWeight: '600' },
   orderDate: { fontSize: 12, color: COLORS.lightText, marginTop: 4 },
+  shippingMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 7,
+  },
+  trackingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#EAF6E8',
+    borderWidth: 1,
+    borderColor: '#B8DFB2',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    maxWidth: '100%',
+  },
+  trackingBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#2E7D32',
+    flexShrink: 1,
+  },
+  shipMethodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F3ECE2',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    maxWidth: '100%',
+  },
+  shipMethodBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#5C4332',
+    flexShrink: 1,
+  },
+  codBadge: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  codBadgePaid: {
+    backgroundColor: '#EBF5FF',
+  },
+  codBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  codBadgeTextPaid: {
+    color: '#1D4ED8',
+  },
 
   orderFooter: {
     flexDirection: 'row',
@@ -439,6 +597,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FAF5EE',
+  },
+  copySlipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F3ECE2',
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: '#DFCBB5',
+  },
+  copySlipBtnDone: {
+    backgroundColor: '#EAF6E8',
+    borderColor: '#B8DFB2',
+  },
+  copySlipBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  trackOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#EAF6E8',
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: '#B8DFB2',
+  },
+  trackOrderBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#2E7D32',
   },
   advanceBtn: {
     flexDirection: 'row',
