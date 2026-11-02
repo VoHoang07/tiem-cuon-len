@@ -35,6 +35,7 @@ export default function FavoritesScreen() {
       ? window.innerWidth
       : 1024;
   const numColumns = windowWidth >= 960 ? 4 : windowWidth >= 640 ? 3 : 2;
+  const isMobile = windowWidth < 640;
 
   const hasFocusedOnce = useRef(false);
   useFocusEffect(
@@ -104,7 +105,11 @@ export default function FavoritesScreen() {
         ListHeaderComponent={favoriteProducts.length === 0 ? null : ListHeader}
         ListEmptyComponent={ListEmpty}
         contentContainerStyle={favoriteProducts.length === 0 ? styles.listEmpty : styles.listContent}
-        columnWrapperStyle={favoriteProducts.length > 0 ? styles.columnWrapper : undefined}
+        columnWrapperStyle={
+          favoriteProducts.length > 0
+            ? [styles.columnWrapper, isMobile && styles.columnWrapperMobile]
+            : undefined
+        }
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       />
@@ -134,6 +139,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: SPACING.lg,
     gap: 14,
+  },
+  columnWrapperMobile: {
+    paddingHorizontal: 12,
+    gap: 10,
   },
   header: {
     flexDirection: 'row',

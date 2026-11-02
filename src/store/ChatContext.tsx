@@ -177,6 +177,7 @@ interface ChatContextType {
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
+const ChatTriggerContext = createContext<((product: Product) => void) | null>(null);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { user, role } = useAuth();
@@ -222,6 +223,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Fetch all chat messages from Supabase REST table (`addresses` with `fullName = __TCL_CHAT_V2__`)
   const fetchRemoteMessages = useCallback(async () => {
     if (!supabaseUrl || !supabaseAnonKey) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     try {
       const res = await fetch(
         `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}&select=*`,
@@ -417,10 +419,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Layer 4: Initial fetch + fast real-time polling + window focus sync
+  // Layer 4: Initial fetch + adaptive polling + window focus sync
   useEffect(() => {
     fetchRemoteMessages();
-    const intervalMs = isOpen ? 1500 : 3500;
+    const intervalMs = isOpen ? 2500 : 12000;
     const timer = setInterval(fetchRemoteMessages, intervalMs);
 
     const handleFocus = () => {
@@ -800,7 +802,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+  return (
+    <ChatTriggerContext.Provider value={openChatWithProduct}>
+      <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
+    </ChatTriggerContext.Provider>
+  );
 }
 
 export function useChat() {
@@ -809,4 +815,12 @@ export function useChat() {
     throw new Error('useChat must be used within ChatProvider');
   }
   return ctx;
+}
+
+export function useChatTrigger() {
+  const trigger = useContext(ChatTriggerContext);
+  if (!trigger) {
+    throw new Error('useChatTrigger must be used within ChatProvider');
+  }
+  return trigger;
 }

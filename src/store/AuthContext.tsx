@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type ReactNode,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -247,21 +248,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const contextValue = useMemo(
+    () => ({
+      user,
+      role: user?.role ?? null,
+      isAuthenticated: user !== null,
+      isLoading,
+      configError,
+      guestAvatar,
+      login,
+      register,
+      logout,
+      updateProfile,
+      updateAvatar,
+    }),
+    [user, isLoading, configError, guestAvatar, login, register, logout, updateProfile, updateAvatar]
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        role: user?.role ?? null,
-        isAuthenticated: user !== null,
-        isLoading,
-        configError,
-        guestAvatar,
-        login,
-        register,
-        logout,
-        updateProfile,
-        updateAvatar,
-      }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

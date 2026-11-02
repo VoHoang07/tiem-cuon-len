@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 import { COLORS } from '@/constants/theme';
 
+const INTRO_SESSION_KEY = 'tcl_intro_shown_v1';
+
 const INTRO_CSS = `
 .yri-overlay {
   position: fixed;
@@ -19,7 +21,7 @@ const INTRO_CSS = `
   justify-content: center;
   padding: 20px;
   overflow: hidden;
-  animation: yri-fade-out 0.42s cubic-bezier(0.4, 0, 0.2, 1) 1.75s forwards;
+  animation: yri-fade-out 0.28s cubic-bezier(0.4, 0, 0.2, 1) 0.9s forwards;
 }
 .yri-circle-top {
   position: absolute;
@@ -83,7 +85,7 @@ const INTRO_CSS = `
   line-height: 1.15;
   white-space: nowrap;
   clip-path: inset(-15% 100% -15% 0);
-  animation: yri-reveal-text 1.25s cubic-bezier(0.25, 0.85, 0.35, 1) 0.12s forwards;
+  animation: yri-reveal-text 0.72s cubic-bezier(0.25, 0.85, 0.35, 1) 0.06s forwards;
 }
 .yri-strand-track {
   position: absolute;
@@ -101,7 +103,7 @@ const INTRO_CSS = `
   border-radius: 99px;
   transform-origin: left center;
   transform: scaleX(0);
-  animation: yri-grow-strand 1.25s cubic-bezier(0.25, 0.85, 0.35, 1) 0.12s forwards;
+  animation: yri-grow-strand 0.72s cubic-bezier(0.25, 0.85, 0.35, 1) 0.06s forwards;
 }
 .yri-ball-rail {
   position: absolute;
@@ -117,12 +119,12 @@ const INTRO_CSS = `
   left: 0;
   width: 54px;
   height: 54px;
-  animation: yri-roll-x 1.25s cubic-bezier(0.25, 0.85, 0.35, 1) 0.12s forwards;
+  animation: yri-roll-x 0.72s cubic-bezier(0.25, 0.85, 0.35, 1) 0.06s forwards;
 }
 .yri-ball-spinner {
   width: 100%;
   height: 100%;
-  animation: yri-spin 1.25s cubic-bezier(0.25, 0.85, 0.35, 1) 0.12s forwards;
+  animation: yri-spin 0.72s cubic-bezier(0.25, 0.85, 0.35, 1) 0.06s forwards;
   filter: drop-shadow(0 5px 10px rgba(61, 43, 31, 0.2));
 }
 .yri-sub {
@@ -135,7 +137,7 @@ const INTRO_CSS = `
   text-align: center;
   opacity: 0;
   transform: translateY(8px);
-  animation: yri-sub-in 0.4s ease-out 1.15s forwards;
+  animation: yri-sub-in 0.28s ease-out 0.55s forwards;
 }
 @media (max-width: 640px) {
   .yri-track-box {
@@ -177,21 +179,34 @@ const INTRO_CSS = `
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes yri-fade-out {
-  0% { opacity: 1; visibility: visible; }
+  0% { opacity: 1; visibility: visible; pointer-events: none; }
   99% { opacity: 0; visibility: visible; pointer-events: none; }
   100% { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 `;
 
 export function YarnRollIntro() {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        if (window.sessionStorage.getItem(INTRO_SESSION_KEY) === '1') {
+          return false;
+        }
+        window.sessionStorage.setItem(INTRO_SESSION_KEY, '1');
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return true;
+  });
 
   useEffect(() => {
+    if (!visible) return;
     const timer = setTimeout(() => {
       setVisible(false);
-    }, 2200);
+    }, 1200);
     return () => clearTimeout(timer);
-  }, []);
+  }, [visible]);
 
   if (!visible) return null;
 

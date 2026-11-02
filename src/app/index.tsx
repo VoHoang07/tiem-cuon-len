@@ -215,13 +215,34 @@ export default function HomeScreen() {
     loadMore();
   }, [hasMore, isLoading, loadMore]);
 
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <ProductCard
-      product={item}
-      variant="grid"
-      numColumns={numColumns}
-      onPress={(p) => router.push(`/product/${p.id}`)}
-    />
+  const handleCardPress = useCallback(
+    (p: Product) => {
+      router.push(`/product/${p.id}`);
+    },
+    [router]
+  );
+
+  const renderProductItem = useCallback(
+    ({ item }: { item: Product }) => (
+      <ProductCard
+        product={item}
+        variant="grid"
+        numColumns={numColumns}
+        onPress={handleCardPress}
+      />
+    ),
+    [numColumns, handleCardPress]
+  );
+
+  const renderFeaturedItem = useCallback(
+    ({ item }: { item: Product }) => (
+      <ProductCard
+        product={item}
+        variant="carousel"
+        onPress={handleCardPress}
+      />
+    ),
+    [handleCardPress]
   );
 
   const showHeroAndFeatured =
@@ -536,17 +557,13 @@ export default function HomeScreen() {
             data={featuredProducts}
             keyExtractor={(item) => `featured-${item.id}`}
             showsHorizontalScrollIndicator={false}
+            initialNumToRender={4}
+            maxToRenderPerBatch={4}
             contentContainerStyle={[
               styles.featuredRow,
               isMobile && styles.featuredRowMobile,
             ]}
-            renderItem={({ item }) => (
-              <ProductCard
-                product={item}
-                variant="carousel"
-                onPress={(p) => router.push(`/product/${p.id}`)}
-              />
-            )}
+            renderItem={renderFeaturedItem}
           />
         </View>
       )}
@@ -784,6 +801,9 @@ export default function HomeScreen() {
           filteredProducts.length === 0 ? styles.listContent : undefined
         }
         showsVerticalScrollIndicator={false}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -791,16 +811,18 @@ export default function HomeScreen() {
         onEndReachedThreshold={0.5}
       />
 
-      <ShareModal
-        visible={showShareWebModal}
-        onClose={() => setShowShareWebModal(false)}
-        type="website"
-        title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
-        subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
-        priceText="Freeship đơn từ 199.000₫"
-        url={PUBLIC_SHOP_URL}
-        shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Tặng kèm hộp quà & thiệp viết tay miễn phí, freeship đơn từ 199k!`}
-      />
+      {showShareWebModal ? (
+        <ShareModal
+          visible={showShareWebModal}
+          onClose={() => setShowShareWebModal(false)}
+          type="website"
+          title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
+          subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
+          priceText="Freeship đơn từ 199.000₫"
+          url={PUBLIC_SHOP_URL}
+          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Tặng kèm hộp quà & thiệp viết tay miễn phí, freeship đơn từ 199k!`}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

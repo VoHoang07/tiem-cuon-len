@@ -78,8 +78,9 @@ export function ShopChatWidget() {
 
   const scrollRef = useRef<ScrollView | null>(null);
 
-  // Deduplicate products for picker
+  // Deduplicate products for picker only when picker is open
   const uniqueProducts = useMemo(() => {
+    if (!isOpen || !showProductPicker) return [];
     const seen = new Set<string>();
     return products.filter((p) => {
       const k = p.name.trim().toLowerCase();
@@ -87,7 +88,7 @@ export function ShopChatWidget() {
       seen.add(k);
       return true;
     });
-  }, [products]);
+  }, [products, isOpen, showProductPicker]);
 
   const filteredPickerProducts = useMemo(() => {
     if (!pickerSearch.trim()) return uniqueProducts;

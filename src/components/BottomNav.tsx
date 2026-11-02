@@ -67,6 +67,7 @@ export function BottomNav() {
   const tabs = isAdmin ? adminTabs : customerTabs;
 
   const handleTabPress = (route: string) => {
+    if (pathname === route) return;
     if (Platform.OS === 'web') {
       router.push(route as Href);
     } else {

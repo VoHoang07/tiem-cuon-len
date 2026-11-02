@@ -34,7 +34,7 @@ interface BoutiqueFooterProps {
   onScrollToTop?: () => void;
 }
 
-export function BoutiqueFooter({
+export const BoutiqueFooter = React.memo(function BoutiqueFooter({
   onSelectCategory,
   onScrollToTop,
 }: BoutiqueFooterProps) {
@@ -381,19 +381,21 @@ export function BoutiqueFooter({
         </View>
       </View>
 
-      <ShareModal
-        visible={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        type="website"
-        title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
-        subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
-        priceText="Freeship đơn từ 199.000₫"
-        url={PUBLIC_SHOP_URL}
-        shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Tặng kèm hộp quà & thiệp viết tay miễn phí, freeship đơn từ 199k!`}
-      />
+      {showShareModal ? (
+        <ShareModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          type="website"
+          title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
+          subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
+          priceText="Freeship đơn từ 199.000₫"
+          url={PUBLIC_SHOP_URL}
+          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Tặng kèm hộp quà & thiệp viết tay miễn phí, freeship đơn từ 199k!`}
+        />
+      ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -682,7 +684,8 @@ const styles = StyleSheet.create({
   bottomActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    flexWrap: 'wrap',
+    gap: 12,
   },
   policyLink: {
     flexDirection: 'row',

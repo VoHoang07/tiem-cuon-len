@@ -1,7 +1,7 @@
 import { Stack, useRouter, useSegments, usePathname, useGlobalSearchParams, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ShopProvider } from '@/store/ShopContext';
 import { AuthProvider, useAuth } from '@/store/AuthContext';
@@ -113,7 +113,7 @@ export default function RootLayout() {
                         screenOptions={{
                           headerShown: false,
                           contentStyle: { backgroundColor: COLORS.cream },
-                          animation: 'slide_from_right',
+                          animation: Platform.OS === 'web' ? 'none' : 'slide_from_right',
                         }}>
                         <Stack.Screen name="login" />
                         <Stack.Screen name="register" />

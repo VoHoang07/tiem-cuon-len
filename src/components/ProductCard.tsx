@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, memo } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,10 @@ import { useRouter } from 'expo-router';
 import { Heart, Plus, Check, Edit3, MessageCircle, Share2 } from 'lucide-react-native';
 import { Product } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
-import { useShop } from '@/store/ShopContext';
+import { useFavorites } from '@/store/FavoritesContext';
+import { useCart } from '@/store/CartContext';
 import { useAuth } from '@/store/AuthContext';
-import { useChat } from '@/store/ChatContext';
+import { useChatTrigger } from '@/store/ChatContext';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
@@ -30,16 +31,17 @@ interface ProductCardProps {
   numColumns?: number;
 }
 
-export function ProductCard({
+export const ProductCard = memo(function ProductCard({
   product,
   onPress,
   variant = 'grid',
   numColumns = 2,
 }: ProductCardProps) {
   const router = useRouter();
-  const { toggleFavorite, isFavorite, addToCart } = useShop();
+  const { toggleFavorite, isFavorite } = useFavorites();
+  const { addToCart } = useCart();
   const { role } = useAuth();
-  const { openChatWithProduct } = useChat();
+  const openChatWithProduct = useChatTrigger();
   const isAdmin = role === 'admin';
 
   const { width: rawWindowWidth } = useWindowDimensions();
@@ -299,22 +301,24 @@ export function ProductCard({
         </View>
       </Pressable>
 
-      <ShareModal
-        visible={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        type="product"
-        title={product.name}
-        subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt làm theo mẫu`}
-        priceText={formatVND(product.price)}
-        url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
-        image={product.image}
-        shareText={`🧶 ${product.name} (${formatVND(
-          product.price
-        )})\n✨ Đan móc thủ công tỉ mỉ theo mẫu tại Tiệm Cuộn Len, tặng kèm hộp quà & thiệp viết tay!`}
-      />
+      {showShareModal ? (
+        <ShareModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          type="product"
+          title={product.name}
+          subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt làm theo mẫu`}
+          priceText={formatVND(product.price)}
+          url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
+          image={product.image}
+          shareText={`🧶 ${product.name} (${formatVND(
+            product.price
+          )})\n✨ Đan móc thủ công tỉ mỉ theo mẫu tại Tiệm Cuộn Len, tặng kèm hộp quà & thiệp viết tay!`}
+        />
+      ) : null}
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   cardWrapper: {

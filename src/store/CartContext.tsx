@@ -431,19 +431,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [cart]
   );
 
+  const contextValue = useMemo(
+    () => ({
+      cart,
+      cartHydrated,
+      cartTotal,
+      cartCount,
+      addToCart,
+      removeFromCart,
+      updateCartQuantity,
+      clearCart,
+      refetchCart,
+    }),
+    [
+      cart,
+      cartHydrated,
+      cartTotal,
+      cartCount,
+      addToCart,
+      removeFromCart,
+      updateCartQuantity,
+      clearCart,
+      refetchCart,
+    ]
+  );
+
   return (
-    <CartContext.Provider
-      value={{
-        cart,
-        cartHydrated,
-        cartTotal,
-        cartCount,
-        addToCart,
-        removeFromCart,
-        updateCartQuantity,
-        clearCart,
-        refetchCart,
-      }}>
+    <CartContext.Provider value={contextValue}>
       {children}
     </CartContext.Provider>
   );

@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type ReactNode,
 } from 'react';
 import { Product, Review } from '@/types/product';
@@ -290,14 +291,24 @@ function loadCachedProducts(): Product[] {
   return mergeWithMockProducts(MOCK_PRODUCTS);
 }
 
+function productsSignature(list: Product[]): string {
+  return list
+    .map(
+      (p) =>
+        `${p.id}:${p.name}:${p.price}:${p.quantity}:${p.isMadeToOrder !== false ? 1 : 0}:${p.rating}:${p.reviews?.length || 0}:${p.colorOptions?.length || 0}:${p.accessoryOptions?.length || 0}:${p.gallery?.length || 0}:${typeof p.image === 'string' ? p.image.length : 1}`
+    )
+    .join('|');
+}
+
 function saveCachedProducts(items: Product[]) {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage && items.length > 0) {
+  if (typeof window === 'undefined' || !window.localStorage || items.length === 0) return;
+  setTimeout(() => {
+    try {
       window.localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(items));
+    } catch {
+      // ignore quota errors (e.g. large base64 images)
     }
-  } catch {
-    // ignore quota errors (e.g. large base64 images)
-  }
+  }, 0);
 }
 
 function toDbProduct(product: Product) {
@@ -460,13 +471,21 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const syncProducts = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
       fetchProducts(0)
         .then((data) => {
           if (cancelled) return;
           if (data) {
             const merged = mergeWithMockProducts(data);
-            setProducts(merged);
-            saveCachedProducts(merged);
+            setProducts((prev) => {
+              if (productsSignature(merged) === productsSignature(prev)) {
+                return prev;
+              }
+              saveCachedProducts(merged);
+              return merged;
+            });
           }
           setLoaded(true);
         })
@@ -476,7 +495,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     };
 
     syncProducts();
-    const timer = setInterval(syncProducts, 10000);
+    const timer = setInterval(syncProducts, 25000);
     const handleFocus = () => {
       syncProducts();
     };
@@ -581,19 +600,33 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const contextValue = useMemo(
+    () => ({
+      products,
+      isLoading: !loaded,
+      hasMore,
+      loadMore,
+      addProduct,
+      updateProduct,
+      removeProduct,
+      addReview,
+      refetchProducts,
+    }),
+    [
+      products,
+      loaded,
+      hasMore,
+      loadMore,
+      addProduct,
+      updateProduct,
+      removeProduct,
+      addReview,
+      refetchProducts,
+    ]
+  );
+
   return (
-    <ProductContext.Provider
-      value={{
-        products,
-        isLoading: !loaded,
-        hasMore,
-        loadMore,
-        addProduct,
-        updateProduct,
-        removeProduct,
-        addReview,
-        refetchProducts,
-      }}>
+    <ProductContext.Provider value={contextValue}>
       {children}
     </ProductContext.Provider>
   );

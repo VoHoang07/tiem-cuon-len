@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type ReactNode,
 } from 'react';
 import { Address } from '@/types/address';
@@ -192,18 +193,31 @@ export function AddressProvider({ children }: { children: ReactNode }) {
     return removedCount;
   }, [user]);
 
+  const contextValue = useMemo(
+    () => ({
+      addresses,
+      userAddresses,
+      addAddress,
+      updateAddress,
+      removeAddress,
+      setDefaultAddress,
+      getDefaultAddress,
+      removeDuplicates,
+    }),
+    [
+      addresses,
+      userAddresses,
+      addAddress,
+      updateAddress,
+      removeAddress,
+      setDefaultAddress,
+      getDefaultAddress,
+      removeDuplicates,
+    ]
+  );
+
   return (
-    <AddressContext.Provider
-      value={{
-        addresses,
-        userAddresses,
-        addAddress,
-        updateAddress,
-        removeAddress,
-        setDefaultAddress,
-        getDefaultAddress,
-        removeDuplicates,
-      }}>
+    <AddressContext.Provider value={contextValue}>
       {children}
     </AddressContext.Provider>
   );

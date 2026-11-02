@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type ReactNode,
 } from 'react';
 import { supabase } from '@/services/supabase';
@@ -78,13 +79,20 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
+  const favoritesSet = useMemo(() => new Set(favorites), [favorites]);
+
   const isFavorite = useCallback(
-    (productId: string) => favorites.includes(productId),
-    [favorites],
+    (productId: string) => favoritesSet.has(productId),
+    [favoritesSet],
+  );
+
+  const contextValue = useMemo(
+    () => ({ favorites, toggleFavorite, isFavorite }),
+    [favorites, toggleFavorite, isFavorite]
   );
 
   return (
-    <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite }}>
+    <FavoritesContext.Provider value={contextValue}>
       {children}
     </FavoritesContext.Provider>
   );

@@ -866,7 +866,7 @@ export default function ProductDetailScreen() {
             <Text style={styles.sectionTitle}>
               Sản phẩm cùng danh mục {getCategoryLabel(product.category).toLowerCase()}
             </Text>
-            <View style={styles.relatedGrid}>
+            <View style={[styles.relatedGrid, isMobile && styles.relatedGridMobile]}>
               {relatedProducts.map((rel) => (
                 <ProductCard
                   key={rel.id}
@@ -919,29 +919,31 @@ export default function ProductDetailScreen() {
       )}
 
       {/* Multi-Platform Share Modal */}
-      <ShareModal
-        visible={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        type="product"
-        title={
-          activeColor || activeAccessory
-            ? `${product.name} (${[activeColor?.name, activeAccessory?.name]
-                .filter(Boolean)
-                .join(' + ')})`
-            : product.name
-        }
-        subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt đan thủ công theo mẫu (1–3 ngày)`}
-        priceText={formatVND(effectivePrice)}
-        url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
-        image={activeDisplayImage || product.image}
-        shareText={`🧶 ${product.name}${
-          activeColor ? ` - Màu: ${activeColor.name}` : ''
-        }${
-          activeAccessory ? ` - Phụ kiện: ${activeAccessory.name}` : ''
-        } (${formatVND(
-          effectivePrice
-        )})\n✨ Đan móc thủ công tỉ mỉ theo mẫu tại Tiệm Cuộn Len, tặng kèm hộp quà & thiệp viết tay!`}
-      />
+      {showShareModal ? (
+        <ShareModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          type="product"
+          title={
+            activeColor || activeAccessory
+              ? `${product.name} (${[activeColor?.name, activeAccessory?.name]
+                  .filter(Boolean)
+                  .join(' + ')})`
+              : product.name
+          }
+          subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt đan thủ công theo mẫu (1–3 ngày)`}
+          priceText={formatVND(effectivePrice)}
+          url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
+          image={activeDisplayImage || product.image}
+          shareText={`🧶 ${product.name}${
+            activeColor ? ` - Màu: ${activeColor.name}` : ''
+          }${
+            activeAccessory ? ` - Phụ kiện: ${activeAccessory.name}` : ''
+          } (${formatVND(
+            effectivePrice
+          )})\n✨ Đan móc thủ công tỉ mỉ theo mẫu tại Tiệm Cuộn Len, tặng kèm hộp quà & thiệp viết tay!`}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1589,6 +1591,10 @@ const styles = StyleSheet.create({
   relatedGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 14,
+  },
+  relatedGridMobile: {
+    gap: 10,
   },
 
   /* Mobile Sticky Bar */

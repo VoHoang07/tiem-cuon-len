@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   useRef,
   type ReactNode,
 } from 'react';
@@ -32,14 +33,21 @@ function loadCachedOrders(userId?: string): Order[] {
   return [];
 }
 
+function ordersSignature(items: Order[]): string {
+  return items
+    .map((o) => `${o.id}:${o.status}:${o.total}:${o.items?.length || 0}`)
+    .join('|');
+}
+
 function saveCachedOrders(items: Order[], userId?: string) {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  setTimeout(() => {
+    try {
       window.localStorage.setItem(getOrdersCacheKey(userId), JSON.stringify(items));
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
-  }
+  }, 0);
 }
 
 interface OrderContextType {
@@ -64,6 +72,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   const fetchOrders = useCallback(async () => {
+    if (!user && role !== 'admin') return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     try {
       const query = supabase.from('orders').select('*').order('createdAt', { ascending: false });
 
@@ -71,8 +81,11 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         const { data, error } = await query;
         if (!error && data) {
           const filtered = (data as Order[]).filter((o) => !deletedOrderIdsRef.current.has(o.id));
-          setOrders(filtered);
-          saveCachedOrders(filtered, user?.id);
+          setOrders((prev) => {
+            if (ordersSignature(filtered) === ordersSignature(prev)) return prev;
+            saveCachedOrders(filtered, user?.id);
+            return filtered;
+          });
         }
       } else if (user) {
         const { data, error } = await query.eq('userId', user.id);
@@ -93,6 +106,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             const merged = [...remoteRows, ...localInFlight].sort(
               (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
+            if (ordersSignature(merged) === ordersSignature(prev)) return prev;
             saveCachedOrders(merged, user.id);
             return merged;
           });
@@ -104,8 +118,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [user, role]);
 
   useEffect(() => {
+    if (!user && role !== 'admin') return;
     fetchOrders();
-    const timer = setInterval(fetchOrders, 4000);
+    const timer = setInterval(fetchOrders, 8000);
     const handleFocus = () => {
       fetchOrders();
     };
@@ -118,7 +133,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         window.removeEventListener('focus', handleFocus);
       }
     };
-  }, [fetchOrders]);
+  }, [user, role, fetchOrders]);
 
   const refetchOrders = useCallback(async () => {
     await fetchOrders();
@@ -181,8 +196,20 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id, role]);
 
+  const contextValue = useMemo(
+    () => ({
+      orders,
+      addOrder,
+      updateOrderStatus,
+      deleteOrder,
+      getOrdersByUser,
+      refetchOrders,
+    }),
+    [orders, addOrder, updateOrderStatus, deleteOrder, getOrdersByUser, refetchOrders]
+  );
+
   return (
-    <OrderContext.Provider value={{ orders, addOrder, updateOrderStatus, deleteOrder, getOrdersByUser, refetchOrders }}>
+    <OrderContext.Provider value={contextValue}>
       {children}
     </OrderContext.Provider>
   );

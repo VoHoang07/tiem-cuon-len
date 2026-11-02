@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   type ReactNode,
 } from 'react';
 import { PaymentMethod, PaymentMethodInput, type PaymentMethodType } from '@/types/payment-method';
@@ -240,20 +241,35 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
     [methods],
   );
 
+  const contextValue = useMemo(
+    () => ({
+      methods,
+      enabledMethods,
+      defaultMethod,
+      loading,
+      error,
+      addMethod,
+      updateMethod,
+      deleteMethod,
+      setDefault,
+      getMethodByType,
+    }),
+    [
+      methods,
+      enabledMethods,
+      defaultMethod,
+      loading,
+      error,
+      addMethod,
+      updateMethod,
+      deleteMethod,
+      setDefault,
+      getMethodByType,
+    ]
+  );
+
   return (
-    <PaymentMethodsContext.Provider
-      value={{
-        methods,
-        enabledMethods,
-        defaultMethod,
-        loading,
-        error,
-        addMethod,
-        updateMethod,
-        deleteMethod,
-        setDefault,
-        getMethodByType,
-      }}>
+    <PaymentMethodsContext.Provider value={contextValue}>
       {children}
     </PaymentMethodsContext.Provider>
   );
