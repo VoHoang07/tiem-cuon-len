@@ -909,22 +909,22 @@ export default function ProductDetailScreen() {
         onClose={() => setShowShareModal(false)}
         type="product"
         title={
-          selectedColor || selectedAccessory
-            ? `${product.name} (${[selectedColor?.name, selectedAccessory?.name]
+          activeColor || activeAccessory
+            ? `${product.name} (${[activeColor?.name, activeAccessory?.name]
                 .filter(Boolean)
                 .join(' + ')})`
             : product.name
         }
         subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt đan thủ công theo mẫu (1–3 ngày)`}
-        priceText={formatVND(effectiveUnitPrice)}
+        priceText={formatVND(effectivePrice)}
         url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
         image={activeDisplayImage || product.image}
         shareText={`🧶 ${product.name}${
-          selectedColor ? ` - Màu: ${selectedColor.name}` : ''
+          activeColor ? ` - Màu: ${activeColor.name}` : ''
         }${
-          selectedAccessory ? ` - Phụ kiện: ${selectedAccessory.name}` : ''
+          activeAccessory ? ` - Phụ kiện: ${activeAccessory.name}` : ''
         } (${formatVND(
-          effectiveUnitPrice
+          effectivePrice
         )})\n✨ Đan móc thủ công tỉ mỉ theo mẫu tại Tiệm Cuộn Len, tặng kèm hộp quà & thiệp viết tay!`}
       />
     </SafeAreaView>
