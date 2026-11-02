@@ -183,6 +183,7 @@ export function ProductStudioForm({
       ? window.innerWidth
       : 1024;
   const isDesktop = windowWidth >= 820;
+  const isMobile = windowWidth < 640;
 
   const [name, setName] = useState(initialProduct?.name ?? '');
   const [price, setPrice] = useState(
@@ -506,7 +507,10 @@ export function ProductStudioForm({
     <SafeAreaView style={styles.safe}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isMobile && styles.scrollContentMobile,
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         {/* 1. Top Navigation Bar (Synchronized with Product Detail) */}
@@ -516,8 +520,14 @@ export function ProductStudioForm({
             <Text style={styles.backBtnText}>Quay lại</Text>
           </TouchableOpacity>
 
-          <Text style={styles.pageTitle}>
-            {mode === 'add' ? 'Thêm mẫu sản phẩm mới' : 'Chỉnh sửa sản phẩm'}
+          <Text style={styles.pageTitle} numberOfLines={1}>
+            {isMobile
+              ? mode === 'add'
+                ? 'Thêm sản phẩm'
+                : 'Sửa sản phẩm'
+              : mode === 'add'
+              ? 'Thêm mẫu sản phẩm mới'
+              : 'Chỉnh sửa sản phẩm'}
           </Text>
 
           <TouchableOpacity
@@ -525,7 +535,7 @@ export function ProductStudioForm({
             onPress={handleSave}
             activeOpacity={0.85}>
             <Check size={16} color="#FFFDF9" />
-            <Text style={styles.saveTopBtnText}>Lưu mẫu</Text>
+            <Text style={styles.saveTopBtnText}>Lưu</Text>
           </TouchableOpacity>
         </View>
 
@@ -920,7 +930,7 @@ export function ProductStudioForm({
                       }}>
                       <ImageIcon size={13} color="#4A3728" />
                       <Text style={styles.pickColorImgBtnText}>
-                        {activeColor.image ? 'Đổi ảnh màu này' : 'Gắn ảnh màu này'}
+                        {activeColor.image ? 'Đổi ảnh' : 'Chọn ảnh'}
                       </Text>
                     </TouchableOpacity>
                     {colorOptions.length > 1 && (
@@ -999,26 +1009,34 @@ export function ProductStudioForm({
               <View style={styles.accessoryList}>
                 {accessoryOptions.map((acc, idx) => (
                   <View key={acc.id || idx} style={styles.accessoryRowCard}>
-                    <TouchableOpacity
-                      style={styles.emojiCycleBtn}
-                      onPress={() => {
-                        const cur = EMOJI_LIST.indexOf(acc.emoji || '🍓');
-                        const nextEm =
-                          EMOJI_LIST[(cur + 1) % EMOJI_LIST.length];
-                        handleUpdateAccessory(idx, { emoji: nextEm });
-                      }}>
-                      <Text style={{ fontSize: 16 }}>{acc.emoji || '🍓'}</Text>
-                    </TouchableOpacity>
+                    <View style={styles.accessoryTopLine}>
+                      <TouchableOpacity
+                        style={styles.emojiCycleBtn}
+                        onPress={() => {
+                          const cur = EMOJI_LIST.indexOf(acc.emoji || '🍓');
+                          const nextEm =
+                            EMOJI_LIST[(cur + 1) % EMOJI_LIST.length];
+                          handleUpdateAccessory(idx, { emoji: nextEm });
+                        }}>
+                        <Text style={{ fontSize: 16 }}>{acc.emoji || '🍓'}</Text>
+                      </TouchableOpacity>
 
-                    <TextInput
-                      style={styles.accNameInput}
-                      value={acc.name}
-                      onChangeText={(txt) =>
-                        handleUpdateAccessory(idx, { name: txt })
-                      }
-                      placeholder="Tên phụ kiện (VD: Ôm dâu tây đỏ)"
-                      placeholderTextColor={COLORS.lightText}
-                    />
+                      <TextInput
+                        style={styles.accNameInput}
+                        value={acc.name}
+                        onChangeText={(txt) =>
+                          handleUpdateAccessory(idx, { name: txt })
+                        }
+                        placeholder="Tên phụ kiện (VD: Ôm dâu tây đỏ)"
+                        placeholderTextColor={COLORS.lightText}
+                      />
+
+                      <TouchableOpacity
+                        style={styles.deleteMiniBtn}
+                        onPress={() => handleRemoveAccessory(idx)}>
+                        <Trash2 size={14} color={COLORS.error} />
+                      </TouchableOpacity>
+                    </View>
 
                     {/* Cycle / pick price delta */}
                     <View style={styles.accPricePills}>
@@ -1047,12 +1065,6 @@ export function ProductStudioForm({
                         );
                       })}
                     </View>
-
-                    <TouchableOpacity
-                      style={styles.deleteMiniBtn}
-                      onPress={() => handleRemoveAccessory(idx)}>
-                      <Trash2 size={14} color={COLORS.error} />
-                    </TouchableOpacity>
                   </View>
                 ))}
               </View>
@@ -1089,45 +1101,54 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
-    paddingBottom: 60,
+    paddingBottom: 110,
+  },
+  scrollContentMobile: {
+    paddingHorizontal: 12,
+    paddingBottom: 120,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     paddingVertical: 8,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     borderRadius: 999,
     backgroundColor: '#F2ECE1',
+    flexShrink: 0,
   },
   backBtnText: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '600',
     color: '#4A3728',
   },
   pageTitle: {
-    fontSize: 16,
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 15.5,
     fontWeight: '800',
     color: '#3D2B1F',
   },
   saveTopBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 13,
     borderRadius: 999,
     backgroundColor: '#5C4033',
+    flexShrink: 0,
   },
   saveTopBtnText: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFFDF9',
   },
@@ -1148,8 +1169,9 @@ const styles = StyleSheet.create({
   },
   mainCardMobile: {
     flexDirection: 'column',
-    padding: 16,
-    gap: 18,
+    padding: 13,
+    borderRadius: 18,
+    gap: 15,
   },
 
   /* Left Column: 1:1 Square Frame + Thumbnails */
@@ -1566,6 +1588,7 @@ const styles = StyleSheet.create({
   },
   activeColorNameInput: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: '#FFFDF9',
     borderRadius: 9,
     paddingHorizontal: 10,
@@ -1579,13 +1602,14 @@ const styles = StyleSheet.create({
   pickColorImgBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: '#EFE6DA',
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 9,
     borderWidth: 1,
     borderColor: '#DBCAB8',
+    flexShrink: 0,
   },
   pickColorImgBtnText: {
     fontSize: 11.5,
@@ -1629,18 +1653,21 @@ const styles = StyleSheet.create({
     color: '#5C4738',
   },
   accessoryList: {
-    gap: 7,
+    gap: 8,
   },
   accessoryRowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 7,
     backgroundColor: '#FAF6F0',
     borderRadius: 12,
     paddingHorizontal: 9,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: '#E6DDD0',
+  },
+  accessoryTopLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
   emojiCycleBtn: {
     width: 30,
@@ -1651,9 +1678,11 @@ const styles = StyleSheet.create({
     borderColor: '#E2D4C4',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   accNameInput: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: '#FFFDF9',
     borderRadius: 8,
     paddingHorizontal: 9,
@@ -1666,7 +1695,9 @@ const styles = StyleSheet.create({
   },
   accPricePills: {
     flexDirection: 'row',
-    gap: 4,
+    flexWrap: 'wrap',
+    gap: 5,
+    paddingLeft: 2,
   },
   accPriceMiniPill: {
     paddingHorizontal: 7,

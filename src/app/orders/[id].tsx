@@ -61,7 +61,7 @@ export default function OrderDetailScreen() {
                 {getOrderStatusLabel(order.status)}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               {order.status === 'pending_payment' && (
                 <TouchableOpacity
                   style={styles.payNowBtn}
@@ -182,16 +182,22 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.darkText },
   section: {
     backgroundColor: COLORS.white,
-    marginHorizontal: SPACING.lg,
+    marginHorizontal: 14,
     marginBottom: SPACING.md,
     borderRadius: 16,
-    padding: SPACING.lg,
+    padding: 16,
     ...SHADOWS.small,
   },
   sectionTitle: { fontSize: 13, fontWeight: '600', color: COLORS.lightText, marginBottom: 4 },
   sectionValue: { fontSize: 15, fontWeight: '600', color: COLORS.darkText },
   sectionSub: { fontSize: 13, color: COLORS.mediumText, marginTop: 2 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',

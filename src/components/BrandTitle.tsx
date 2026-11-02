@@ -43,17 +43,20 @@ export function getAnimalAvatar(avatarId?: string, seed?: string): AnimalAvatarI
 
 interface BrandTitleProps {
   centered?: boolean;
+  compact?: boolean;
 }
 
 /**
  * Stylized "Tiệm Cuộn Len 🧶" text for the home header.
  */
-export function BrandTitle({ centered = false }: BrandTitleProps) {
+export function BrandTitle({ centered = false, compact = false }: BrandTitleProps) {
   return (
     <View style={[styles.wrap, centered && styles.centered]}>
-      <Text style={styles.title}>
+      <Text
+        style={[styles.title, compact && styles.titleCompact]}
+        numberOfLines={1}>
         Tiệm Cuộn Len{' '}
-        <Text style={styles.emoji}>🧶</Text>
+        <Text style={[styles.emoji, compact && styles.emojiCompact]}>🧶</Text>
       </Text>
     </View>
   );
@@ -118,8 +121,14 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     letterSpacing: -0.3,
   },
+  titleCompact: {
+    fontSize: 18,
+  },
   emoji: {
     fontSize: 22,
+  },
+  emojiCompact: {
+    fontSize: 18,
   },
   avatar: {
     alignItems: 'center',

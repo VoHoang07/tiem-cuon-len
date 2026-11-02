@@ -267,8 +267,10 @@ export default function HomeScreen() {
       <View style={[styles.headerCard, isMobile && styles.headerCardMobile]}>
         <View style={styles.headerTopRow}>
           <View style={[styles.brandBlock, isMobile && styles.brandBlockMobile]}>
-            <Text style={styles.greeting}>{HOME_WELCOME}</Text>
-            <BrandTitle />
+            <Text style={styles.greeting} numberOfLines={1}>
+              {HOME_WELCOME}
+            </Text>
+            <BrandTitle compact={isMobile} />
           </View>
 
           {isDesktop && SearchBarBlock}
@@ -295,52 +297,58 @@ export default function HomeScreen() {
                   </Text>
                 </TouchableOpacity>
 
-                {/* Admin: Manage Products Inventory Button */}
-                <TouchableOpacity
-                  style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
-                  onPress={() => router.push('/manage-products')}
-                  activeOpacity={0.75}>
-                  <Package size={isMobile ? 17 : 19} color={COLORS.darkText} />
-                </TouchableOpacity>
+                {!isMobile && (
+                  <>
+                    {/* Admin: Manage Products Inventory Button */}
+                    <TouchableOpacity
+                      style={styles.iconActionBtn}
+                      onPress={() => router.push('/manage-products')}
+                      activeOpacity={0.75}>
+                      <Package size={19} color={COLORS.darkText} />
+                    </TouchableOpacity>
 
-                {/* Admin: Orders Button with Pending Badge */}
-                <TouchableOpacity
-                  style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
-                  onPress={() => router.push('/orders')}
-                  activeOpacity={0.75}>
-                  <ShoppingBag size={isMobile ? 17 : 19} color={COLORS.darkText} />
-                  {pendingOrdersCount > 0 && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>
-                        {pendingOrdersCount > 99 ? '99+' : pendingOrdersCount}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                    {/* Admin: Orders Button with Pending Badge */}
+                    <TouchableOpacity
+                      style={styles.iconActionBtn}
+                      onPress={() => router.push('/orders')}
+                      activeOpacity={0.75}>
+                      <ShoppingBag size={19} color={COLORS.darkText} />
+                      {pendingOrdersCount > 0 && (
+                        <View style={styles.badge}>
+                          <Text style={styles.badgeText}>
+                            {pendingOrdersCount > 99 ? '99+' : pendingOrdersCount}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
               </>
             ) : (
               <>
-                {/* Client: Quick Favorites Button */}
-                <TouchableOpacity
-                  style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
-                  onPress={() => router.push('/favorites')}
-                  activeOpacity={0.75}>
-                  <Heart size={isMobile ? 17 : 19} color={COLORS.darkText} />
-                  {favorites.length > 0 && (
-                    <View style={[styles.badge, styles.favBadge]}>
-                      <Text style={styles.badgeText}>
-                        {favorites.length > 99 ? '99+' : favorites.length}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                {!isMobile && (
+                  /* Client: Quick Favorites Button (on mobile it is in BottomNav) */
+                  <TouchableOpacity
+                    style={styles.iconActionBtn}
+                    onPress={() => router.push('/favorites')}
+                    activeOpacity={0.75}>
+                    <Heart size={19} color={COLORS.darkText} />
+                    {favorites.length > 0 && (
+                      <View style={[styles.badge, styles.favBadge]}>
+                        <Text style={styles.badgeText}>
+                          {favorites.length > 99 ? '99+' : favorites.length}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
 
                 {/* Client: Quick Cart Button */}
                 <TouchableOpacity
                   style={[styles.iconActionBtn, isMobile && styles.iconActionBtnMobile]}
                   onPress={() => router.push('/cart')}
                   activeOpacity={0.75}>
-                  <ShoppingCart size={isMobile ? 17 : 19} color={COLORS.darkText} />
+                  <ShoppingCart size={isMobile ? 16 : 19} color={COLORS.darkText} />
                   {cartCount > 0 && (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>
@@ -355,10 +363,10 @@ export default function HomeScreen() {
             {/* Login or Profile Button */}
             {isAuthenticated ? (
               <TouchableOpacity
-                style={styles.userPill}
+                style={[styles.userPill, isMobile && styles.userPillMobile]}
                 onPress={() => router.push('/profile')}
                 activeOpacity={0.8}>
-                <BrandAvatar size={32} />
+                <BrandAvatar size={isMobile ? 30 : 32} />
                 {!isMobile && (
                   <Text style={styles.userPillName} numberOfLines={1}>
                     {isAdmin ? `Quản trị • ${user?.name || 'Admin'}` : user?.name || 'Tài khoản'}
@@ -915,6 +923,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2D2C0',
     ...SHADOWS.small,
+  },
+  userPillMobile: {
+    padding: 3,
+    paddingRight: 3,
+    borderRadius: 20,
   },
   userPillName: {
     fontSize: 13,

@@ -9,6 +9,7 @@ import {
   Image,
   TextInput,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,6 +37,8 @@ export default function ManageProductsScreen() {
   const router = useRouter();
   const { products, removeProduct } = useShop();
   const { role, isLoading } = useAuth();
+  const { width: rawWidth } = useWindowDimensions();
+  const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
@@ -56,12 +59,12 @@ export default function ManageProductsScreen() {
     return list;
   }, [products, selectedCategory, search]);
 
-  const totalStock = useMemo(
-    () => products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0),
+  const madeToOrderCount = useMemo(
+    () => products.filter((p) => p.isMadeToOrder !== false).length,
     [products]
   );
-  const lowStockCount = useMemo(
-    () => products.filter((p) => p.quantity <= 2).length,
+  const readyStockCount = useMemo(
+    () => products.filter((p) => p.isMadeToOrder === false).length,
     [products]
   );
 
@@ -99,7 +102,7 @@ export default function ManageProductsScreen() {
   const renderItem = ({ item }: { item: Product }) => (
     <View style={styles.constrainedRow}>
       <TouchableOpacity
-        style={styles.productItem}
+        style={[styles.productItem, isMobile && styles.productItemMobile]}
         onPress={() => router.push(`/product/${item.id}`)}
         activeOpacity={0.8}>
         <View style={styles.productImageContainer}>
@@ -164,7 +167,7 @@ export default function ManageProductsScreen() {
   const ListHeader = (
     <View style={styles.constrained}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isMobile && styles.headerMobile]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
             onPress={() => {
@@ -172,43 +175,49 @@ export default function ManageProductsScreen() {
               else router.replace('/');
             }}
             style={styles.backBtn}>
-            <ChevronLeft size={24} color={COLORS.darkText} />
+            <ChevronLeft size={22} color={COLORS.darkText} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/')}>
-            <Home size={19} color={COLORS.darkText} />
-          </TouchableOpacity>
+          {!isMobile && (
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/')}>
+              <Home size={19} color={COLORS.darkText} />
+            </TouchableOpacity>
+          )}
         </View>
-        <Text style={styles.headerTitle}>Quản lý kho sản phẩm</Text>
+        <Text
+          style={[styles.headerTitle, isMobile && styles.headerTitleMobile]}
+          numberOfLines={1}>
+          Quản lý kho sản phẩm
+        </Text>
         <TouchableOpacity
           style={styles.headerAddBtn}
           onPress={() => router.push('/add-product')}>
-          <Plus size={18} color="#3D2B1F" />
+          <Plus size={17} color="#3D2B1F" />
           <Text style={styles.headerAddText}>Thêm</Text>
         </TouchableOpacity>
       </View>
 
       {/* Stats */}
-      <View style={styles.statsRow}>
+      <View style={[styles.statsRow, isMobile && styles.statsRowMobile]}>
         <View style={styles.statCard}>
           <Package size={19} color="#3D2B1F" />
           <Text style={styles.statNumber}>{products.length}</Text>
-          <Text style={styles.statLabel}>Mẫu sản phẩm</Text>
+          <Text style={styles.statLabel} numberOfLines={1}>Mẫu sản phẩm</Text>
         </View>
         <View style={styles.statCard}>
           <Layers size={19} color="#3D2B1F" />
-          <Text style={styles.statNumber}>{totalStock}</Text>
-          <Text style={styles.statLabel}>Tổng tồn kho</Text>
+          <Text style={styles.statNumber}>{madeToOrderCount}</Text>
+          <Text style={styles.statLabel} numberOfLines={1}>Mẫu Order</Text>
         </View>
         <View style={styles.statCard}>
-          <AlertTriangle size={19} color={lowStockCount > 0 ? '#D97706' : '#3D2B1F'} />
-          <Text style={styles.statNumber}>{lowStockCount}</Text>
-          <Text style={styles.statLabel}>Sắp hết hàng</Text>
+          <AlertTriangle size={19} color="#3D2B1F" />
+          <Text style={styles.statNumber}>{readyStockCount}</Text>
+          <Text style={styles.statLabel} numberOfLines={1}>Mẫu có sẵn</Text>
         </View>
       </View>
 
       {/* Add Product Button */}
       <TouchableOpacity
-        style={styles.addBtn}
+        style={[styles.addBtn, isMobile && styles.addBtnMobile]}
         onPress={() => router.push('/add-product')}
         activeOpacity={0.85}>
         <Plus size={20} color="#3D2B1F" />
@@ -216,7 +225,7 @@ export default function ManageProductsScreen() {
       </TouchableOpacity>
 
       {/* Search & Category Filter */}
-      <View style={styles.searchBar}>
+      <View style={[styles.searchBar, isMobile && styles.searchBarMobile]}>
         <Search size={17} color={COLORS.mediumText} />
         <TextInput
           style={styles.searchInput}
@@ -293,6 +302,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    gap: 8,
+  },
+  headerMobile: {
+    paddingHorizontal: 12,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -311,16 +324,21 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 19,
     fontWeight: '900',
     color: '#3D2B1F',
+    textAlign: 'center',
+  },
+  headerTitleMobile: {
+    fontSize: 17,
   },
   headerAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#D8C3AD',
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 8,
     borderRadius: 14,
     borderWidth: 1,
@@ -337,12 +355,16 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: SPACING.md,
   },
+  statsRowMobile: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
   statCard: {
     flex: 1,
     backgroundColor: '#FFFDF9',
     borderRadius: 16,
     paddingVertical: 14,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E5D6C5',
@@ -359,6 +381,7 @@ const styles = StyleSheet.create({
     color: COLORS.mediumText,
     marginTop: 2,
     fontWeight: '600',
+    textAlign: 'center',
   },
   addBtn: {
     flexDirection: 'row',
@@ -373,6 +396,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#C4AA90',
     ...SHADOWS.small,
+  },
+  addBtnMobile: {
+    marginHorizontal: 12,
   },
   addBtnText: {
     fontSize: 15,
@@ -392,6 +418,9 @@ const styles = StyleSheet.create({
     borderColor: '#E5D6C5',
     gap: 8,
   },
+  searchBarMobile: {
+    marginHorizontal: 12,
+  },
   searchInput: {
     flex: 1,
     fontSize: 14,
@@ -403,7 +432,7 @@ const styles = StyleSheet.create({
     color: '#3D2B1F',
     marginTop: 4,
     marginBottom: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: 14,
   },
   productItem: {
     flexDirection: 'row',
@@ -416,6 +445,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5D6C5',
     ...SHADOWS.small,
+  },
+  productItemMobile: {
+    marginHorizontal: 12,
+    padding: 10,
   },
   productImageContainer: {
     width: 60,
@@ -436,6 +469,7 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     flex: 1,
+    minWidth: 0,
     gap: 3,
   },
   productName: {
@@ -451,7 +485,8 @@ const styles = StyleSheet.create({
   productMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
     marginTop: 2,
   },
   stockPill: {

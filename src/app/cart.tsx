@@ -373,10 +373,10 @@ const styles = StyleSheet.create({
   },
   cartItem: {
     backgroundColor: COLORS.white,
-    marginHorizontal: SPACING.lg,
+    marginHorizontal: 14,
     marginBottom: SPACING.md,
     borderRadius: 20,
-    padding: SPACING.md,
+    padding: 12,
     flexDirection: 'row',
     ...SHADOWS.small,
   },
@@ -499,9 +499,9 @@ const styles = StyleSheet.create({
   },
   summary: {
     backgroundColor: COLORS.white,
-    marginHorizontal: SPACING.lg,
+    marginHorizontal: 14,
     borderRadius: 20,
-    padding: SPACING.lg,
+    padding: 16,
     ...SHADOWS.small,
   },
   summaryTitle: {

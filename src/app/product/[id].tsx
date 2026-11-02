@@ -275,8 +275,11 @@ export default function ProductDetailScreen() {
     Alert.alert('Thành công', 'Đánh giá đã được gửi.');
   };
 
+  const maxOrderQty =
+    product.isMadeToOrder !== false ? 99 : Math.max(1, product.quantity);
+
   const handleAddToCart = async () => {
-    if (quantity > product.quantity) {
+    if (product.isMadeToOrder === false && quantity > product.quantity) {
       Alert.alert('Không đủ hàng', `Chỉ còn ${product.quantity} sản phẩm trong kho.`);
       return;
     }
@@ -285,7 +288,7 @@ export default function ProductDetailScreen() {
   };
 
   const handleBuyNow = () => {
-    if (quantity > product.quantity) {
+    if (product.isMadeToOrder === false && quantity > product.quantity) {
       Alert.alert('Không đủ hàng', `Chỉ còn ${product.quantity} sản phẩm trong kho.`);
       return;
     }
@@ -345,7 +348,10 @@ export default function ProductDetailScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isMobile && styles.scrollContentMobile,
+        ]}
         showsVerticalScrollIndicator={false}>
         {/* 1. Minimalist Top Navigation Bar */}
         <View style={styles.topBar}>
@@ -690,7 +696,7 @@ export default function ProductDetailScreen() {
                   <TouchableOpacity
                     style={styles.qtyBtn}
                     onPress={() =>
-                      setQuantity(Math.min(quantity + 1, product.quantity))
+                      setQuantity(Math.min(quantity + 1, maxOrderQty))
                     }>
                     <Plus size={16} color="#4A3728" />
                   </TouchableOpacity>
@@ -954,6 +960,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
+  },
+  scrollContentMobile: {
+    paddingHorizontal: 12,
   },
   notFound: {
     flex: 1,

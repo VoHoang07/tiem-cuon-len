@@ -8,6 +8,7 @@ import {
   StyleSheet,
   RefreshControl,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,6 +41,8 @@ export default function OrdersScreen() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
 
   const isAdmin = role === 'admin';
+  const { width: rawWidth } = useWindowDimensions();
+  const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
   const baseOrders = isAdmin ? orders : getOrdersByUser(user?.id ?? '');
 
   const displayOrders = useMemo(() => {
@@ -86,9 +89,9 @@ export default function OrdersScreen() {
     const nextStatus = ORDER_STATUS_NEXT[item.status];
     return (
       <View style={styles.constrained}>
-        <View style={styles.orderCard}>
+        <View style={[styles.orderCard, isMobile && styles.orderCardMobile]}>
           <TouchableOpacity
-            style={styles.orderCardBody}
+            style={[styles.orderCardBody, isMobile && styles.orderCardBodyMobile]}
             onPress={() => router.push(`/orders/${item.id}`)}
             activeOpacity={0.75}>
             <View style={styles.orderHeader}>
@@ -125,7 +128,7 @@ export default function OrdersScreen() {
             </View>
           </TouchableOpacity>
 
-          <View style={styles.actionRow}>
+          <View style={[styles.actionRow, isMobile && styles.actionRowMobile]}>
             <View style={styles.actionLeft}>
               {item.status === 'pending_payment' && (
                 <TouchableOpacity
@@ -164,7 +167,7 @@ export default function OrdersScreen() {
 
   const ListHeader = (
     <View style={styles.constrained}>
-      <View style={styles.header}>
+      <View style={[styles.header, isMobile && styles.headerMobile]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
             onPress={() => {
@@ -172,30 +175,32 @@ export default function OrdersScreen() {
               else router.replace('/');
             }}
             style={styles.backBtn}>
-            <ChevronLeft size={24} color={COLORS.darkText} />
+            <ChevronLeft size={22} color={COLORS.darkText} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
-            <Home size={20} color={COLORS.darkText} />
-          </TouchableOpacity>
+          {!isMobile && (
+            <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/')}>
+              <Home size={20} color={COLORS.darkText} />
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>
+          <Text style={[styles.headerTitle, isMobile && styles.headerTitleMobile]} numberOfLines={1}>
             {isAdmin ? 'Quản lý đơn hàng' : 'Đơn hàng của tôi'}
           </Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
             {isAdmin
               ? `${baseOrders.length} đơn đặt hàng toàn hệ thống`
               : `${baseOrders.length} đơn hàng đã đặt`}
           </Text>
         </View>
-        <View style={{ width: 80 }} />
+        <View style={{ width: isMobile ? 38 : 80 }} />
       </View>
 
       {/* Status Filter Bar for both Admin and Client */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}>
+        contentContainerStyle={[styles.filterRow, isMobile && styles.filterRowMobile]}>
         {STATUS_FILTERS.map((f) => {
           const active = statusFilter === f.key;
           return (
@@ -257,6 +262,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    gap: 8,
+  },
+  headerMobile: {
+    paddingHorizontal: 12,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -264,12 +273,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerCenter: {
+    flex: 1,
     alignItems: 'center',
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#FFFDF9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -278,9 +288,9 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   homeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#FFFDF9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -288,12 +298,16 @@ const styles = StyleSheet.create({
     borderColor: '#E5D6C5',
     ...SHADOWS.small,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: '#3D2B1F' },
-  headerSubtitle: { fontSize: 12, color: COLORS.mediumText, marginTop: 2 },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: '#3D2B1F', textAlign: 'center' },
+  headerTitleMobile: { fontSize: 18 },
+  headerSubtitle: { fontSize: 12, color: COLORS.mediumText, marginTop: 2, textAlign: 'center' },
   filterRow: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: 12,
     gap: 8,
+  },
+  filterRowMobile: {
+    paddingHorizontal: 12,
   },
   filterChip: {
     paddingHorizontal: 14,
@@ -334,9 +348,17 @@ const styles = StyleSheet.create({
     borderColor: '#E5D6C5',
     ...SHADOWS.small,
   },
+  orderCardMobile: {
+    marginHorizontal: 12,
+    borderRadius: 18,
+  },
   orderCardBody: {
     padding: SPACING.lg,
     paddingBottom: SPACING.sm,
+  },
+  orderCardBodyMobile: {
+    padding: 14,
+    paddingBottom: 10,
   },
 
   orderHeader: {
@@ -384,13 +406,21 @@ const styles = StyleSheet.create({
 
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingHorizontal: SPACING.lg,
     paddingBottom: 12,
     paddingTop: 4,
   },
+  actionRowMobile: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
   actionLeft: {
+    flex: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

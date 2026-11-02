@@ -311,7 +311,10 @@ export default function CheckoutScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -327,8 +330,8 @@ export default function CheckoutScreen() {
               <Home size={20} color={COLORS.darkText} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.headerTitle}>{CHECKOUT_TITLE}</Text>
-          <View style={{ width: 40 }} />
+          <Text style={styles.headerTitle} numberOfLines={1}>{CHECKOUT_TITLE}</Text>
+          <View style={{ width: 64 }} />
         </View>
 
         {/* Address — unchanged */}
@@ -583,12 +586,17 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.cream },
   scroll: { flex: 1 },
+  scrollContent: {
+    width: '100%',
+    maxWidth: 840,
+    alignSelf: 'center',
+  },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: 14,
     paddingVertical: SPACING.md,
   },
   headerLeft: {
@@ -597,18 +605,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
   },
   homeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -618,8 +626,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: COLORS.darkText },
-  section: { paddingHorizontal: SPACING.lg, marginBottom: SPACING.xxl },
+  headerTitle: { flex: 1, fontSize: 20, fontWeight: '800', color: COLORS.darkText, textAlign: 'center' },
+  section: { paddingHorizontal: 14, marginBottom: SPACING.xxl },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -874,7 +882,7 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
   payBtn: {
     backgroundColor: COLORS.primary,
-    marginHorizontal: SPACING.lg,
+    marginHorizontal: 14,
     borderRadius: 20,
     paddingVertical: 16,
     alignItems: 'center',

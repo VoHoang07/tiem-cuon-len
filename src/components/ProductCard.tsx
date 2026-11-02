@@ -181,8 +181,8 @@ export function ProductCard({
           )}
         </View>
 
-        <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={2}>
+        <View style={[styles.info, !isDesktop && styles.infoMobile]}>
+          <Text style={[styles.name, !isDesktop && styles.nameMobile]} numberOfLines={2}>
             {product.name}
           </Text>
 
@@ -232,43 +232,50 @@ export function ProductCard({
           </View>
 
           <View style={styles.priceRow}>
-            <Text style={[styles.price, !isDesktop && styles.priceMobile]}>
+            <Text
+              style={[styles.price, !isDesktop && styles.priceMobile]}
+              numberOfLines={1}>
               {formatVND(product.price)}
             </Text>
             <View style={styles.cardActionBtnsRow}>
+              {(isDesktop || isAdmin) && (
+                <TouchableOpacity
+                  style={[styles.pingCardBtn, !isDesktop && styles.pingCardBtnMobile]}
+                  onPress={(e: any) => {
+                    e?.stopPropagation?.();
+                    setShowShareModal(true);
+                  }}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Share2 size={isDesktop ? 13.5 : 13} color="#3D2B1F" strokeWidth={2.3} />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
-                style={styles.pingCardBtn}
-                onPress={(e: any) => {
-                  e?.stopPropagation?.();
-                  setShowShareModal(true);
-                }}
-                activeOpacity={0.75}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <Share2 size={13.5} color="#3D2B1F" strokeWidth={2.3} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.pingCardBtn}
+                style={[styles.pingCardBtn, !isDesktop && styles.pingCardBtnMobile]}
                 onPress={(e: any) => {
                   e?.stopPropagation?.();
                   openChatWithProduct(product);
                 }}
                 activeOpacity={0.75}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <MessageCircle size={14} color="#3D2B1F" strokeWidth={2.3} />
+                <MessageCircle size={isDesktop ? 14 : 13} color="#3D2B1F" strokeWidth={2.3} />
               </TouchableOpacity>
               {isAdmin ? (
-                <TouchableOpacity
-                  style={[styles.quickAddBtn, isDesktop && styles.quickAddBtnDesktop]}
-                  onPress={handleAdminEdit}
-                  activeOpacity={0.75}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                  <Edit3 size={14} color="#3D2B1F" strokeWidth={2.5} />
-                  {isDesktop && <Text style={styles.quickAddText}>Sửa</Text>}
-                </TouchableOpacity>
+                isDesktop ? (
+                  <TouchableOpacity
+                    style={[styles.quickAddBtn, styles.quickAddBtnDesktop]}
+                    onPress={handleAdminEdit}
+                    activeOpacity={0.75}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Edit3 size={14} color="#3D2B1F" strokeWidth={2.5} />
+                    <Text style={styles.quickAddText}>Sửa</Text>
+                  </TouchableOpacity>
+                ) : null
               ) : (
                 <TouchableOpacity
                   style={[
                     styles.quickAddBtn,
+                    !isDesktop && styles.quickAddBtnMobile,
                     isDesktop && styles.quickAddBtnDesktop,
                     justAdded && styles.quickAddBtnAdded,
                   ]}
@@ -276,9 +283,9 @@ export function ProductCard({
                   activeOpacity={0.75}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                   {justAdded ? (
-                    <Check size={15} color="#3D2B1F" strokeWidth={2.8} />
+                    <Check size={isDesktop ? 15 : 14} color="#3D2B1F" strokeWidth={2.8} />
                   ) : (
-                    <Plus size={15} color="#3D2B1F" strokeWidth={2.6} />
+                    <Plus size={isDesktop ? 15 : 14} color="#3D2B1F" strokeWidth={2.6} />
                   )}
                   {isDesktop && (
                     <Text style={styles.quickAddText}>
@@ -378,12 +385,21 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
+  infoMobile: {
+    padding: 10,
+    gap: 5,
+  },
   name: {
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.darkText,
     lineHeight: 19,
     minHeight: 38,
+  },
+  nameMobile: {
+    fontSize: 13,
+    lineHeight: 17.5,
+    minHeight: 35,
   },
   variantsPreviewRow: {
     flexDirection: 'row',
@@ -456,34 +472,42 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 2,
+    gap: 4,
   },
   price: {
     fontSize: 16,
     fontWeight: '800',
     color: '#3D2B1F',
+    flexShrink: 1,
   },
   priceMobile: {
-    fontSize: 14.5,
+    fontSize: 14,
   },
   cardActionBtnsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
+    flexShrink: 0,
   },
   pingCardBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
+    width: 31,
+    height: 31,
+    borderRadius: 10,
     backgroundColor: '#F3ECE2',
     borderWidth: 1,
     borderColor: '#DFCBB5',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pingCardBtnMobile: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+  },
   quickAddBtn: {
-    minWidth: 32,
-    height: 32,
-    borderRadius: 11,
+    minWidth: 31,
+    height: 31,
+    borderRadius: 10,
     backgroundColor: '#D8C3AD',
     borderWidth: 1,
     borderColor: '#C5AC92',
@@ -492,6 +516,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     paddingHorizontal: 8,
+  },
+  quickAddBtnMobile: {
+    minWidth: 28,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    paddingHorizontal: 0,
   },
   quickAddBtnDesktop: {
     paddingHorizontal: 11,
