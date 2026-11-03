@@ -413,7 +413,7 @@ export default function CheckoutScreen() {
     openChat();
   };
 
-  const handlePayment = async () => {
+  const handlePayment = async (bypassExpressCheck?: boolean) => {
     if (isSubmittingOrder) return;
     if (!user?.id) {
       Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt hàng.');
@@ -424,7 +424,7 @@ export default function CheckoutScreen() {
       Alert.alert('Thiếu địa chỉ', 'Vui lòng thêm địa chỉ giao hàng trước khi thanh toán.');
       return;
     }
-    if (shippingOption === 'express' && !expressFeeConfirmed) {
+    if (shippingOption === 'express' && !expressFeeConfirmed && !bypassExpressCheck) {
       handleAskExpressFeeInChat();
       return;
     }
@@ -739,10 +739,10 @@ export default function CheckoutScreen() {
                     title: 'Giao tiêu chuẩn',
                     sub: hasMadeToOrder
                       ? isHCM
-                        ? 'Nội thành HCM • Tổng 4–6 ngày (3–4 ngày làm + ship)'
-                        : 'Toàn quốc • Tổng 5–8 ngày (3–4 ngày làm + ship)'
+                        ? 'Nhận sau 4–6 ngày (gồm đan)'
+                        : 'Nhận sau 5–8 ngày (gồm đan)'
                       : isHCM
-                        ? 'Nội thành TP.HCM • 1–2 ngày'
+                        ? 'Nội thành • 1–2 ngày'
                         : 'Toàn quốc • 2–4 ngày',
                     priceLabel:
                       standardShippingFee === 0 ? 'Miễn phí' : formatVND(standardShippingFee),
@@ -753,11 +753,9 @@ export default function CheckoutScreen() {
                     id: 'express' as const,
                     icon: <Zap size={20} color="#D97706" />,
                     iconBg: '#FEF3C7',
-                    title: 'Giao Hỏa Tốc 2h (TP.HCM)',
-                    sub: hasMadeToOrder
-                      ? `${expressEstimate.sub} • Làm 3–4 ngày xong giao 2h`
-                      : expressEstimate.sub,
-                    priceLabel: `Dự kiến ${expressEstimate.range}`,
+                    title: 'Hỏa Tốc 2h (HCM)',
+                    sub: 'Báo giá qua Chat trước khi đặt',
+                    priceLabel: `${expressEstimate.range}`,
                     isFree: false,
                     show: isHCM,
                   },
@@ -765,10 +763,10 @@ export default function CheckoutScreen() {
                     id: 'pickup' as const,
                     icon: <Store size={20} color="#765341" />,
                     iconBg: '#F5EFE6',
-                    title: 'Nhận tại tiệm (Quận 8)',
+                    title: 'Nhận tại tiệm (Q.8)',
                     sub: hasMadeToOrder
-                      ? 'Làm 3–4 ngày • Tự qua lấy khi tiệm báo xong'
-                      : 'Tự qua lấy khi tiệm chuẩn bị xong',
+                      ? 'Đan 3–4 ngày xong ghé lấy'
+                      : 'Ghé lấy ngay trong ngày',
                     priceLabel: 'Miễn phí',
                     isFree: true,
                     show: true,
@@ -788,7 +786,7 @@ export default function CheckoutScreen() {
                         onPress={() => setShippingOption(opt.id)}
                         activeOpacity={0.8}>
                         {isDesktop ? (
-                          <View style={{ width: '100%', gap: 6 }}>
+                          <View style={{ width: '100%', gap: 5 }}>
                             <View style={styles.shippingCardTopDesktop}>
                               <View style={[styles.paymentIconWrap, styles.paymentIconWrapCompact, { backgroundColor: opt.iconBg }]}>
                                 {opt.icon}
@@ -805,7 +803,7 @@ export default function CheckoutScreen() {
                               </View>
                             </View>
                             <Text style={styles.paymentTextDesktop}>{opt.title}</Text>
-                            <Text style={styles.shippingSubtextDesktop} numberOfLines={2}>
+                            <Text style={styles.shippingSubtextDesktop} numberOfLines={1}>
                               {opt.sub}
                             </Text>
                           </View>
@@ -836,90 +834,6 @@ export default function CheckoutScreen() {
                     );
                   })}
               </View>
-
-              {/* Total Crafting + Shipping Time Notice Box */}
-              <View
-                style={[
-                  styles.deliveryEstimateBox,
-                  !hasMadeToOrder && styles.deliveryEstimateBoxReady,
-                ]}>
-                <Text style={styles.deliveryEstimateTitle}>
-                  {hasMadeToOrder
-                    ? `🧶 Đơn có hàng đặt làm • Tổng thời gian nhận: khoảng ${deliveryTimeEstimate.totalDays}`
-                    : `📦 Hàng có sẵn • Thời gian nhận dự kiến: ${deliveryTimeEstimate.totalDays}`}
-                </Text>
-                <Text style={styles.deliveryEstimateSub}>
-                  {deliveryTimeEstimate.breakdown}
-                </Text>
-              </View>
-
-              {/* 2-Step Express Shipping Chat Quote & Confirmation Gate */}
-              {shippingOption === 'express' && (
-                <View
-                  style={[
-                    styles.expressGateBox,
-                    expressFeeConfirmed && styles.expressGateBoxConfirmed,
-                  ]}>
-                  <Text style={styles.expressGateHeader}>
-                    {expressFeeConfirmed
-                      ? '✅ Đã xác nhận phí Ship Hỏa Tốc với Tiệm'
-                      : '⚡ Xác nhận phí Ship Hỏa Tốc qua Chat trước khi thanh toán'}
-                  </Text>
-                  <Text style={styles.expressGateDesc}>
-                    {expressFeeConfirmed
-                      ? 'Bạn đã đồng ý mức cước Hỏa Tốc qua khung Chat. Bây giờ bạn có thể bấm nút Thanh toán!'
-                      : 'Vì cước xe Hỏa Tốc 2h thay đổi theo số km thực tế, bạn bấm Bước 1 để nhắn địa chỉ qua khung Chat cho Tiệm báo giá, sau đó bấm Bước 2 (Đồng ý) để mở khóa Thanh toán.'}
-                  </Text>
-
-                  {latestAdminReply ? (
-                    <View style={styles.expressAdminReplyBox}>
-                      <Text style={styles.expressAdminReplyLabel}>💬 Tin nhắn mới nhất từ Tiệm:</Text>
-                      <Text style={styles.expressAdminReplyText}>{latestAdminReply.text}</Text>
-                    </View>
-                  ) : null}
-
-                  <View
-                    style={[
-                      styles.expressGateActionsRow,
-                      isDesktop && styles.expressGateActionsRowDesktop,
-                    ]}>
-                    <TouchableOpacity
-                      style={[styles.expressChatBtn, isDesktop && { flex: 1 }]}
-                      onPress={handleAskExpressFeeInChat}
-                      activeOpacity={0.85}>
-                      <MessageCircle size={16} color="#FFFDF9" />
-                      <Text style={styles.expressChatBtnText}>
-                        {hasAskedExpressChat
-                          ? '💬 Mở lại khung Chat với Tiệm'
-                          : '💬 Bước 1: Nhắn Chat hỏi giá Ship'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.expressConfirmBtn,
-                        isDesktop && { flex: 1.15 },
-                        !hasAskedExpressChat && !latestAdminReply && styles.expressConfirmBtnDisabled,
-                        expressFeeConfirmed && styles.expressConfirmBtnActive,
-                      ]}
-                      disabled={!hasAskedExpressChat && !latestAdminReply}
-                      onPress={() => setExpressFeeConfirmed((prev) => !prev)}
-                      activeOpacity={0.85}>
-                      <Text
-                        style={[
-                          styles.expressConfirmBtnText,
-                          expressFeeConfirmed && styles.expressConfirmBtnTextActive,
-                        ]}>
-                        {expressFeeConfirmed
-                          ? '✅ Đã đồng ý giá Ship'
-                          : hasAskedExpressChat || latestAdminReply
-                            ? '⭕ Bước 2: Tôi đồng ý giá Ship'
-                            : '🔒 Bước 2: Đồng ý giá Ship'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
             </View>
 
             {/* Payment Method — dynamic from Supabase */}
@@ -1039,11 +953,11 @@ export default function CheckoutScreen() {
                 </Text>
               </View>
               <View style={styles.subRow}>
-                <Text style={styles.subLabel}>
-                  {hasMadeToOrder ? 'Tổng thời gian làm & giao' : 'Thời gian giao dự kiến'}
-                </Text>
+                <Text style={styles.subLabel}>Dự kiến nhận hàng</Text>
                 <Text style={[styles.subValue, { color: '#8B5E3C' }]}>
-                  Khoảng {deliveryTimeEstimate.totalDays}
+                  {hasMadeToOrder
+                    ? `${deliveryTimeEstimate.totalDays} (gồm 3–4 ngày đan)`
+                    : deliveryTimeEstimate.totalDays}
                 </Text>
               </View>
               {shippingOption === 'standard' &&
@@ -1065,39 +979,50 @@ export default function CheckoutScreen() {
                 {shippingOption === 'express' && !expressFeeConfirmed ? (
                   <View style={[styles.expressBottomGateWrap, isDesktop && { marginHorizontal: 0, marginBottom: 0 }]}>
                     {!hasAskedExpressChat && !latestAdminReply ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.payBtn,
-                          styles.payBtnExpressChat,
-                          !hasAddress && styles.payBtnDisabled,
-                        ]}
-                        onPress={handleAskExpressFeeInChat}
-                        disabled={!hasAddress}
-                        activeOpacity={0.85}>
-                        <Text style={styles.payBtnText}>
-                          {hasAddress
-                            ? '💬 Bước 1: Nhắn Chat hỏi giá Ship Hỏa Tốc'
-                            : 'Thêm địa chỉ để hỏi giá Ship'}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={styles.expressBottomConfirmGroup}>
+                      <>
                         <TouchableOpacity
-                          style={styles.expressBottomOpenChatBtn}
+                          style={[
+                            styles.payBtn,
+                            styles.payBtnExpressChat,
+                            !hasAddress && styles.payBtnDisabled,
+                          ]}
                           onPress={handleAskExpressFeeInChat}
+                          disabled={!hasAddress}
                           activeOpacity={0.85}>
-                          <MessageCircle size={17} color="#92400E" />
-                          <Text style={styles.expressBottomOpenChatText}>
-                            Mở lại khung Chat xem báo giá Ship
+                          <Text style={styles.payBtnText}>
+                            {hasAddress
+                              ? '💬 Nhắn Chat hỏi giá Ship Hỏa Tốc'
+                              : 'Thêm địa chỉ để hỏi giá Ship'}
                           </Text>
                         </TouchableOpacity>
+                        <Text style={styles.expressMinimalHint}>
+                          Nhắn Tiệm báo giá ship thực tế qua Chat trước khi thanh toán
+                        </Text>
+                      </>
+                    ) : (
+                      <View style={styles.expressBottomConfirmGroup}>
+                        <View style={styles.expressCompactReplyRow}>
+                          <Text style={styles.expressCompactReplyText} numberOfLines={2}>
+                            {latestAdminReply
+                              ? `💬 Tiệm báo: "${latestAdminReply.text}"`
+                              : '💬 Đã gửi yêu cầu hỏi giá Ship qua Chat'}
+                          </Text>
+                          <TouchableOpacity onPress={handleAskExpressFeeInChat}>
+                            <Text style={styles.expressCompactOpenLink}>Mở Chat</Text>
+                          </TouchableOpacity>
+                        </View>
 
                         <TouchableOpacity
                           style={styles.expressBottomAgreeBtn}
-                          onPress={() => setExpressFeeConfirmed(true)}
+                          onPress={() => {
+                            setExpressFeeConfirmed(true);
+                            handlePayment(true);
+                          }}
                           activeOpacity={0.85}>
                           <Text style={styles.expressBottomAgreeText}>
-                            ✅ Bước 2: Tôi đồng ý giá Ship • Mở khóa Thanh toán
+                            {selectedPayment?.type === 'cod'
+                              ? `✅ Đồng ý giá Ship & Đặt COD (${formatVND(checkoutTotal)})`
+                              : `✅ Đồng ý giá Ship & Quét QR (${formatVND(checkoutTotal)})`}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -1110,7 +1035,7 @@ export default function CheckoutScreen() {
                       isDesktop && styles.payBtnDesktop,
                       !hasAddress && styles.payBtnDisabled,
                     ]}
-                    onPress={handlePayment}
+                    onPress={() => handlePayment()}
                     disabled={!hasAddress}
                     activeOpacity={0.8}>
                     <Text style={styles.payBtnText}>
@@ -1724,7 +1649,38 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   expressBottomConfirmGroup: {
-    gap: 10,
+    gap: 8,
+  },
+  expressMinimalHint: {
+    fontSize: 11.5,
+    color: '#78350F',
+    textAlign: 'center',
+    marginTop: 6,
+    fontWeight: '600',
+  },
+  expressCompactReplyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  expressCompactReplyText: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#78350F',
+  },
+  expressCompactOpenLink: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#D97706',
+    textDecorationLine: 'underline',
   },
   expressBottomOpenChatBtn: {
     flexDirection: 'row',
