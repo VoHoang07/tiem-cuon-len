@@ -6,6 +6,8 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  Linking,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -18,6 +20,8 @@ import {
   Home,
   HelpCircle,
   MessageCircle,
+  Mail,
+  Phone,
   Search,
   ShoppingBag,
   CreditCard,
@@ -25,7 +29,6 @@ import {
   RotateCcw,
   Package,
   ClipboardList,
-  CheckCircle2,
   Sparkles,
   ShieldCheck,
   Clock,
@@ -302,6 +305,31 @@ export default function HelpScreen() {
     }
   };
 
+  const handleOpenExternalLink = async (
+    url: string,
+    copyFallbackValue: string,
+    copyKey: string
+  ) => {
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        if (url.startsWith('http')) {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        } else {
+          window.location.href = url;
+        }
+        return;
+      }
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        await handleCopySupportCode(copyFallbackValue, copyKey);
+      }
+    } catch {
+      await handleCopySupportCode(copyFallbackValue, copyKey);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
@@ -405,12 +433,12 @@ export default function HelpScreen() {
           </View>
         </View>
 
-        {/* Official Support Channels (No personal phone/Gmail exposed) */}
+        {/* Official Contact & Support Channels */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Kênh hỗ trợ chính thức</Text>
+            <Text style={styles.sectionTitle}>Liên hệ & Hỗ trợ trực tiếp</Text>
             <Text style={styles.sectionSubtitle}>
-              Kết nối nhanh chóng & bảo mật ngay trên hệ thống
+              Chạm để kết nối ngay qua Chat, Zalo, Điện thoại hoặc Email
             </Text>
           </View>
 
@@ -432,52 +460,124 @@ export default function HelpScreen() {
                 <View style={styles.channelTitleRow}>
                   <Text style={styles.channelTitle}>Chat Trực Tuyến</Text>
                   <View style={styles.recommendTag}>
-                    <Text style={styles.recommendTagText}>Nhanh nhất</Text>
+                    <Text style={styles.recommendTagText}>Trên Web</Text>
                   </View>
                 </View>
-                <Text style={styles.channelDesc} numberOfLines={2}>
-                  Nhắn tin & gửi mẫu sản phẩm trực tiếp cho Tiệm ngay trên web
+                <Text style={styles.channelDesc} numberOfLines={1}>
+                  Nhắn tin & gửi mẫu trực tiếp cho Tiệm
                 </Text>
               </View>
               <ArrowRight size={16} color="#7A5C44" />
             </TouchableOpacity>
 
-            {/* Channel 2: Order & Tracking Portal */}
-            <TouchableOpacity
-              style={[styles.channelCard, isMobile && styles.channelCardMobile]}
-              onPress={() => router.push('/orders')}
-              activeOpacity={0.8}>
-              <View
-                style={[styles.channelIconBox, { backgroundColor: '#EBF5EE' }]}>
-                <Truck size={20} color="#2E7D32" />
-              </View>
-              <View style={styles.channelInfo}>
-                <Text style={styles.channelTitle}>Tra cứu Vận đơn 24/7</Text>
-                <Text style={styles.channelDesc} numberOfLines={2}>
-                  Xem tiến độ đan mẫu 4 bước & định vị kiện hàng trực tiếp
-                </Text>
-              </View>
-              <ArrowRight size={16} color="#7A5C44" />
-            </TouchableOpacity>
-
-            {/* Channel 3: Official Brand Support Email */}
+            {/* Channel 2: Zalo (0387 966 507) */}
             <TouchableOpacity
               style={[styles.channelCard, isMobile && styles.channelCardMobile]}
               onPress={() =>
-                handleCopySupportCode('cskh@tiemcuonlen.shop', 'email')
+                handleOpenExternalLink(
+                  'https://zalo.me/0387966507',
+                  '0387966507',
+                  'zalo'
+                )
+              }
+              activeOpacity={0.8}>
+              <View
+                style={[styles.channelIconBox, { backgroundColor: '#EBF3FA' }]}>
+                <MessageCircle size={20} color="#0068FF" />
+              </View>
+              <View style={styles.channelInfo}>
+                <View style={styles.channelTitleRow}>
+                  <Text style={styles.channelTitle}>Zalo Hỗ Trợ</Text>
+                  <View style={[styles.recommendTag, { backgroundColor: '#EBF3FA' }]}>
+                    <Text style={[styles.recommendTagText, { color: '#0068FF' }]}>
+                      Zalo
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.channelValueText}>0387 966 507</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.copyMiniPill}
+                onPress={() => handleCopySupportCode('0387966507', 'zalo')}
+                activeOpacity={0.75}>
+                {copiedCode === 'zalo' ? (
+                  <>
+                    <Check size={12} color="#2E7D32" />
+                    <Text style={[styles.copyMiniText, { color: '#2E7D32' }]}>
+                      Đã chép
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} color="#5C4332" />
+                    <Text style={styles.copyMiniText}>Chép SĐT</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </TouchableOpacity>
+
+            {/* Channel 3: Phone Hotline (0387 966 507) */}
+            <TouchableOpacity
+              style={[styles.channelCard, isMobile && styles.channelCardMobile]}
+              onPress={() =>
+                handleOpenExternalLink('tel:0387966507', '0387966507', 'phone')
+              }
+              activeOpacity={0.8}>
+              <View
+                style={[styles.channelIconBox, { backgroundColor: '#EBF5EE' }]}>
+                <Phone size={20} color="#2E7D32" />
+              </View>
+              <View style={styles.channelInfo}>
+                <Text style={styles.channelTitle}>Điện thoại / Hotline</Text>
+                <Text style={styles.channelValueText}>0387 966 507</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.copyMiniPill}
+                onPress={() => handleCopySupportCode('0387966507', 'phone')}
+                activeOpacity={0.75}>
+                {copiedCode === 'phone' ? (
+                  <>
+                    <Check size={12} color="#2E7D32" />
+                    <Text style={[styles.copyMiniText, { color: '#2E7D32' }]}>
+                      Đã chép
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} color="#5C4332" />
+                    <Text style={styles.copyMiniText}>Chép số</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </TouchableOpacity>
+
+            {/* Channel 4: Personal Gmail (vohoang1327@gmail.com) */}
+            <TouchableOpacity
+              style={[styles.channelCard, isMobile && styles.channelCardMobile]}
+              onPress={() =>
+                handleOpenExternalLink(
+                  'mailto:vohoang1327@gmail.com?subject=Hỗ trợ từ Tiệm Cuộn Len',
+                  'vohoang1327@gmail.com',
+                  'email'
+                )
               }
               activeOpacity={0.8}>
               <View
                 style={[styles.channelIconBox, { backgroundColor: '#F6EFE6' }]}>
-                <CheckCircle2 size={20} color="#6E5239" />
+                <Mail size={20} color="#6E5239" />
               </View>
               <View style={styles.channelInfo}>
-                <Text style={styles.channelTitle}>Hộp thư CSKH Tiệm</Text>
-                <Text style={styles.channelDesc} numberOfLines={1}>
-                  cskh@tiemcuonlen.shop
+                <Text style={styles.channelTitle}>Email Hỗ Trợ</Text>
+                <Text style={styles.channelValueText} numberOfLines={1}>
+                  vohoang1327@gmail.com
                 </Text>
               </View>
-              <View style={styles.copyMiniPill}>
+              <TouchableOpacity
+                style={styles.copyMiniPill}
+                onPress={() =>
+                  handleCopySupportCode('vohoang1327@gmail.com', 'email')
+                }
+                activeOpacity={0.75}>
                 {copiedCode === 'email' ? (
                   <>
                     <Check size={12} color="#2E7D32" />
@@ -491,7 +591,7 @@ export default function HelpScreen() {
                     <Text style={styles.copyMiniText}>Chép</Text>
                   </>
                 )}
-              </View>
+              </TouchableOpacity>
             </TouchableOpacity>
           </View>
         </View>
@@ -910,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   channelCard: {
     flex: 1,
-    minWidth: 230,
+    minWidth: 320,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 11,
@@ -963,6 +1063,12 @@ const styles = StyleSheet.create({
     color: COLORS.mediumText,
     marginTop: 2,
     lineHeight: 16,
+  },
+  channelValueText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5C4332',
+    marginTop: 2,
   },
   copyMiniPill: {
     flexDirection: 'row',
