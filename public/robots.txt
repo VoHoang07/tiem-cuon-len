@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Google-Favicon
+Allow: /
+
+Sitemap: https://www.tiemcuonlen.shop/sitemap.xml
