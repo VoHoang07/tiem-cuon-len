@@ -65,14 +65,21 @@ const QUICK_ACCESSORIES = [
 const PRICE_DELTAS = [0, 5000, 10000, 15000, 25000];
 const EMOJI_LIST = ['🍓', '🎀', '🌼', '🎁', '👜', '👑', '🧣', '✨', '🌸'];
 
+function resolveImgUri(src: any): string | null {
+  if (!src) return null;
+  if (typeof src === 'string') return src;
+  if (typeof src === 'object' && typeof src.uri === 'string') return src.uri;
+  return null;
+}
+
 /**
- * Keep full HD sharpness (up to 1600px at 0.92 quality).
- * If the image is already reasonably sized (< 950KB), keep original dataURI untouched.
+ * Keep 100% lossless original file on Web unless the file is massive (> 10MB base64).
+ * When downscaling is needed, use progressive 2x step-down canvas scaling up to 2560px at 0.98 quality.
  */
 async function optimizeHdImageIfWeb(
   dataUri: string,
-  maxSide: number = 1600,
-  quality: number = 0.92
+  maxSide: number = 2560,
+  quality: number = 0.98
 ): Promise<string> {
   if (
     Platform.OS !== 'web' ||
@@ -81,30 +88,65 @@ async function optimizeHdImageIfWeb(
   ) {
     return dataUri;
   }
+  // Keep 100% original untouched file for all normal HD/2K/4K photos (< ~10MB base64)
+  if (dataUri.length < 10_500_000) {
+    return dataUri;
+  }
   return new Promise((resolve) => {
     try {
       const img = new window.Image();
       img.onload = () => {
         const origW = img.width || maxSide;
         const origH = img.height || maxSide;
-        if (origW <= maxSide && origH <= maxSide && dataUri.length < 1_300_000) {
+        if (origW <= maxSide && origH <= maxSide) {
           resolve(dataUri);
           return;
         }
-        let w = origW;
-        let h = origH;
-        if (w > maxSide || h > maxSide) {
-          if (w >= h) {
-            h = Math.round((h * maxSide) / w);
-            w = maxSide;
+        let targetW = origW;
+        let targetH = origH;
+        if (targetW > maxSide || targetH > maxSide) {
+          if (targetW >= targetH) {
+            targetH = Math.round((targetH * maxSide) / targetW);
+            targetW = maxSide;
           } else {
-            w = Math.round((w * maxSide) / h);
-            h = maxSide;
+            targetW = Math.round((targetW * maxSide) / targetH);
+            targetH = maxSide;
           }
         }
+        // Progressive 2x halving to prevent bilinear aliasing ("vỡ hạt")
+        let curW = origW;
+        let curH = origH;
+        let stepCanvas = document.createElement('canvas');
+        stepCanvas.width = curW;
+        stepCanvas.height = curH;
+        const stepCtx = stepCanvas.getContext('2d');
+        if (!stepCtx) {
+          resolve(dataUri);
+          return;
+        }
+        stepCtx.imageSmoothingEnabled = true;
+        stepCtx.imageSmoothingQuality = 'high';
+        stepCtx.drawImage(img, 0, 0, curW, curH);
+
+        while (curW * 0.5 > targetW && curH * 0.5 > targetH) {
+          const nextW = Math.max(targetW, Math.round(curW * 0.5));
+          const nextH = Math.max(targetH, Math.round(curH * 0.5));
+          const nextCanvas = document.createElement('canvas');
+          nextCanvas.width = nextW;
+          nextCanvas.height = nextH;
+          const nextCtx = nextCanvas.getContext('2d');
+          if (!nextCtx) break;
+          nextCtx.imageSmoothingEnabled = true;
+          nextCtx.imageSmoothingQuality = 'high';
+          nextCtx.drawImage(stepCanvas, 0, 0, curW, curH, 0, 0, nextW, nextH);
+          stepCanvas = nextCanvas;
+          curW = nextW;
+          curH = nextH;
+        }
+
         const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = targetW;
+        canvas.height = targetH;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           resolve(dataUri);
@@ -112,8 +154,11 @@ async function optimizeHdImageIfWeb(
         }
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, w, h);
-        const out = canvas.toDataURL('image/jpeg', quality);
+        ctx.drawImage(stepCanvas, 0, 0, curW, curH, 0, 0, targetW, targetH);
+        const isPng = dataUri.startsWith('data:image/png');
+        const out = isPng
+          ? canvas.toDataURL('image/png')
+          : canvas.toDataURL('image/jpeg', quality);
         resolve(out || dataUri);
       };
       img.onerror = () => resolve(dataUri);
@@ -125,6 +170,49 @@ async function optimizeHdImageIfWeb(
 }
 
 async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
+  // On Web: use direct native file input + FileReader so the uploaded file is read 100% losslessly without ImagePicker cropping/re-encoding
+  if (
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined'
+  ) {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png,image/jpeg,image/webp,image/avif,image/*';
+      if (useCamera) {
+        input.setAttribute('capture', 'environment');
+      }
+      let settled = false;
+      const finish = (val: string | null) => {
+        if (settled) return;
+        settled = true;
+        resolve(val);
+      };
+      input.onchange = () => {
+        const file = input.files?.[0];
+        if (!file) {
+          finish(null);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const rawDataUri = typeof reader.result === 'string' ? reader.result : null;
+          if (!rawDataUri) {
+            finish(null);
+            return;
+          }
+          const finalUri = await optimizeHdImageIfWeb(rawDataUri);
+          finish(finalUri);
+        };
+        reader.onerror = () => finish(null);
+        reader.readAsDataURL(file);
+      };
+      input.oncancel = () => finish(null);
+      input.click();
+    });
+  }
+
   if (useCamera) {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -133,13 +221,12 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
     }
     const res = await ImagePicker.launchCameraAsync({
       quality: 1,
-      allowsEditing: true,
-      aspect: [1, 1],
+      allowsEditing: false,
       base64: true,
     });
     if (!res.canceled && res.assets[0]?.base64) {
       const mime = res.assets[0].mimeType || 'image/jpeg';
-      return await optimizeHdImageIfWeb(`data:${mime};base64,${res.assets[0].base64}`);
+      return `data:${mime};base64,${res.assets[0].base64}`;
     }
     return null;
   }
@@ -151,13 +238,12 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
   }
   const res = await ImagePicker.launchImageLibraryAsync({
     quality: 1,
-    allowsEditing: true,
-    aspect: [1, 1],
+    allowsEditing: false,
     base64: true,
   });
   if (!res.canceled && res.assets[0]?.base64) {
     const mime = res.assets[0].mimeType || 'image/jpeg';
-    return await optimizeHdImageIfWeb(`data:${mime};base64,${res.assets[0].base64}`);
+    return `data:${mime};base64,${res.assets[0].base64}`;
   }
   return null;
 }
@@ -550,15 +636,29 @@ export function ProductStudioForm({
             style={[styles.galleryCol, isDesktop && styles.galleryColDesktop]}>
             <View style={styles.mainImageFrame}>
               {currentDisplayImage ? (
-                <Image
-                  source={
-                    typeof currentDisplayImage === 'string'
-                      ? { uri: currentDisplayImage }
-                      : (currentDisplayImage as any)
-                  }
-                  style={styles.mainImage}
-                  resizeMode="cover"
-                />
+                Platform.OS === 'web' && resolveImgUri(currentDisplayImage) ? (
+                  React.createElement('img', {
+                    src: resolveImgUri(currentDisplayImage)!,
+                    alt: name || 'Sản phẩm',
+                    decoding: 'async',
+                    style: {
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    },
+                  })
+                ) : (
+                  <Image
+                    source={
+                      typeof currentDisplayImage === 'string'
+                        ? { uri: currentDisplayImage }
+                        : (currentDisplayImage as any)
+                    }
+                    style={styles.mainImage}
+                    resizeMode="cover"
+                  />
+                )
               ) : (
                 <TouchableOpacity
                   style={styles.emptyImageTapArea}
@@ -639,15 +739,29 @@ export function ProductStudioForm({
                         isSelected && styles.thumbBoxActive,
                       ]}>
                       {thumbImg ? (
-                        <Image
-                          source={
-                            typeof thumbImg === 'string'
-                              ? { uri: thumbImg }
-                              : (thumbImg as any)
-                          }
-                          style={styles.thumbImg}
-                          resizeMode="cover"
-                        />
+                        Platform.OS === 'web' && resolveImgUri(thumbImg) ? (
+                          React.createElement('img', {
+                            src: resolveImgUri(thumbImg)!,
+                            alt: c.name || 'Màu',
+                            decoding: 'async',
+                            style: {
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                            },
+                          })
+                        ) : (
+                          <Image
+                            source={
+                              typeof thumbImg === 'string'
+                                ? { uri: thumbImg }
+                                : (thumbImg as any)
+                            }
+                            style={styles.thumbImg}
+                            resizeMode="cover"
+                          />
+                        )
                       ) : (
                         <View style={styles.thumbEmpty}>
                           <ImageIcon size={16} color="#8C7A6B" />
@@ -683,11 +797,25 @@ export function ProductStudioForm({
                         styles.thumbBox,
                         isSelected && styles.thumbBoxActive,
                       ]}>
-                      <Image
-                        source={{ uri }}
-                        style={styles.thumbImg}
-                        resizeMode="cover"
-                      />
+                      {Platform.OS === 'web' ? (
+                        React.createElement('img', {
+                          src: uri,
+                          alt: `Góc #${idx + 2}`,
+                          decoding: 'async',
+                          style: {
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                          },
+                        })
+                      ) : (
+                        <Image
+                          source={{ uri }}
+                          style={styles.thumbImg}
+                          resizeMode="cover"
+                        />
+                      )}
                       <TouchableOpacity
                         style={styles.thumbDeleteMini}
                         onPress={() => handleRemoveExtraPhoto(idx)}>

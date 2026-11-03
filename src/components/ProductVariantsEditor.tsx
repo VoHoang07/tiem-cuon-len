@@ -63,10 +63,13 @@ const PRICE_DELTA_CHIPS = [0, 5000, 10000, 15000, 25000];
  */
 export async function compressDataUriIfWeb(
   dataUri: string,
-  maxSide: number = 720,
-  quality: number = 0.72
+  maxSide: number = 2560,
+  quality: number = 0.98
 ): Promise<string> {
   if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') {
+    return dataUri;
+  }
+  if (dataUri.length < 10_500_000) {
     return dataUri;
   }
   return new Promise((resolve) => {

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Pressable,
   StyleSheet,
+  Platform,
   useWindowDimensions,
   Animated,
 } from 'react-native';
@@ -23,6 +24,13 @@ import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
 
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
+
+function resolveImgUri(src: any): string | null {
+  if (!src) return null;
+  if (typeof src === 'string') return src;
+  if (typeof src === 'object' && typeof src.uri === 'string') return src.uri;
+  return null;
+}
 
 interface ProductCardProps {
   product: Product;
@@ -133,15 +141,31 @@ export const ProductCard = memo(function ProductCard({
         onPressOut={handlePressOut}>
         <View style={styles.imageContainer}>
           {product.image ? (
-            <Image
-              source={
-                typeof product.image === 'string'
-                  ? { uri: product.image }
-                  : (product.image as any)
-              }
-              style={[styles.productImage, { height: imageHeight }]}
-              resizeMode="cover"
-            />
+            Platform.OS === 'web' && resolveImgUri(product.image) ? (
+              <View style={[styles.productImage, { height: imageHeight, overflow: 'hidden' }]}>
+                {React.createElement('img', {
+                  src: resolveImgUri(product.image)!,
+                  alt: product.name,
+                  decoding: 'async',
+                  style: {
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  },
+                })}
+              </View>
+            ) : (
+              <Image
+                source={
+                  typeof product.image === 'string'
+                    ? { uri: product.image }
+                    : (product.image as any)
+                }
+                style={[styles.productImage, { height: imageHeight }]}
+                resizeMode="cover"
+              />
+            )
           ) : (
             <View style={[styles.imagePlaceholder, { height: imageHeight }]}>
               <Text style={styles.imageEmoji}>

@@ -8,6 +8,7 @@ import {
   Image,
   TextInput,
   Alert,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -51,6 +52,13 @@ import {
 
 const PD_BUY_NOW = 'Mua ngay';
 const MAX_WIDTH = 1040;
+
+function resolveImgUri(src: any): string | null {
+  if (!src) return null;
+  if (typeof src === 'string') return src;
+  if (typeof src === 'object' && typeof src.uri === 'string') return src.uri;
+  return null;
+}
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -145,24 +153,12 @@ export default function ProductDetailScreen() {
 
     if (product.gallery && product.gallery.length > 0) {
       product.gallery.forEach((g, idx) => {
-        if (g.image) {
+        if (g.image && g.zoomMode !== 'closeup') {
           items.push({
             ...g,
             id: g.id || `g_extra_${idx}`,
           });
         }
-      });
-    }
-
-    if (items.length === 1 && items[0]?.image) {
-      items.push({
-        id: 'g_closeup',
-        label: 'Cận cảnh mũi móc',
-        angleTag: 'Cận cảnh',
-        image: items[0].image,
-        colorId: c0?.id,
-        accessoryId: a0?.id,
-        zoomMode: 'closeup',
       });
     }
 
@@ -447,18 +443,32 @@ export default function ProductDetailScreen() {
             ]}>
             <View style={styles.mainImageFrame}>
               {activeDisplayImage ? (
-                <Image
-                  source={
-                    typeof activeDisplayImage === 'string'
-                      ? { uri: activeDisplayImage }
-                      : (activeDisplayImage as any)
-                  }
-                  style={[
-                    styles.mainImage,
-                    isCloseupZoom && { transform: [{ scale: 1.22 }] },
-                  ]}
-                  resizeMode="cover"
-                />
+                Platform.OS === 'web' && resolveImgUri(activeDisplayImage) ? (
+                  React.createElement('img', {
+                    src: resolveImgUri(activeDisplayImage)!,
+                    alt: product.name,
+                    decoding: 'async',
+                    style: {
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    },
+                  })
+                ) : (
+                  <Image
+                    source={
+                      typeof activeDisplayImage === 'string'
+                        ? { uri: activeDisplayImage }
+                        : (activeDisplayImage as any)
+                    }
+                    style={[
+                      styles.mainImage,
+                      isCloseupZoom && { transform: [{ scale: 1.22 }] },
+                    ]}
+                    resizeMode="cover"
+                  />
+                )
               ) : (
                 <View style={styles.imagePlaceholder}>
                   <Text style={{ fontSize: 56 }}>
@@ -528,20 +538,29 @@ export default function ProductDetailScreen() {
                       onPress={() => handleSelectGalleryIndex(idx)}
                       activeOpacity={0.85}>
                       {thumbImg ? (
-                        <Image
-                          source={
-                            typeof thumbImg === 'string'
-                              ? { uri: thumbImg }
-                              : (thumbImg as any)
-                          }
-                          style={[
-                            styles.thumbImg,
-                            gItem.zoomMode === 'closeup' && {
-                              transform: [{ scale: 1.22 }],
+                        Platform.OS === 'web' && resolveImgUri(thumbImg) ? (
+                          React.createElement('img', {
+                            src: resolveImgUri(thumbImg)!,
+                            alt: gItem.label || product.name,
+                            decoding: 'async',
+                            style: {
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
                             },
-                          ]}
-                          resizeMode="cover"
-                        />
+                          })
+                        ) : (
+                          <Image
+                            source={
+                              typeof thumbImg === 'string'
+                                ? { uri: thumbImg }
+                                : (thumbImg as any)
+                            }
+                            style={styles.thumbImg}
+                            resizeMode="cover"
+                          />
+                        )
                       ) : (
                         <Text style={{ fontSize: 20 }}>
                           {getCategoryEmoji(product.category)}
