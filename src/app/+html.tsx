@@ -42,6 +42,10 @@ export default function Root({ children }: PropsWithChildren) {
         />
         <meta name="application-name" content="Tiệm Cuộn Len" />
         <meta name="theme-color" content="#765341" />
+        <meta
+          name="google-site-verification"
+          content="K6yf-g_WIZImy_CFM9JP_zi-voNoDnCJ5GRzdbT_jwo"
+        />
 
         {/* Google Search Favicon Requirements: multiples of 48px (48x48, 96x96, 192x192) */}
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
