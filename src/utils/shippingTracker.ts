@@ -121,6 +121,10 @@ export function formatShippingSlipForClipboard(order: Order): string {
   const addr = order.shippingAddress;
   const fullAddress = getFullAddressString(order);
   const codAmount = getCodCollectAmount(order);
+  const itemsValue = order.items.reduce(
+    (sum, i) => sum + (i.price ?? i.product.price) * i.quantity,
+    0
+  );
   const itemsText = order.items
     .map((i) => `${i.product.name} (x${i.quantity})`)
     .join(', ');
@@ -135,12 +139,14 @@ export function formatShippingSlipForClipboard(order: Order): string {
     `🚚 Hình thức giao: ${shipMethod}`,
     isExpress
       ? '⚡ Cước ship Hỏa Tốc: Khách tự trả cước trực tiếp cho tài xế theo giá App'
-      : null,
-    `💰 Thu hộ tiền hàng (COD): ${
+      : '💳 Mục "Người trả phí" trên Goship: Chọn "Shop trả"',
+    `💰 Ô "Thu hộ" (COD): ${
       codAmount > 0
-        ? `${formatVND(codAmount)} (Đơn COD - Thu khi giao)`
-        : '0₫ (Khách ĐÃ CHUYỂN KHOẢN - Không thu tiền hàng)'
+        ? `${formatVND(codAmount)} (Đơn COD - Shipper thu của khách)`
+        : '0₫ (Khách ĐÃ CHUYỂN KHOẢN QR - Điền số 0)'
     }`,
+    `🛡️ Ô "Khai giá" (Giá trị hàng): ${formatVND(itemsValue || order.total)}`,
+    `⚖️ Cân nặng gợi ý: 250g • Loại hàng: Đồ chơi / Quà tặng`,
     `🧶 Sản phẩm (${order.items.reduce((s, i) => s + i.quantity, 0)} món): ${itemsText}`,
   ]
     .filter(Boolean)
