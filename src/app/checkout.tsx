@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -86,6 +87,14 @@ export default function CheckoutScreen() {
     updateShippingConfig,
   } = usePaymentMethods();
   const { openChat, sendMessage, myMessages } = useChat();
+  const { width: rawWidth } = useWindowDimensions();
+  const windowWidth =
+    rawWidth > 0
+      ? rawWidth
+      : typeof window !== 'undefined' && window.innerWidth > 0
+        ? window.innerWidth
+        : 1024;
+  const isDesktop = windowWidth >= 820;
   const [showAdminShipConfig, setShowAdminShipConfig] = useState(false);
   const [draftHcmFee, setDraftHcmFee] = useState(String(shippingConfig.hcmFee));
   const [draftProvFee, setDraftProvFee] = useState(String(shippingConfig.provincialFee));
@@ -209,6 +218,12 @@ export default function CheckoutScreen() {
     }
     const isNear =
       d.includes('quận 8') ||
+      d.includes('bình đông') ||
+      d.includes('chánh hưng') ||
+      d.includes('phú định') ||
+      d.includes('rạch ông') ||
+      d.includes('hưng phú') ||
+      d.includes('xóm củi') ||
       d.includes('quận 5') ||
       d.includes('quận 6') ||
       d.includes('quận 7') ||
@@ -522,10 +537,13 @@ export default function CheckoutScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isDesktop && styles.scrollContentDesktop,
+        ]}
         showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, isDesktop && styles.headerDesktop]}>
           <View style={styles.headerLeft}>
             <TouchableOpacity
               onPress={() => {
@@ -543,496 +561,573 @@ export default function CheckoutScreen() {
           <View style={{ width: 64 }} />
         </View>
 
-        {/* Address — unchanged */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{CHECKOUT_DELIVERY}</Text>
-            <TouchableOpacity onPress={() => router.push('/addresses')}>
-              <Text style={styles.changeText}>Thay đổi</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={[styles.checkoutBody, isDesktop && styles.checkoutBodyDesktop]}>
+          {/* Left Column on Desktop: Address + Shipping + Payment */}
+          <View style={[styles.leftCol, isDesktop && styles.leftColDesktop]}>
+            {/* Address */}
+            <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{CHECKOUT_DELIVERY}</Text>
+                <TouchableOpacity onPress={() => router.push('/addresses')}>
+                  <Text style={styles.changeText}>Thay đổi</Text>
+                </TouchableOpacity>
+              </View>
 
-          {!hasAddress ? (
-            <View style={styles.noAddressCard}>
-              <MapPin size={48} color={COLORS.lightText} />
-              <Text style={styles.noAddressText}>Bạn chưa có địa chỉ giao hàng</Text>
-              <TouchableOpacity
-                style={styles.addAddressBtn}
-                onPress={() => router.push('/addresses/add')}>
-                <Text style={styles.addAddressBtnText}>Thêm địa chỉ giao hàng</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={styles.addressCard}
-                onPress={() => router.push('/addresses')}>
-                <View style={styles.addressHeader}>
-                  <MapPin size={20} color={COLORS.primary} />
-                  <View style={styles.addressInfo}>
-                    <Text style={styles.addressName}>{selectedAddress?.fullName}</Text>
-                    <Text style={styles.addressPhone}>{selectedAddress?.phone}</Text>
-                    <Text style={styles.addressDetail}>
-                      {[
-                        selectedAddress?.detailAddress,
-                        selectedAddress?.ward,
-                        selectedAddress?.district,
-                        selectedAddress?.city,
-                      ]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </Text>
-                  </View>
-                  <ChevronRight size={20} color={COLORS.lightText} />
+              {!hasAddress ? (
+                <View style={styles.noAddressCard}>
+                  <MapPin size={48} color={COLORS.lightText} />
+                  <Text style={styles.noAddressText}>Bạn chưa có địa chỉ giao hàng</Text>
+                  <TouchableOpacity
+                    style={styles.addAddressBtn}
+                    onPress={() => router.push('/addresses/add')}>
+                    <Text style={styles.addAddressBtnText}>Thêm địa chỉ giao hàng</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-
-              {userAddresses.length > 1 && (
-                <View style={styles.addressList}>
-                  <Text style={styles.addressListTitle}>Địa chỉ khác</Text>
-                  {userAddresses
-                    .filter((a) => a.id !== selectedAddressId)
-                    .map((addr) => (
-                      <TouchableOpacity
-                        key={addr.id}
-                        style={[
-                          styles.altAddressCard,
-                          selectedAddressId === addr.id && styles.altAddressCardSelected,
-                        ]}
-                        onPress={() => setSelectedAddressId(addr.id)}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.altAddressName}>{addr.fullName}</Text>
-                          <Text style={styles.altAddressDetail}>
-                            {[addr.detailAddress, addr.ward, addr.district, addr.city]
-                              .filter(Boolean)
-                              .join(', ')}
-                          </Text>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.addressCard, isDesktop && styles.addressCardDesktop]}
+                    onPress={() => router.push('/addresses')}>
+                    <View style={styles.addressHeader}>
+                      <MapPin size={20} color={COLORS.primary} />
+                      <View style={styles.addressInfo}>
+                        <View style={styles.addressTopRow}>
+                          <Text style={styles.addressName}>{selectedAddress?.fullName}</Text>
+                          {selectedAddress?.phone ? (
+                            <Text style={styles.addressPhoneInline}>• {selectedAddress.phone}</Text>
+                          ) : null}
                         </View>
-                        {selectedAddressId === addr.id && (
-                          <Check size={20} color={COLORS.primary} />
+                        <Text style={styles.addressDetail}>
+                          {[
+                            selectedAddress?.detailAddress,
+                            selectedAddress?.ward,
+                            selectedAddress?.district,
+                            selectedAddress?.city,
+                          ]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </Text>
+                      </View>
+                      <ChevronRight size={20} color={COLORS.lightText} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {userAddresses.length > 1 && (
+                    <View style={styles.addressList}>
+                      <Text style={styles.addressListTitle}>Địa chỉ khác</Text>
+                      <View style={isDesktop ? styles.altAddressGridDesktop : undefined}>
+                        {userAddresses
+                          .filter((a) => a.id !== selectedAddressId)
+                          .map((addr) => (
+                            <TouchableOpacity
+                              key={addr.id}
+                              style={[
+                                styles.altAddressCard,
+                                isDesktop && styles.altAddressCardDesktop,
+                                selectedAddressId === addr.id && styles.altAddressCardSelected,
+                              ]}
+                              onPress={() => setSelectedAddressId(addr.id)}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.altAddressName}>{addr.fullName}</Text>
+                                <Text style={styles.altAddressDetail} numberOfLines={2}>
+                                  {[addr.detailAddress, addr.ward, addr.district, addr.city]
+                                    .filter(Boolean)
+                                    .join(', ')}
+                                </Text>
+                              </View>
+                              {selectedAddressId === addr.id && (
+                                <Check size={20} color={COLORS.primary} />
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+
+            {/* Shipping Carrier Selection */}
+            <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Cách nhận hàng</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {shippingConfig.freeshipEnabled && shippingConfig.freeshipThreshold > 0 && (
+                    <Text style={styles.freeshipBadge}>
+                      Freeship từ {Math.round(shippingConfig.freeshipThreshold / 1000)}k
+                    </Text>
+                  )}
+                  {isAdmin && (
+                    <TouchableOpacity
+                      style={styles.adminConfigBtn}
+                      onPress={() => setShowAdminShipConfig((v) => !v)}>
+                      <Settings size={13} color="#3D2B1F" />
+                      <Text style={styles.adminConfigBtnText}>Chỉnh phí ship</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {isAdmin && showAdminShipConfig && (
+                <View style={styles.adminShipConfigCard}>
+                  <Text style={styles.adminShipConfigTitle}>
+                    ⚙️ Cấu hình phí vận chuyển (Đồng bộ toàn shop)
+                  </Text>
+                  <View style={styles.adminShipInputsRow}>
+                    <View style={styles.adminShipField}>
+                      <Text style={styles.adminShipFieldLabel}>Nội thành TP.HCM (₫)</Text>
+                      <TextInput
+                        style={styles.adminShipInput}
+                        value={draftHcmFee}
+                        onChangeText={setDraftHcmFee}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={styles.adminShipField}>
+                      <Text style={styles.adminShipFieldLabel}>Liên tỉnh (₫)</Text>
+                      <TextInput
+                        style={styles.adminShipInput}
+                        value={draftProvFee}
+                        onChangeText={setDraftProvFee}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.adminShipInputsRow}>
+                    <View style={styles.adminShipField}>
+                      <Text style={styles.adminShipFieldLabel}>Đơn tối thiểu Freeship (₫)</Text>
+                      <TextInput
+                        style={styles.adminShipInput}
+                        value={draftThreshold}
+                        onChangeText={setDraftThreshold}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.freeshipToggleBtn,
+                        shippingConfig.freeshipEnabled && styles.freeshipToggleBtnActive,
+                      ]}
+                      onPress={() =>
+                        updateShippingConfig({
+                          freeshipEnabled: !shippingConfig.freeshipEnabled,
+                        })
+                      }>
+                      <Text
+                        style={[
+                          styles.freeshipToggleText,
+                          shippingConfig.freeshipEnabled && styles.freeshipToggleTextActive,
+                        ]}>
+                        {shippingConfig.freeshipEnabled ? '✅ Đang bật Freeship' : '⭕ Đang tắt Freeship'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.adminShipSaveBtn}
+                    onPress={handleSaveShippingConfig}>
+                    <Text style={styles.adminShipSaveBtnText}>Lưu bảng phí vận chuyển</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View style={isDesktop ? styles.optionsGridDesktop : undefined}>
+                {[
+                  {
+                    id: 'standard' as const,
+                    icon: <Truck size={20} color="#6BAF5C" />,
+                    iconBg: '#6BAF5C18',
+                    title: 'Giao tiêu chuẩn',
+                    sub: hasMadeToOrder
+                      ? isHCM
+                        ? 'Nội thành HCM • Tổng 4–6 ngày (3–4 ngày làm + ship)'
+                        : 'Toàn quốc • Tổng 5–8 ngày (3–4 ngày làm + ship)'
+                      : isHCM
+                        ? 'Nội thành TP.HCM • 1–2 ngày'
+                        : 'Toàn quốc • 2–4 ngày',
+                    priceLabel:
+                      standardShippingFee === 0 ? 'Miễn phí' : formatVND(standardShippingFee),
+                    isFree: standardShippingFee === 0,
+                    show: true,
+                  },
+                  {
+                    id: 'express' as const,
+                    icon: <Zap size={20} color="#D97706" />,
+                    iconBg: '#FEF3C7',
+                    title: 'Giao Hỏa Tốc 2h (TP.HCM)',
+                    sub: hasMadeToOrder
+                      ? `${expressEstimate.sub} • Làm 3–4 ngày xong giao 2h`
+                      : expressEstimate.sub,
+                    priceLabel: `Dự kiến ${expressEstimate.range}`,
+                    isFree: false,
+                    show: isHCM,
+                  },
+                  {
+                    id: 'pickup' as const,
+                    icon: <Store size={20} color="#765341" />,
+                    iconBg: '#F5EFE6',
+                    title: 'Nhận tại tiệm (Quận 8)',
+                    sub: hasMadeToOrder
+                      ? 'Làm 3–4 ngày • Tự qua lấy khi tiệm báo xong'
+                      : 'Tự qua lấy khi tiệm chuẩn bị xong',
+                    priceLabel: 'Miễn phí',
+                    isFree: true,
+                    show: true,
+                  },
+                ]
+                  .filter((opt) => opt.show)
+                  .map((opt) => {
+                    const active = shippingOption === opt.id;
+                    return (
+                      <TouchableOpacity
+                        key={opt.id}
+                        style={[
+                          styles.paymentOption,
+                          isDesktop && styles.shippingCardDesktop,
+                          active && styles.paymentOptionSelected,
+                        ]}
+                        onPress={() => setShippingOption(opt.id)}
+                        activeOpacity={0.8}>
+                        {isDesktop ? (
+                          <View style={{ width: '100%', gap: 6 }}>
+                            <View style={styles.shippingCardTopDesktop}>
+                              <View style={[styles.paymentIconWrap, styles.paymentIconWrapCompact, { backgroundColor: opt.iconBg }]}>
+                                {opt.icon}
+                              </View>
+                              <View style={styles.shippingRight}>
+                                <Text
+                                  style={[
+                                    styles.shippingFeeTag,
+                                    opt.isFree && { color: '#4E8C40' },
+                                  ]}>
+                                  {opt.priceLabel}
+                                </Text>
+                                {active && <Check size={16} color={COLORS.primary} />}
+                              </View>
+                            </View>
+                            <Text style={styles.paymentTextDesktop}>{opt.title}</Text>
+                            <Text style={styles.shippingSubtextDesktop} numberOfLines={2}>
+                              {opt.sub}
+                            </Text>
+                          </View>
+                        ) : (
+                          <>
+                            <View style={[styles.paymentOptionLeft, { flex: 1 }]}>
+                              <View style={[styles.paymentIconWrap, { backgroundColor: opt.iconBg }]}>
+                                {opt.icon}
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.paymentText}>{opt.title}</Text>
+                                <Text style={styles.shippingSubtext}>{opt.sub}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.shippingRight}>
+                              <Text
+                                style={[
+                                  styles.shippingFeeTag,
+                                  opt.isFree && { color: '#4E8C40' },
+                                ]}>
+                                {opt.priceLabel}
+                              </Text>
+                              {active && <Check size={18} color={COLORS.primary} />}
+                            </View>
+                          </>
                         )}
                       </TouchableOpacity>
-                    ))}
-                </View>
-              )}
-            </>
-          )}
-        </View>
-
-        {/* Shipping Carrier Selection — Ultra-clean for Customer, Configurable for Admin */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Cách nhận hàng</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {shippingConfig.freeshipEnabled && shippingConfig.freeshipThreshold > 0 && (
-                <Text style={styles.freeshipBadge}>
-                  Freeship từ {Math.round(shippingConfig.freeshipThreshold / 1000)}k
-                </Text>
-              )}
-              {isAdmin && (
-                <TouchableOpacity
-                  style={styles.adminConfigBtn}
-                  onPress={() => setShowAdminShipConfig((v) => !v)}>
-                  <Settings size={13} color="#3D2B1F" />
-                  <Text style={styles.adminConfigBtnText}>Chỉnh phí ship</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {isAdmin && showAdminShipConfig && (
-            <View style={styles.adminShipConfigCard}>
-              <Text style={styles.adminShipConfigTitle}>
-                ⚙️ Cấu hình phí vận chuyển (Đồng bộ toàn shop)
-              </Text>
-              <View style={styles.adminShipInputsRow}>
-                <View style={styles.adminShipField}>
-                  <Text style={styles.adminShipFieldLabel}>Nội thành TP.HCM (₫)</Text>
-                  <TextInput
-                    style={styles.adminShipInput}
-                    value={draftHcmFee}
-                    onChangeText={setDraftHcmFee}
-                    keyboardType="numeric"
-                  />
-                </View>
-                <View style={styles.adminShipField}>
-                  <Text style={styles.adminShipFieldLabel}>Liên tỉnh (₫)</Text>
-                  <TextInput
-                    style={styles.adminShipInput}
-                    value={draftProvFee}
-                    onChangeText={setDraftProvFee}
-                    keyboardType="numeric"
-                  />
-                </View>
+                    );
+                  })}
               </View>
-              <View style={styles.adminShipInputsRow}>
-                <View style={styles.adminShipField}>
-                  <Text style={styles.adminShipFieldLabel}>Đơn tối thiểu Freeship (₫)</Text>
-                  <TextInput
-                    style={styles.adminShipInput}
-                    value={draftThreshold}
-                    onChangeText={setDraftThreshold}
-                    keyboardType="numeric"
-                  />
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.freeshipToggleBtn,
-                    shippingConfig.freeshipEnabled && styles.freeshipToggleBtnActive,
-                  ]}
-                  onPress={() =>
-                    updateShippingConfig({
-                      freeshipEnabled: !shippingConfig.freeshipEnabled,
-                    })
-                  }>
-                  <Text
-                    style={[
-                      styles.freeshipToggleText,
-                      shippingConfig.freeshipEnabled && styles.freeshipToggleTextActive,
-                    ]}>
-                    {shippingConfig.freeshipEnabled ? '✅ Đang bật Freeship' : '⭕ Đang tắt Freeship'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={styles.adminShipSaveBtn}
-                onPress={handleSaveShippingConfig}>
-                <Text style={styles.adminShipSaveBtnText}>Lưu bảng phí vận chuyển</Text>
-              </TouchableOpacity>
-            </View>
-          )}
 
-          {[
-            {
-              id: 'standard' as const,
-              icon: <Truck size={20} color="#6BAF5C" />,
-              iconBg: '#6BAF5C18',
-              title: 'Giao tiêu chuẩn',
-              sub: hasMadeToOrder
-                ? isHCM
-                  ? 'Nội thành TP.HCM • Tổng 4–6 ngày (3–4 ngày làm + 1–2 ngày ship)'
-                  : 'Toàn quốc • Tổng 5–8 ngày (3–4 ngày làm + 2–4 ngày ship)'
-                : isHCM
-                  ? 'Nội thành TP.HCM • 1–2 ngày'
-                  : 'Toàn quốc • 2–4 ngày',
-              priceLabel:
-                standardShippingFee === 0 ? 'Miễn phí' : formatVND(standardShippingFee),
-              isFree: standardShippingFee === 0,
-              show: true,
-            },
-            {
-              id: 'express' as const,
-              icon: <Zap size={20} color="#D97706" />,
-              iconBg: '#FEF3C7',
-              title: 'Giao Hỏa Tốc 2h (TP.HCM)',
-              sub: hasMadeToOrder
-                ? `${expressEstimate.sub} • Làm 3–4 ngày xong giao ngay 2h`
-                : expressEstimate.sub,
-              priceLabel: `Dự kiến ${expressEstimate.range}`,
-              isFree: false,
-              show: isHCM,
-            },
-            {
-              id: 'pickup' as const,
-              icon: <Store size={20} color="#765341" />,
-              iconBg: '#F5EFE6',
-              title: 'Nhận tại tiệm (Quận 8)',
-              sub: hasMadeToOrder
-                ? 'Làm thủ công 3–4 ngày • Tự qua lấy khi tiệm báo xong'
-                : 'Tự qua lấy khi tiệm chuẩn bị xong',
-              priceLabel: 'Miễn phí',
-              isFree: true,
-              show: true,
-            },
-          ]
-            .filter((opt) => opt.show)
-            .map((opt) => {
-              const active = shippingOption === opt.id;
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  style={[styles.paymentOption, active && styles.paymentOptionSelected]}
-                  onPress={() => setShippingOption(opt.id)}
-                  activeOpacity={0.8}>
-                  <View style={[styles.paymentOptionLeft, { flex: 1 }]}>
-                    <View style={[styles.paymentIconWrap, { backgroundColor: opt.iconBg }]}>
-                      {opt.icon}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.paymentText}>{opt.title}</Text>
-                      <Text style={styles.shippingSubtext}>{opt.sub}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.shippingRight}>
-                    <Text
-                      style={[
-                        styles.shippingFeeTag,
-                        opt.isFree && { color: '#4E8C40' },
-                      ]}>
-                      {opt.priceLabel}
-                    </Text>
-                    {active && <Check size={18} color={COLORS.primary} />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-
-          {/* Total Crafting + Shipping Time Notice Box */}
-          <View
-            style={[
-              styles.deliveryEstimateBox,
-              !hasMadeToOrder && styles.deliveryEstimateBoxReady,
-            ]}>
-            <Text style={styles.deliveryEstimateTitle}>
-              {hasMadeToOrder
-                ? `🧶 Đơn có hàng đặt làm • Tổng thời gian nhận: khoảng ${deliveryTimeEstimate.totalDays}`
-                : `📦 Hàng có sẵn • Thời gian nhận dự kiến: ${deliveryTimeEstimate.totalDays}`}
-            </Text>
-            <Text style={styles.deliveryEstimateSub}>
-              {deliveryTimeEstimate.breakdown}
-            </Text>
-          </View>
-
-          {/* 2-Step Express Shipping Chat Quote & Confirmation Gate */}
-          {shippingOption === 'express' && (
-            <View
-              style={[
-                styles.expressGateBox,
-                expressFeeConfirmed && styles.expressGateBoxConfirmed,
-              ]}>
-              <Text style={styles.expressGateHeader}>
-                {expressFeeConfirmed
-                  ? '✅ Đã xác nhận phí Ship Hỏa Tốc với Tiệm'
-                  : '⚡ Xác nhận phí Ship Hỏa Tốc qua Chat trước khi thanh toán'}
-              </Text>
-              <Text style={styles.expressGateDesc}>
-                {expressFeeConfirmed
-                  ? 'Bạn đã đồng ý mức cước Hỏa Tốc qua khung Chat. Bây giờ bạn có thể bấm nút Thanh toán bên dưới!'
-                  : 'Vì cước xe Hỏa Tốc 2h thay đổi theo số km thực tế, bạn vui lòng bấm Bước 1 để nhắn địa chỉ qua khung Chat cho Tiệm báo giá, sau đó bấm Bước 2 (Đồng ý) để mở khóa Thanh toán.'}
-              </Text>
-
-              {latestAdminReply ? (
-                <View style={styles.expressAdminReplyBox}>
-                  <Text style={styles.expressAdminReplyLabel}>💬 Tin nhắn mới nhất từ Tiệm:</Text>
-                  <Text style={styles.expressAdminReplyText}>{latestAdminReply.text}</Text>
-                </View>
-              ) : null}
-
-              <View style={styles.expressGateActionsRow}>
-                <TouchableOpacity
-                  style={styles.expressChatBtn}
-                  onPress={handleAskExpressFeeInChat}
-                  activeOpacity={0.85}>
-                  <MessageCircle size={16} color="#FFFDF9" />
-                  <Text style={styles.expressChatBtnText}>
-                    {hasAskedExpressChat
-                      ? '💬 Mở lại khung Chat với Tiệm'
-                      : '💬 Bước 1: Nhắn Chat hỏi giá Ship'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.expressConfirmBtn,
-                    !hasAskedExpressChat && !latestAdminReply && styles.expressConfirmBtnDisabled,
-                    expressFeeConfirmed && styles.expressConfirmBtnActive,
-                  ]}
-                  disabled={!hasAskedExpressChat && !latestAdminReply}
-                  onPress={() => setExpressFeeConfirmed((prev) => !prev)}
-                  activeOpacity={0.85}>
-                  <Text
-                    style={[
-                      styles.expressConfirmBtnText,
-                      expressFeeConfirmed && styles.expressConfirmBtnTextActive,
-                    ]}>
-                    {expressFeeConfirmed
-                      ? '✅ Đã đồng ý giá Ship (Bấm lại nếu muốn hủy)'
-                      : hasAskedExpressChat || latestAdminReply
-                        ? '⭕ Bước 2: Tôi đồng ý giá Ship • Cho phép Thanh toán'
-                        : '🔒 Bước 2: Đồng ý giá Ship (Nhắn Bước 1 trước)'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Payment Method — dynamic from Supabase */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{CHECKOUT_PAYMENT}</Text>
-          {enabledMethods.map((method) => {
-            const { icon, color } = TYPE_ICONS[method.type];
-            const isSelected = selectedPayment?.id === method.id;
-
-            return (
-              <TouchableOpacity
-                key={method.id}
+              {/* Total Crafting + Shipping Time Notice Box */}
+              <View
                 style={[
-                  styles.paymentOption,
-                  isSelected && styles.paymentOptionSelected,
-                ]}
-                onPress={() => setSelectedPayment(method)}>
-                <View style={styles.paymentOptionLeft}>
-                  <View style={[styles.paymentIconWrap, { backgroundColor: color + '15' }]}>
-                    {icon}
-                  </View>
-                  <Text style={styles.paymentText}>{method.title}</Text>
-                </View>
-                {isSelected && <Check size={20} color={color} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                  styles.deliveryEstimateBox,
+                  !hasMadeToOrder && styles.deliveryEstimateBoxReady,
+                ]}>
+                <Text style={styles.deliveryEstimateTitle}>
+                  {hasMadeToOrder
+                    ? `🧶 Đơn có hàng đặt làm • Tổng thời gian nhận: khoảng ${deliveryTimeEstimate.totalDays}`
+                    : `📦 Hàng có sẵn • Thời gian nhận dự kiến: ${deliveryTimeEstimate.totalDays}`}
+                </Text>
+                <Text style={styles.deliveryEstimateSub}>
+                  {deliveryTimeEstimate.breakdown}
+                </Text>
+              </View>
 
-        {/* Order Summary */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
-          {checkoutItems.map((item) => {
-            const liveProd = products.find((p) => p.id === item.product.id);
-            const isItemOrder = liveProd
-              ? liveProd.isMadeToOrder !== false
-              : item.product.isMadeToOrder !== false;
-            return (
-              <View key={item.product.id} style={styles.summaryItem}>
-                {item.product.image ? (
-                  <Image
-                    source={
-                      typeof item.product.image === 'string'
-                        ? { uri: item.product.image }
-                        : (item.product.image as any)
-                    }
-                    style={styles.summaryThumb}
-                    resizeMode="cover"
-                  />
-                ) : null}
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.itemName} numberOfLines={2}>
-                    {item.product.name}
+              {/* 2-Step Express Shipping Chat Quote & Confirmation Gate */}
+              {shippingOption === 'express' && (
+                <View
+                  style={[
+                    styles.expressGateBox,
+                    expressFeeConfirmed && styles.expressGateBoxConfirmed,
+                  ]}>
+                  <Text style={styles.expressGateHeader}>
+                    {expressFeeConfirmed
+                      ? '✅ Đã xác nhận phí Ship Hỏa Tốc với Tiệm'
+                      : '⚡ Xác nhận phí Ship Hỏa Tốc qua Chat trước khi thanh toán'}
                   </Text>
-                  {(item.product.selectedColorName || item.product.selectedAccessoryName) ? (
-                    <Text style={styles.summaryVariantText} numberOfLines={1}>
-                      {[
-                        item.product.selectedColorName
-                          ? `Màu: ${item.product.selectedColorName}`
-                          : null,
-                        item.product.selectedAccessoryName
-                          ? `${item.product.selectedAccessoryEmoji ? `${item.product.selectedAccessoryEmoji} ` : ''}${item.product.selectedAccessoryName}`
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' • ')}
-                    </Text>
+                  <Text style={styles.expressGateDesc}>
+                    {expressFeeConfirmed
+                      ? 'Bạn đã đồng ý mức cước Hỏa Tốc qua khung Chat. Bây giờ bạn có thể bấm nút Thanh toán!'
+                      : 'Vì cước xe Hỏa Tốc 2h thay đổi theo số km thực tế, bạn bấm Bước 1 để nhắn địa chỉ qua khung Chat cho Tiệm báo giá, sau đó bấm Bước 2 (Đồng ý) để mở khóa Thanh toán.'}
+                  </Text>
+
+                  {latestAdminReply ? (
+                    <View style={styles.expressAdminReplyBox}>
+                      <Text style={styles.expressAdminReplyLabel}>💬 Tin nhắn mới nhất từ Tiệm:</Text>
+                      <Text style={styles.expressAdminReplyText}>{latestAdminReply.text}</Text>
+                    </View>
                   ) : null}
-                  <View style={styles.summaryMetaInline}>
-                    <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
-                    <Text style={styles.summaryStockBadge}>
-                      {isItemOrder ? '• 🧶 Hàng đặt (3–4 ngày)' : '• 📦 Có sẵn'}
-                    </Text>
+
+                  <View
+                    style={[
+                      styles.expressGateActionsRow,
+                      isDesktop && styles.expressGateActionsRowDesktop,
+                    ]}>
+                    <TouchableOpacity
+                      style={[styles.expressChatBtn, isDesktop && { flex: 1 }]}
+                      onPress={handleAskExpressFeeInChat}
+                      activeOpacity={0.85}>
+                      <MessageCircle size={16} color="#FFFDF9" />
+                      <Text style={styles.expressChatBtnText}>
+                        {hasAskedExpressChat
+                          ? '💬 Mở lại khung Chat với Tiệm'
+                          : '💬 Bước 1: Nhắn Chat hỏi giá Ship'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.expressConfirmBtn,
+                        isDesktop && { flex: 1.15 },
+                        !hasAskedExpressChat && !latestAdminReply && styles.expressConfirmBtnDisabled,
+                        expressFeeConfirmed && styles.expressConfirmBtnActive,
+                      ]}
+                      disabled={!hasAskedExpressChat && !latestAdminReply}
+                      onPress={() => setExpressFeeConfirmed((prev) => !prev)}
+                      activeOpacity={0.85}>
+                      <Text
+                        style={[
+                          styles.expressConfirmBtnText,
+                          expressFeeConfirmed && styles.expressConfirmBtnTextActive,
+                        ]}>
+                        {expressFeeConfirmed
+                          ? '✅ Đã đồng ý giá Ship'
+                          : hasAskedExpressChat || latestAdminReply
+                            ? '⭕ Bước 2: Tôi đồng ý giá Ship'
+                            : '🔒 Bước 2: Đồng ý giá Ship'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <Text style={styles.itemPrice}>
-                  {formatVND(item.product.price * item.quantity)}
+              )}
+            </View>
+
+            {/* Payment Method — dynamic from Supabase */}
+            <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+              <Text style={styles.sectionTitle}>{CHECKOUT_PAYMENT}</Text>
+              <View style={isDesktop ? styles.optionsGridDesktop : undefined}>
+                {enabledMethods.map((method) => {
+                  const { icon, color } = TYPE_ICONS[method.type];
+                  const isSelected = selectedPayment?.id === method.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={method.id}
+                      style={[
+                        styles.paymentOption,
+                        isDesktop && styles.paymentMethodCardDesktop,
+                        isSelected && styles.paymentOptionSelected,
+                      ]}
+                      onPress={() => setSelectedPayment(method)}>
+                      <View style={[styles.paymentOptionLeft, { flex: 1 }]}>
+                        <View
+                          style={[
+                            styles.paymentIconWrap,
+                            isDesktop && styles.paymentIconWrapCompact,
+                            { backgroundColor: color + '15' },
+                          ]}>
+                          {icon}
+                        </View>
+                        <Text
+                          style={[
+                            styles.paymentText,
+                            isDesktop && styles.paymentTextDesktop,
+                            { flex: 1 },
+                          ]}
+                          numberOfLines={2}>
+                          {method.title}
+                        </Text>
+                      </View>
+                      {isSelected && <Check size={18} color={color} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {/* Right Column on Desktop: Order Summary + Pay Button Card */}
+          <View style={[styles.rightCol, isDesktop && styles.rightColDesktop]}>
+            <View style={[styles.section, isDesktop && styles.summaryCardDesktop]}>
+              <Text style={styles.sectionTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
+              {checkoutItems.map((item) => {
+                const liveProd = products.find((p) => p.id === item.product.id);
+                const isItemOrder = liveProd
+                  ? liveProd.isMadeToOrder !== false
+                  : item.product.isMadeToOrder !== false;
+                return (
+                  <View key={item.product.id} style={styles.summaryItem}>
+                    {item.product.image ? (
+                      <Image
+                        source={
+                          typeof item.product.image === 'string'
+                            ? { uri: item.product.image }
+                            : (item.product.image as any)
+                        }
+                        style={styles.summaryThumb}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={styles.itemName} numberOfLines={2}>
+                        {item.product.name}
+                      </Text>
+                      {(item.product.selectedColorName || item.product.selectedAccessoryName) ? (
+                        <Text style={styles.summaryVariantText} numberOfLines={1}>
+                          {[
+                            item.product.selectedColorName
+                              ? `Màu: ${item.product.selectedColorName}`
+                              : null,
+                            item.product.selectedAccessoryName
+                              ? `${item.product.selectedAccessoryEmoji ? `${item.product.selectedAccessoryEmoji} ` : ''}${item.product.selectedAccessoryName}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' • ')}
+                        </Text>
+                      ) : null}
+                      <View style={styles.summaryMetaInline}>
+                        <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
+                        <Text style={styles.summaryStockBadge}>
+                          {isItemOrder ? '• 🧶 Hàng đặt (3–4 ngày)' : '• 📦 Có sẵn'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.itemPrice}>
+                      {formatVND(item.product.price * item.quantity)}
+                    </Text>
+                  </View>
+                );
+              })}
+              <View style={styles.divider} />
+              <View style={styles.subRow}>
+                <Text style={styles.subLabel}>Tạm tính ({checkoutItems.length} món)</Text>
+                <Text style={styles.subValue}>{formatVND(subtotal)}</Text>
+              </View>
+              <View style={styles.subRow}>
+                <Text style={styles.subLabel}>Phí vận chuyển</Text>
+                <Text
+                  style={[
+                    styles.subValue,
+                    shippingOption !== 'express' && shippingFee === 0 && { color: '#4E8C40' },
+                  ]}>
+                  {shippingOption === 'express'
+                    ? `Dự kiến ${expressEstimate.range} (trả khi nhận)`
+                    : shippingFee === 0
+                      ? 'Miễn phí (0₫)'
+                      : formatVND(shippingFee)}
                 </Text>
               </View>
-            );
-          })}
-          <View style={styles.divider} />
-          <View style={styles.subRow}>
-            <Text style={styles.subLabel}>Tạm tính ({checkoutItems.length} món)</Text>
-            <Text style={styles.subValue}>{formatVND(subtotal)}</Text>
-          </View>
-          <View style={styles.subRow}>
-            <Text style={styles.subLabel}>Phí vận chuyển</Text>
-            <Text
-              style={[
-                styles.subValue,
-                shippingOption !== 'express' && shippingFee === 0 && { color: '#4E8C40' },
-              ]}>
-              {shippingOption === 'express'
-                ? `Dự kiến ${expressEstimate.range} (trả khi nhận)`
-                : shippingFee === 0
-                  ? 'Miễn phí (0₫)'
-                  : formatVND(shippingFee)}
-            </Text>
-          </View>
-          <View style={styles.subRow}>
-            <Text style={styles.subLabel}>
-              {hasMadeToOrder ? 'Tổng thời gian làm & giao' : 'Thời gian giao dự kiến'}
-            </Text>
-            <Text style={[styles.subValue, { color: '#8B5E3C' }]}>
-              Khoảng {deliveryTimeEstimate.totalDays}
-            </Text>
-          </View>
-          {shippingOption === 'standard' &&
-            shippingConfig.freeshipEnabled &&
-            shippingConfig.freeshipThreshold > 0 &&
-            subtotal < shippingConfig.freeshipThreshold && (
-              <Text style={styles.freeshipHint}>
-                💡 Mua thêm {formatVND(shippingConfig.freeshipThreshold - subtotal)} để được Miễn phí giao hàng!
-              </Text>
-            )}
-          <View style={styles.divider} />
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
-            <Text style={styles.totalValue}>{formatVND(checkoutTotal)}</Text>
+              <View style={styles.subRow}>
+                <Text style={styles.subLabel}>
+                  {hasMadeToOrder ? 'Tổng thời gian làm & giao' : 'Thời gian giao dự kiến'}
+                </Text>
+                <Text style={[styles.subValue, { color: '#8B5E3C' }]}>
+                  Khoảng {deliveryTimeEstimate.totalDays}
+                </Text>
+              </View>
+              {shippingOption === 'standard' &&
+                shippingConfig.freeshipEnabled &&
+                shippingConfig.freeshipThreshold > 0 &&
+                subtotal < shippingConfig.freeshipThreshold && (
+                  <Text style={styles.freeshipHint}>
+                    💡 Mua thêm {formatVND(shippingConfig.freeshipThreshold - subtotal)} để được Miễn phí giao hàng!
+                  </Text>
+                )}
+              <View style={styles.divider} />
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
+                <Text style={styles.totalValue}>{formatVND(checkoutTotal)}</Text>
+              </View>
+
+              {/* Pay Button inside Summary Card on Desktop, or below on Mobile */}
+              <View style={isDesktop ? styles.desktopPayBtnWrap : styles.mobilePayBtnWrap}>
+                {shippingOption === 'express' && !expressFeeConfirmed ? (
+                  <View style={[styles.expressBottomGateWrap, isDesktop && { marginHorizontal: 0, marginBottom: 0 }]}>
+                    {!hasAskedExpressChat && !latestAdminReply ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.payBtn,
+                          styles.payBtnExpressChat,
+                          !hasAddress && styles.payBtnDisabled,
+                        ]}
+                        onPress={handleAskExpressFeeInChat}
+                        disabled={!hasAddress}
+                        activeOpacity={0.85}>
+                        <Text style={styles.payBtnText}>
+                          {hasAddress
+                            ? '💬 Bước 1: Nhắn Chat hỏi giá Ship Hỏa Tốc'
+                            : 'Thêm địa chỉ để hỏi giá Ship'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.expressBottomConfirmGroup}>
+                        <TouchableOpacity
+                          style={styles.expressBottomOpenChatBtn}
+                          onPress={handleAskExpressFeeInChat}
+                          activeOpacity={0.85}>
+                          <MessageCircle size={17} color="#92400E" />
+                          <Text style={styles.expressBottomOpenChatText}>
+                            Mở lại khung Chat xem báo giá Ship
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.expressBottomAgreeBtn}
+                          onPress={() => setExpressFeeConfirmed(true)}
+                          activeOpacity={0.85}>
+                          <Text style={styles.expressBottomAgreeText}>
+                            ✅ Bước 2: Tôi đồng ý giá Ship • Mở khóa Thanh toán
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.payBtn,
+                      isDesktop && styles.payBtnDesktop,
+                      !hasAddress && styles.payBtnDisabled,
+                    ]}
+                    onPress={handlePayment}
+                    disabled={!hasAddress}
+                    activeOpacity={0.8}>
+                    <Text style={styles.payBtnText}>
+                      {hasAddress
+                        ? selectedPayment?.type === 'cod'
+                          ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
+                          : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
+                        : 'Thêm địa chỉ để thanh toán'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* Pay Button (with Express 2-Step Chat Verification Gate) */}
-        {shippingOption === 'express' && !expressFeeConfirmed ? (
-          <View style={styles.expressBottomGateWrap}>
-            {!hasAskedExpressChat && !latestAdminReply ? (
-              <TouchableOpacity
-                style={[styles.payBtn, styles.payBtnExpressChat, !hasAddress && styles.payBtnDisabled]}
-                onPress={handleAskExpressFeeInChat}
-                disabled={!hasAddress}
-                activeOpacity={0.85}>
-                <Text style={styles.payBtnText}>
-                  {hasAddress
-                    ? '💬 Bước 1: Nhắn Chat hỏi giá Ship Hỏa Tốc'
-                    : 'Thêm địa chỉ để hỏi giá Ship'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.expressBottomConfirmGroup}>
-                <TouchableOpacity
-                  style={styles.expressBottomOpenChatBtn}
-                  onPress={handleAskExpressFeeInChat}
-                  activeOpacity={0.85}>
-                  <MessageCircle size={17} color="#92400E" />
-                  <Text style={styles.expressBottomOpenChatText}>
-                    Mở lại khung Chat xem báo giá Ship
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.expressBottomAgreeBtn}
-                  onPress={() => setExpressFeeConfirmed(true)}
-                  activeOpacity={0.85}>
-                  <Text style={styles.expressBottomAgreeText}>
-                    ✅ Bước 2: Tôi đồng ý giá Ship Tiệm báo • Mở khóa Thanh toán
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={[styles.payBtn, !hasAddress && styles.payBtnDisabled]}
-            onPress={handlePayment}
-            disabled={!hasAddress}
-            activeOpacity={0.8}>
-            <Text style={styles.payBtnText}>
-              {hasAddress
-                ? selectedPayment?.type === 'cod'
-                  ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
-                  : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
-                : 'Thêm địa chỉ để thanh toán'}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={{ height: 60 }} />
+        <View style={{ height: isDesktop ? 32 : 60 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -1050,6 +1145,34 @@ const styles = StyleSheet.create({
     maxWidth: 840,
     alignSelf: 'center',
   },
+  scrollContentDesktop: {
+    maxWidth: 1180,
+    paddingHorizontal: 16,
+  },
+  checkoutBody: {
+    width: '100%',
+  },
+  checkoutBodyDesktop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 20,
+    paddingHorizontal: 6,
+  },
+  leftCol: {
+    width: '100%',
+  },
+  leftColDesktop: {
+    flex: 1.45,
+    minWidth: 0,
+  },
+  rightCol: {
+    width: '100%',
+  },
+  rightColDesktop: {
+    flex: 1,
+    maxWidth: 420,
+    minWidth: 330,
+  },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
@@ -1057,6 +1180,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: SPACING.md,
+  },
+  headerDesktop: {
+    paddingVertical: 10,
+    marginBottom: 4,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1087,19 +1214,23 @@ const styles = StyleSheet.create({
   },
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '800', color: COLORS.darkText, textAlign: 'center' },
   section: { paddingHorizontal: 14, marginBottom: SPACING.xxl },
+  sectionDesktop: {
+    paddingHorizontal: 8,
+    marginBottom: 16,
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.md,
+    marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: COLORS.darkText,
-    marginBottom: SPACING.md,
+    marginBottom: 8,
   },
-  changeText: { fontSize: 14, fontWeight: '600', color: COLORS.primary, marginBottom: SPACING.md },
+  changeText: { fontSize: 14, fontWeight: '600', color: COLORS.primary, marginBottom: 8 },
   addressCard: {
     backgroundColor: COLORS.white,
     borderRadius: 15,
@@ -1108,17 +1239,33 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     ...SHADOWS.small,
   },
-  addressHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md },
+  addressCardDesktop: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  addressHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   addressInfo: { flex: 1 },
-  addressName: { fontSize: 16, fontWeight: '700', color: COLORS.darkText },
+  addressTopRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  addressName: { fontSize: 15.5, fontWeight: '700', color: COLORS.darkText },
   addressPhone: { fontSize: 13, color: COLORS.mediumText, marginTop: 2 },
-  addressDetail: { fontSize: 13, color: COLORS.mediumText, marginTop: 4, lineHeight: 18 },
+  addressPhoneInline: { fontSize: 13.5, fontWeight: '600', color: COLORS.mediumText },
+  addressDetail: { fontSize: 13, color: COLORS.mediumText, marginTop: 3, lineHeight: 18 },
   addressList: { marginTop: SPACING.md },
   addressListTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.darkText,
     marginBottom: SPACING.sm,
+  },
+  altAddressGridDesktop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   altAddressCard: {
     backgroundColor: COLORS.white,
@@ -1130,6 +1277,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     ...SHADOWS.small,
+  },
+  altAddressCardDesktop: {
+    flex: 1,
+    minWidth: 220,
+    marginBottom: 0,
   },
   altAddressCardSelected: {
     borderColor: COLORS.primary,
@@ -1179,7 +1331,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  paymentIconWrapCompact: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
   paymentText: { fontSize: 16, fontWeight: '700', color: COLORS.darkText },
+  paymentTextDesktop: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.darkText,
+  },
+  optionsGridDesktop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  shippingCardDesktop: {
+    flex: 1,
+    minWidth: 190,
+    padding: 12,
+    marginBottom: 0,
+    alignItems: 'flex-start',
+  },
+  shippingCardTopDesktop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  shippingSubtextDesktop: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: COLORS.mediumText,
+  },
+  paymentMethodCardDesktop: {
+    flex: 1,
+    minWidth: 210,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+    marginBottom: 0,
+  },
   paymentDetails: { marginTop: SPACING.md, paddingHorizontal: SPACING.lg },
   paymentDetailsTitle: {
     fontSize: 16,
@@ -1475,6 +1667,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 2,
   },
+  expressGateActionsRowDesktop: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+  },
   expressChatBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1586,9 +1783,25 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '600',
   },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
   totalValue: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
+  summaryCardDesktop: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    ...SHADOWS.small,
+  },
+  desktopPayBtnWrap: {
+    marginTop: 14,
+  },
+  mobilePayBtnWrap: {
+    marginTop: 14,
+    marginHorizontal: -14,
+  },
   payBtn: {
     backgroundColor: COLORS.primary,
     marginHorizontal: 14,
@@ -1597,6 +1810,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.medium,
     marginBottom: SPACING.xxl,
+  },
+  payBtnDesktop: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: 14,
+    paddingVertical: 14,
   },
   payBtnDisabled: { opacity: 0.5 },
   payBtnText: { fontSize: 16, fontWeight: '900', fontStyle: 'italic', color: COLORS.white },
