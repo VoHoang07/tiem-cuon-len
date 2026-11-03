@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,7 +22,10 @@ import {
   Wallet,
   Truck,
   Home,
-  } from 'lucide-react-native';
+  Zap,
+  Store,
+  Settings,
+} from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
@@ -68,10 +72,27 @@ export default function CheckoutScreen() {
   const isBuyNow = mode === 'buyNow' || mode === 'buy_now';
 
   const { cart, clearCart, products } = useShop();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const isAdmin = role === 'admin';
   const { addOrder } = useOrders();
   const { userAddresses, getDefaultAddress } = useAddresses();
-  const { enabledMethods, defaultMethod, loading: pmLoading } = usePaymentMethods();
+  const {
+    enabledMethods,
+    defaultMethod,
+    loading: pmLoading,
+    shippingConfig,
+    updateShippingConfig,
+  } = usePaymentMethods();
+  const [showAdminShipConfig, setShowAdminShipConfig] = useState(false);
+  const [draftHcmFee, setDraftHcmFee] = useState(String(shippingConfig.hcmFee));
+  const [draftProvFee, setDraftProvFee] = useState(String(shippingConfig.provincialFee));
+  const [draftThreshold, setDraftThreshold] = useState(String(shippingConfig.freeshipThreshold));
+
+  useEffect(() => {
+    setDraftHcmFee(String(shippingConfig.hcmFee));
+    setDraftProvFee(String(shippingConfig.provincialFee));
+    setDraftThreshold(String(shippingConfig.freeshipThreshold));
+  }, [shippingConfig]);
 
   // Compute buyNow product (derive authoritative price from catalog + accessoryDelta, never trust URL price param)
   const buyNowProduct = useMemo(() => {
@@ -143,23 +164,43 @@ export default function CheckoutScreen() {
   }, [selectedAddress?.city]);
 
   const standardShippingFee = useMemo(() => {
-    if (subtotal >= 199000) return 0;
-    return isHCM ? 15000 : 25000;
-  }, [subtotal, isHCM]);
+    if (
+      shippingConfig.freeshipEnabled &&
+      shippingConfig.freeshipThreshold > 0 &&
+      subtotal >= shippingConfig.freeshipThreshold
+    ) {
+      return 0;
+    }
+    return isHCM ? shippingConfig.hcmFee : shippingConfig.provincialFee;
+  }, [subtotal, isHCM, shippingConfig]);
 
   const shippingFee = useMemo(() => {
     if (shippingOption === 'pickup') return 0;
-    if (shippingOption === 'express') return isHCM ? 30000 : 40000;
+    if (shippingOption === 'express') return 0; // Khách trả cước trực tiếp cho tài xế theo giá App
     return standardShippingFee;
-  }, [shippingOption, isHCM, standardShippingFee]);
+  }, [shippingOption, standardShippingFee]);
 
   const shippingMethodLabel = useMemo(() => {
-    if (shippingOption === 'pickup') return 'Nhận tại Tiệm / Tự đặt ship (0₫)';
-    if (shippingOption === 'express') return 'Giao Hỏa Tốc 2h (Grab/Ahamove)';
-    return isHCM
-      ? 'Giao Tiết Kiệm Nội thành TP.HCM (Goship/GHTK)'
-      : 'Giao Tiết Kiệm Liên tỉnh (Goship/GHTK)';
+    if (shippingOption === 'pickup') return 'Nhận tại Tiệm (Miễn phí)';
+    if (shippingOption === 'express')
+      return 'Giao Hỏa Tốc 2h (Khách trả cước theo App)';
+    return isHCM ? 'Giao tiêu chuẩn Nội thành' : 'Giao tiêu chuẩn Toàn quốc';
   }, [shippingOption, isHCM]);
+
+  const handleSaveShippingConfig = async () => {
+    const hcm = Math.max(0, parseInt(draftHcmFee.replace(/[^0-9]/g, ''), 10) || 0);
+    const prov = Math.max(0, parseInt(draftProvFee.replace(/[^0-9]/g, ''), 10) || 0);
+    const thresh = Math.max(
+      0,
+      parseInt(draftThreshold.replace(/[^0-9]/g, ''), 10) || 0
+    );
+    await updateShippingConfig({
+      hcmFee: hcm,
+      provincialFee: prov,
+      freeshipThreshold: thresh,
+    });
+    setShowAdminShipConfig(false);
+  };
 
   const checkoutTotal = subtotal + shippingFee;
 
@@ -390,34 +431,117 @@ export default function CheckoutScreen() {
           )}
         </View>
 
-        {/* Shipping Carrier Selection */}
+        {/* Shipping Carrier Selection — Ultra-clean for Customer, Configurable for Admin */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Đơn vị vận chuyển</Text>
-            <Text style={styles.freeshipBadge}>Freeship đơn từ 199k</Text>
+            <Text style={styles.sectionTitle}>Cách nhận hàng</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {shippingConfig.freeshipEnabled && shippingConfig.freeshipThreshold > 0 && (
+                <Text style={styles.freeshipBadge}>
+                  Freeship từ {Math.round(shippingConfig.freeshipThreshold / 1000)}k
+                </Text>
+              )}
+              {isAdmin && (
+                <TouchableOpacity
+                  style={styles.adminConfigBtn}
+                  onPress={() => setShowAdminShipConfig((v) => !v)}>
+                  <Settings size={13} color="#3D2B1F" />
+                  <Text style={styles.adminConfigBtnText}>Chỉnh phí ship</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-          <Text style={styles.madeToOrderBanner}>
-            🧶 Sản phẩm handmade được tiệm đan/làm mới theo đúng màu & phụ kiện bạn chọn (hoàn thiện 1–3 ngày rồi mới gửi ship).
-          </Text>
+
+          {isAdmin && showAdminShipConfig && (
+            <View style={styles.adminShipConfigCard}>
+              <Text style={styles.adminShipConfigTitle}>
+                ⚙️ Cấu hình phí vận chuyển (Đồng bộ toàn shop)
+              </Text>
+              <View style={styles.adminShipInputsRow}>
+                <View style={styles.adminShipField}>
+                  <Text style={styles.adminShipFieldLabel}>Nội thành TP.HCM (₫)</Text>
+                  <TextInput
+                    style={styles.adminShipInput}
+                    value={draftHcmFee}
+                    onChangeText={setDraftHcmFee}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={styles.adminShipField}>
+                  <Text style={styles.adminShipFieldLabel}>Liên tỉnh (₫)</Text>
+                  <TextInput
+                    style={styles.adminShipInput}
+                    value={draftProvFee}
+                    onChangeText={setDraftProvFee}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+              <View style={styles.adminShipInputsRow}>
+                <View style={styles.adminShipField}>
+                  <Text style={styles.adminShipFieldLabel}>Đơn tối thiểu Freeship (₫)</Text>
+                  <TextInput
+                    style={styles.adminShipInput}
+                    value={draftThreshold}
+                    onChangeText={setDraftThreshold}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.freeshipToggleBtn,
+                    shippingConfig.freeshipEnabled && styles.freeshipToggleBtnActive,
+                  ]}
+                  onPress={() =>
+                    updateShippingConfig({
+                      freeshipEnabled: !shippingConfig.freeshipEnabled,
+                    })
+                  }>
+                  <Text
+                    style={[
+                      styles.freeshipToggleText,
+                      shippingConfig.freeshipEnabled && styles.freeshipToggleTextActive,
+                    ]}>
+                    {shippingConfig.freeshipEnabled ? '✅ Đang bật Freeship' : '⭕ Đang tắt Freeship'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.adminShipSaveBtn}
+                onPress={handleSaveShippingConfig}>
+                <Text style={styles.adminShipSaveBtnText}>Lưu bảng phí vận chuyển</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {[
             {
               id: 'standard' as const,
-              title: isHCM ? 'Giao Tiết Kiệm Nội thành (Goship / GHTK)' : 'Giao Tiết Kiệm Toàn quốc (Goship / GHTK)',
-              sub: isHCM ? 'Ship 1–2 ngày sau khi tiệm đan xong mẫu' : 'Ship 2–4 ngày sau khi tiệm đan xong mẫu',
-              fee: standardShippingFee,
+              icon: <Truck size={20} color="#6BAF5C" />,
+              iconBg: '#6BAF5C18',
+              title: 'Giao tiêu chuẩn',
+              sub: isHCM ? 'Nội thành TP.HCM • 1–2 ngày' : 'Toàn quốc • 2–4 ngày',
+              priceLabel:
+                standardShippingFee === 0 ? 'Miễn phí' : formatVND(standardShippingFee),
+              isFree: standardShippingFee === 0,
             },
             {
               id: 'express' as const,
-              title: 'Giao Hỏa Tốc ngay khi hoàn thiện (Grab / Ahamove)',
-              sub: 'Shipper giao ngay trong 2h sau khi tiệm làm xong sản phẩm',
-              fee: isHCM ? 30000 : 40000,
+              icon: <Zap size={20} color="#D97706" />,
+              iconBg: '#FEF3C7',
+              title: 'Giao Hỏa Tốc 2h',
+              sub: 'Grab / Ahamove • Trả cước trực tiếp cho tài xế',
+              priceLabel: 'Trả khi nhận',
+              isFree: false,
             },
             {
               id: 'pickup' as const,
-              title: 'Nhận trực tiếp tại Tiệm / Tự đặt ship',
-              sub: 'Tiệm nhắn bạn qua lấy khi đan xong • Không tính phí ship (0₫)',
-              fee: 0,
+              icon: <Store size={20} color="#765341" />,
+              iconBg: '#F5EFE6',
+              title: 'Nhận tại tiệm',
+              sub: 'Tự qua lấy khi tiệm chuẩn bị xong',
+              priceLabel: 'Miễn phí',
+              isFree: true,
             },
           ].map((opt) => {
             const active = shippingOption === opt.id;
@@ -428,8 +552,8 @@ export default function CheckoutScreen() {
                 onPress={() => setShippingOption(opt.id)}
                 activeOpacity={0.8}>
                 <View style={[styles.paymentOptionLeft, { flex: 1 }]}>
-                  <View style={[styles.paymentIconWrap, { backgroundColor: '#6BAF5C18' }]}>
-                    <Truck size={20} color="#6BAF5C" />
+                  <View style={[styles.paymentIconWrap, { backgroundColor: opt.iconBg }]}>
+                    {opt.icon}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.paymentText}>{opt.title}</Text>
@@ -437,8 +561,12 @@ export default function CheckoutScreen() {
                   </View>
                 </View>
                 <View style={styles.shippingRight}>
-                  <Text style={[styles.shippingFeeTag, opt.fee === 0 && { color: '#4E8C40' }]}>
-                    {opt.fee === 0 ? 'Miễn phí' : formatVND(opt.fee)}
+                  <Text
+                    style={[
+                      styles.shippingFeeTag,
+                      opt.isFree && { color: '#4E8C40' },
+                    ]}>
+                    {opt.priceLabel}
                   </Text>
                   {active && <Check size={18} color={COLORS.primary} />}
                 </View>
@@ -522,15 +650,26 @@ export default function CheckoutScreen() {
           </View>
           <View style={styles.subRow}>
             <Text style={styles.subLabel}>Phí vận chuyển</Text>
-            <Text style={[styles.subValue, shippingFee === 0 && { color: '#4E8C40' }]}>
-              {shippingFee === 0 ? 'Miễn phí (0₫)' : formatVND(shippingFee)}
+            <Text
+              style={[
+                styles.subValue,
+                shippingOption !== 'express' && shippingFee === 0 && { color: '#4E8C40' },
+              ]}>
+              {shippingOption === 'express'
+                ? 'Trả theo App khi nhận'
+                : shippingFee === 0
+                  ? 'Miễn phí (0₫)'
+                  : formatVND(shippingFee)}
             </Text>
           </View>
-          {shippingOption === 'standard' && subtotal < 199000 && (
-            <Text style={styles.freeshipHint}>
-              💡 Mua thêm {formatVND(199000 - subtotal)} để được Miễn phí vận chuyển!
-            </Text>
-          )}
+          {shippingOption === 'standard' &&
+            shippingConfig.freeshipEnabled &&
+            shippingConfig.freeshipThreshold > 0 &&
+            subtotal < shippingConfig.freeshipThreshold && (
+              <Text style={styles.freeshipHint}>
+                💡 Mua thêm {formatVND(shippingConfig.freeshipThreshold - subtotal)} để được Miễn phí giao hàng!
+              </Text>
+            )}
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
@@ -804,16 +943,98 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
   },
-  madeToOrderBanner: {
-    fontSize: 12.5,
-    color: '#5C4033',
-    backgroundColor: '#FAF3E8',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  adminConfigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFE6DC',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
+  },
+  adminConfigBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  adminShipConfigCard: {
+    backgroundColor: '#FAF6F0',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5D8C8',
+    marginBottom: 12,
+    gap: 10,
+  },
+  adminShipConfigTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  adminShipInputsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    alignItems: 'flex-end',
+  },
+  adminShipField: {
+    flex: 1,
+    minWidth: 130,
+    gap: 4,
+  },
+  adminShipFieldLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#6E5239',
+  },
+  adminShipInput: {
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1,
+    borderColor: '#DFCBB5',
     borderRadius: 10,
-    marginBottom: 10,
-    lineHeight: 18,
-    fontWeight: '600',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#2C1E14',
+    minWidth: 0,
+  },
+  freeshipToggleBtn: {
+    flex: 1,
+    minWidth: 140,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#F5EFE6',
+    borderWidth: 1,
+    borderColor: '#DFCBB5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  freeshipToggleBtnActive: {
+    backgroundColor: '#EAF6E8',
+    borderColor: '#86EFAC',
+  },
+  freeshipToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5C4332',
+  },
+  freeshipToggleTextActive: {
+    color: '#166534',
+  },
+  adminShipSaveBtn: {
+    backgroundColor: '#3D2B1F',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  adminShipSaveBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFDF9',
   },
   shippingSubtext: {
     fontSize: 12,

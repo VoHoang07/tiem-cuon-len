@@ -85,7 +85,7 @@ const CUSTOMER_FAQ: FaqItem[] = [
   {
     category: 'shipping',
     q: 'Phí vận chuyển và điều kiện Miễn phí vận chuyển (Freeship)?',
-    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao Tiết Kiệm toàn quốc (20.000₫ nội thành TP.HCM, 30.000₫ liên tỉnh — Miễn phí 0₫ cho mọi đơn từ 199.000₫); (2) Giao Hỏa Tốc 2h nội thành TP.HCM; (3) Nhận trực tiếp tại Tiệm Cuộn Len (0₫).',
+    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn (22.000₫ nội thành TP.HCM, 30.000₫ liên tỉnh — Miễn phí cho đơn từ 299.000₫); (2) Giao Hỏa Tốc 2h (Grab/Ahamove — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
   },
   {
     category: 'shipping',
@@ -265,14 +265,14 @@ export default function HelpScreen() {
       {
         id: 'client-shipping',
         icon: Truck,
-        badge: 'Freeship 199k',
+        badge: 'Freeship 299k',
         title: 'Vận chuyển & Tra cứu Hành trình Đơn',
         summary:
-          'Theo dõi tiến độ đan mẫu 4 bước và định vị kiện hàng trực tuyến.',
+          'Theo dõi tiến độ đơn hàng và định vị kiện hàng trực tuyến.',
         steps: [
-          'Miễn phí vận chuyển toàn quốc cho mọi đơn từ 199.000₫ (hỗ trợ Giao Tiết Kiệm, Hỏa Tốc 2h TP.HCM & Nhận tại tiệm).',
-          'Vào mục "Đơn hàng của tôi" để xem Timeline 4 bước: Đã đặt đơn → Đang đan mẫu → Đang vận chuyển → Giao thành công.',
-          'Bấm nút "Tra cứu hành trình đơn hàng" để xem vị trí bưu kiện trên Viettel Post, GHTK, GHN, J&T hoặc SPX.',
+          'Giao tiêu chuẩn toàn quốc (22k nội thành, 30k liên tỉnh — Freeship từ 299k) hoặc Giao Hỏa Tốc 2h (trả cước theo App).',
+          'Vào mục "Đơn hàng của tôi" để xem tiến độ 4 bước: Đã đặt đơn → Đang chuẩn bị → Đang vận chuyển → Giao thành công.',
+          'Bấm nút "Xem hành trình đơn hàng" để xem vị trí bưu kiện trên Viettel Post, GHTK, GHN, J&T hoặc SPX.',
         ],
         actionLabel: 'Tra cứu Đơn hàng',
         onAction: () => router.push('/orders'),

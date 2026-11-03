@@ -124,8 +124,8 @@ export function formatShippingSlipForClipboard(order: Order): string {
   const itemsText = order.items
     .map((i) => `${i.product.name} (x${i.quantity})`)
     .join(', ');
-  const shipMethod =
-    addr?.shippingMethod || 'Giao Tiết Kiệm (Goship / Viettel Post / GHTK)';
+  const shipMethod = addr?.shippingMethod || 'Giao tiêu chuẩn';
+  const isExpress = shipMethod.toLowerCase().includes('hỏa tốc');
 
   return [
     `📦 ĐƠN HÀNG TIỆM CUỘN LEN (#${order.id.slice(-8)})`,
@@ -133,11 +133,16 @@ export function formatShippingSlipForClipboard(order: Order): string {
     `📞 SĐT: ${addr?.phone || '—'}`,
     `📍 Địa chỉ: ${fullAddress}`,
     `🚚 Hình thức giao: ${shipMethod}`,
-    `💰 Thu hộ COD: ${
+    isExpress
+      ? '⚡ Cước ship Hỏa Tốc: Khách tự trả cước trực tiếp cho tài xế theo giá App'
+      : null,
+    `💰 Thu hộ tiền hàng (COD): ${
       codAmount > 0
         ? `${formatVND(codAmount)} (Đơn COD - Thu khi giao)`
         : '0₫ (Khách ĐÃ CHUYỂN KHOẢN - Không thu tiền hàng)'
     }`,
     `🧶 Sản phẩm (${order.items.reduce((s, i) => s + i.quantity, 0)} món): ${itemsText}`,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }

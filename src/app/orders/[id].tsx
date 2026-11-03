@@ -348,22 +348,24 @@ export default function OrderDetailScreen() {
                 )}
               </View>
 
-              {/* COD Collection Alert Box */}
-              <View
-                style={[
-                  styles.codAlertBox,
-                  codAmount === 0 && styles.codAlertBoxPaid,
-                ]}>
-                <Text
+              {/* COD Collection Alert Box (Admin only) */}
+              {isAdmin && (
+                <View
                   style={[
-                    styles.codAlertTitle,
-                    codAmount === 0 && styles.codAlertTitlePaid,
+                    styles.codAlertBox,
+                    codAmount === 0 && styles.codAlertBoxPaid,
                   ]}>
-                  {codAmount > 0
-                    ? `💰 Số tiền Shipper thu khi giao (COD): ${formatVND(codAmount)}`
-                    : '✅ Đơn chuyển khoản QR: Thu hộ COD = 0₫ (Không thu tiền khi giao)'}
-                </Text>
-              </View>
+                  <Text
+                    style={[
+                      styles.codAlertTitle,
+                      codAmount === 0 && styles.codAlertTitlePaid,
+                    ]}>
+                    {codAmount > 0
+                      ? `💰 Số tiền Shipper thu khi giao (COD): ${formatVND(codAmount)}`
+                      : '✅ Đơn chuyển khoản QR: Thu hộ COD = 0₫ (Không thu tiền khi giao)'}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* CLIENT VIEW: Clean Tracking Card */}
@@ -374,7 +376,7 @@ export default function OrderDetailScreen() {
                     <View style={styles.liveTrackingTop}>
                       <View>
                         <Text style={styles.liveTrackingLabel}>
-                          ĐƠN VỊ VẬN CHUYỂN: {(savedCarrier || 'CHUYỂN PHÁT').toUpperCase()}
+                          {(savedCarrier || 'ĐƠN VỊ VẬN CHUYỂN').toUpperCase()}
                         </Text>
                         <Text style={styles.liveTrackingCode}>
                           Mã vận đơn: {savedTracking}
@@ -401,7 +403,7 @@ export default function OrderDetailScreen() {
                         activeOpacity={0.85}>
                         <Truck size={16} color="#FFFDF9" />
                         <Text style={styles.openTrackingBtnText}>
-                          Tra cứu hành trình đơn hàng trực tiếp
+                          Xem hành trình đơn hàng
                         </Text>
                         <ExternalLink size={14} color="#FFFDF9" />
                       </TouchableOpacity>
@@ -410,7 +412,7 @@ export default function OrderDetailScreen() {
                 ) : (
                   <View style={styles.pendingTrackingBanner}>
                     <Text style={styles.pendingTrackingText}>
-                      🧶 Sản phẩm handmade đang được tiệm đan & hoàn thiện tỉ mỉ theo mẫu (1–3 ngày). Ngay khi gửi cho bưu tá, mã vận đơn sẽ xuất hiện tại đây để bạn theo dõi!
+                      🧶 Mã vận đơn sẽ hiển thị tại đây ngay khi tiệm gửi hàng.
                     </Text>
                   </View>
                 )}

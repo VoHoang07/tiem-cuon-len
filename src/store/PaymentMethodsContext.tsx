@@ -12,6 +12,63 @@ import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 
 const PAYMENT_CACHE_KEY = 'tcl_payment_methods_v3';
+const SHIPPING_CONFIG_CACHE_KEY = 'tcl_shipping_config_v1';
+const SHIPPING_CONFIG_ROW_ID = 'tcl_shipping_config_v1';
+const SHIPPING_CONFIG_PARTITION = '__TCL_SHIPPING_CONFIG_V1__';
+const SHIPPING_HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
+
+export interface ShippingConfig {
+  hcmFee: number;
+  provincialFee: number;
+  freeshipEnabled: boolean;
+  freeshipThreshold: number;
+}
+
+export const DEFAULT_SHIPPING_CONFIG: ShippingConfig = {
+  hcmFee: 22000,
+  provincialFee: 30000,
+  freeshipEnabled: true,
+  freeshipThreshold: 299000,
+};
+
+function loadCachedShippingConfig(): ShippingConfig {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(SHIPPING_CONFIG_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            hcmFee: Number.isFinite(Number(parsed.hcmFee)) ? Math.max(0, Number(parsed.hcmFee)) : DEFAULT_SHIPPING_CONFIG.hcmFee,
+            provincialFee: Number.isFinite(Number(parsed.provincialFee))
+              ? Math.max(0, Number(parsed.provincialFee))
+              : DEFAULT_SHIPPING_CONFIG.provincialFee,
+            freeshipEnabled:
+              typeof parsed.freeshipEnabled === 'boolean'
+                ? parsed.freeshipEnabled
+                : DEFAULT_SHIPPING_CONFIG.freeshipEnabled,
+            freeshipThreshold: Number.isFinite(Number(parsed.freeshipThreshold))
+              ? Math.max(0, Number(parsed.freeshipThreshold))
+              : DEFAULT_SHIPPING_CONFIG.freeshipThreshold,
+          };
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_SHIPPING_CONFIG;
+}
+
+function saveCachedShippingConfig(cfg: ShippingConfig) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(SHIPPING_CONFIG_CACHE_KEY, JSON.stringify(cfg));
+    }
+  } catch {
+    // ignore
+  }
+}
 
 const SEPAY_VIETINBANK_CONFIG = {
   bank_name: 'VietinBank',
@@ -90,6 +147,8 @@ interface PaymentMethodsContextType {
   defaultMethod: PaymentMethod | undefined;
   loading: boolean;
   error: string | null;
+  shippingConfig: ShippingConfig;
+  updateShippingConfig: (patch: Partial<ShippingConfig>) => Promise<void>;
   addMethod: (input: PaymentMethodInput) => Promise<void>;
   updateMethod: (id: string, data: Partial<PaymentMethod>) => Promise<void>;
   deleteMethod: (id: string) => Promise<void>;
@@ -102,8 +161,77 @@ const PaymentMethodsContext = createContext<PaymentMethodsContextType | null>(nu
 export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth();
   const [methods, setMethods] = useState<PaymentMethod[]>(() => loadCachedMethods());
+  const [shippingConfig, setShippingConfig] = useState<ShippingConfig>(() =>
+    loadCachedShippingConfig()
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchShippingConfig = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('addresses')
+        .select('detailAddress')
+        .eq('id', SHIPPING_CONFIG_ROW_ID)
+        .maybeSingle();
+
+      if (data && data.detailAddress) {
+        const parsed = JSON.parse(data.detailAddress);
+        if (parsed && typeof parsed === 'object') {
+          const next: ShippingConfig = {
+            hcmFee: Number.isFinite(Number(parsed.hcmFee))
+              ? Math.max(0, Number(parsed.hcmFee))
+              : DEFAULT_SHIPPING_CONFIG.hcmFee,
+            provincialFee: Number.isFinite(Number(parsed.provincialFee))
+              ? Math.max(0, Number(parsed.provincialFee))
+              : DEFAULT_SHIPPING_CONFIG.provincialFee,
+            freeshipEnabled:
+              typeof parsed.freeshipEnabled === 'boolean'
+                ? parsed.freeshipEnabled
+                : DEFAULT_SHIPPING_CONFIG.freeshipEnabled,
+            freeshipThreshold: Number.isFinite(Number(parsed.freeshipThreshold))
+              ? Math.max(0, Number(parsed.freeshipThreshold))
+              : DEFAULT_SHIPPING_CONFIG.freeshipThreshold,
+          };
+          setShippingConfig(next);
+          saveCachedShippingConfig(next);
+        }
+      }
+    } catch {
+      // keep cached/default
+    }
+  }, []);
+
+  const updateShippingConfig = useCallback(
+    async (patch: Partial<ShippingConfig>) => {
+      if (role !== 'admin') return;
+      let updated: ShippingConfig = DEFAULT_SHIPPING_CONFIG;
+      setShippingConfig((prev) => {
+        updated = { ...prev, ...patch };
+        saveCachedShippingConfig(updated);
+        return updated;
+      });
+      try {
+        await supabase.from('addresses').upsert(
+          {
+            id: SHIPPING_CONFIG_ROW_ID,
+            userId: SHIPPING_HOLDER_USER_ID,
+            fullName: SHIPPING_CONFIG_PARTITION,
+            phone: '0387966507',
+            city: 'TP.HCM',
+            district: new Date().toISOString(),
+            ward: 'SHIPPING_CONFIG',
+            detailAddress: JSON.stringify(updated),
+            isDefault: false,
+          },
+          { onConflict: 'id' }
+        );
+      } catch {
+        // keep local update
+      }
+    },
+    [role]
+  );
 
   const fetchMethods = useCallback(async () => {
     setError(null);
@@ -145,7 +273,8 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchMethods();
-  }, [fetchMethods]);
+    fetchShippingConfig();
+  }, [fetchMethods, fetchShippingConfig]);
 
   const enabledMethods = methods.filter((m) => m.enabled === true);
   const defaultMethod = methods.find((m) => m.is_default === true) ?? enabledMethods[0];
@@ -248,6 +377,8 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       defaultMethod,
       loading,
       error,
+      shippingConfig,
+      updateShippingConfig,
       addMethod,
       updateMethod,
       deleteMethod,
@@ -260,6 +391,8 @@ export function PaymentMethodsProvider({ children }: { children: ReactNode }) {
       defaultMethod,
       loading,
       error,
+      shippingConfig,
+      updateShippingConfig,
       addMethod,
       updateMethod,
       deleteMethod,
