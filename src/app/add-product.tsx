@@ -24,8 +24,8 @@ export default function AddProductScreen() {
     );
   }
 
-  const handleSubmit = (newProduct: Product) => {
-    addProduct(newProduct);
+  const handleSubmit = async (newProduct: Product) => {
+    await addProduct(newProduct);
     router.replace(`/product/${newProduct.id}`);
   };
 

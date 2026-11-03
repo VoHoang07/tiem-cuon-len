@@ -13,15 +13,17 @@ import { MOCK_PRODUCTS } from '@/data/products';
 import { useAuth } from '@/store/AuthContext';
 
 const PAGE_SIZE = 50;
-const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v11';
+const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v12';
+const LEGACY_CACHE_KEYS = ['tcl_products_cache_v11', 'tcl_products_cache_v10'];
 const CUSTOM_ADMIN_PRODUCTS_KEY = 'tcl_custom_admin_products_v1';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
 const VARIANTS_META_PREFIX = '__tcl_variants_v1__:';
+const COVER_IMG_REF = '__COVER__';
 
 // In-memory map + IndexedDB + localStorage persistence so newly added/edited products NEVER disappear when syncProducts runs
 const customAdminProductsMemory = new Map<string, Product>();
 
-function saveCustomProductsToIdb(list: Product[]) {
+function saveToIdb(key: string, value: any) {
   if (typeof window === 'undefined' || !window.indexedDB) return;
   try {
     const req = window.indexedDB.open('tcl_products_idb_v1', 1);
@@ -35,7 +37,7 @@ function saveCustomProductsToIdb(list: Product[]) {
       try {
         const db = req.result;
         const tx = db.transaction('store', 'readwrite');
-        tx.objectStore('store').put(list, 'custom_products');
+        tx.objectStore('store').put(value, key);
       } catch {
         // ignore
       }
@@ -45,7 +47,7 @@ function saveCustomProductsToIdb(list: Product[]) {
   }
 }
 
-function loadCustomProductsFromIdb(): Promise<Product[]> {
+function loadFromIdb(key: string): Promise<Product[]> {
   if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve([]);
   return new Promise((resolve) => {
     try {
@@ -60,7 +62,7 @@ function loadCustomProductsFromIdb(): Promise<Product[]> {
         try {
           const db = req.result;
           const tx = db.transaction('store', 'readonly');
-          const getReq = tx.objectStore('store').get('custom_products');
+          const getReq = tx.objectStore('store').get(key);
           getReq.onsuccess = () => {
             resolve(Array.isArray(getReq.result) ? (getReq.result as Product[]) : []);
           };
@@ -74,6 +76,14 @@ function loadCustomProductsFromIdb(): Promise<Product[]> {
       resolve([]);
     }
   });
+}
+
+function saveCustomProductsToIdb(list: Product[]) {
+  saveToIdb('custom_products', list);
+}
+
+function loadCustomProductsFromIdb(): Promise<Product[]> {
+  return loadFromIdb('custom_products');
 }
 
 function loadCustomAdminProductsSync(): Product[] {
@@ -152,7 +162,10 @@ function hydrateDbProduct(raw: Product): Product {
     tags: cleanTags,
     colorOptions:
       Array.isArray(parsedMeta.colorOptions) && parsedMeta.colorOptions.length > 0
-        ? parsedMeta.colorOptions
+        ? parsedMeta.colorOptions.map((c) => ({
+            ...c,
+            image: c.image === COVER_IMG_REF ? raw.image : c.image,
+          }))
         : raw.colorOptions,
     accessoryOptions:
       Array.isArray(parsedMeta.accessoryOptions) &&
@@ -188,6 +201,11 @@ const RETIRED_PRODUCT_IDS = new Set([
   'velvet_wire_bear_04',
   'velvet_wire_hairclip_05',
   'velvet_wire_diy_kit_06',
+  'user_1779644070262',
+  'user_1779641933394',
+  'user_1779641892818',
+  'user_1779641818466',
+  'user_1779641784566',
 ]);
 
 const LEGACY_ID_TO_MOCK_ID: Record<string, string> = {
@@ -372,6 +390,11 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
     customAdminProducts.push(item);
   }
 
+  customAdminProducts.sort(
+    (a, b) =>
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+
   const merged: Product[] = [...customAdminProducts];
 
   for (const mp of MOCK_PRODUCTS) {
@@ -395,6 +418,13 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
 function loadCachedProducts(): Product[] {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
+      for (const oldKey of LEGACY_CACHE_KEYS) {
+        try {
+          window.localStorage.removeItem(oldKey);
+        } catch {
+          // ignore
+        }
+      }
       const raw = window.localStorage.getItem(PRODUCTS_CACHE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -419,12 +449,31 @@ function productsSignature(list: Product[]): string {
 }
 
 function saveCachedProducts(items: Product[]) {
-  if (typeof window === 'undefined' || !window.localStorage || items.length === 0) return;
+  if (typeof window === 'undefined' || items.length === 0) return;
+  saveToIdb('cached_all_products', items);
+  if (!window.localStorage) return;
   setTimeout(() => {
     try {
       window.localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(items));
     } catch {
-      // ignore quota errors (e.g. large base64 images)
+      // If full base64 variants exceed localStorage 5MB quota, save a compact summary in localStorage while IndexedDB holds the full images
+      try {
+        const compact = items.map((p) => ({
+          ...p,
+          colorOptions: Array.isArray(p.colorOptions)
+            ? p.colorOptions.map((c) => ({
+                ...c,
+                image:
+                  typeof c.image === 'string' && c.image === p.image
+                    ? COVER_IMG_REF
+                    : c.image,
+              }))
+            : p.colorOptions,
+        }));
+        window.localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(compact));
+      } catch {
+        // ignore
+      }
     }
   }, 0);
 }
@@ -449,7 +498,9 @@ function toDbProduct(product: Product) {
         image:
           typeof c.image === 'string' &&
           (c.image.startsWith('data:image/') || c.image.startsWith('http'))
-            ? c.image
+            ? validImage && c.image === validImage
+              ? COVER_IMG_REF
+              : c.image
             : undefined,
       }))
     : undefined;
@@ -515,13 +566,64 @@ function toDbProduct(product: Product) {
   };
 }
 
+async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>): Promise<boolean> {
+  if (supabaseUrl && supabaseAnonKey) {
+    try {
+      const res = await fetch(`${supabaseUrl}/rest/v1/products?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(dbProduct),
+      });
+      if (res.ok) return true;
+    } catch {
+      // fall through to supabase client
+    }
+  }
+  try {
+    const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+async function deleteProductFromSupabase(id: string): Promise<void> {
+  if (supabaseUrl && supabaseAnonKey) {
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/products?id=eq.${encodeURIComponent(id)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+          },
+        }
+      );
+      if (res.ok) return;
+    } catch {
+      // fall through
+    }
+  }
+  try {
+    await supabase.from('products').delete().eq('id', id);
+  } catch {
+    // ignore
+  }
+}
+
 interface ProductContextType {
   products: Product[];
   shopReviews: Review[];
   isLoading: boolean;
   hasMore: boolean;
   loadMore: () => Promise<void>;
-  addProduct: (product: Product) => void;
+  addProduct: (product: Product) => Promise<void>;
   updateProduct: (id: string, product: Product) => Promise<void>;
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
@@ -590,19 +692,25 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
 
-  // Hydrate custom admin products from IndexedDB on mount in case localStorage was exceeded
+  // Hydrate cached and custom admin products from IndexedDB on mount in case localStorage was exceeded
   useEffect(() => {
-    loadCustomProductsFromIdb().then((idbList) => {
-      if (idbList.length > 0) {
+    Promise.all([loadFromIdb('cached_all_products'), loadCustomProductsFromIdb()]).then(
+      ([cachedAll, idbCustom]) => {
         const deleted = getDeletedIds();
-        for (const p of idbList) {
-          if (p && p.id && !deleted.has(p.id)) {
-            customAdminProductsMemory.set(p.id, p);
+        if (idbCustom.length > 0) {
+          for (const p of idbCustom) {
+            if (p && p.id && !deleted.has(p.id)) {
+              customAdminProductsMemory.set(p.id, p);
+            }
           }
         }
-        setProducts((prev) => mergeWithMockProducts(prev));
+        if (cachedAll.length > 0 || idbCustom.length > 0) {
+          setProducts((prev) =>
+            mergeWithMockProducts(cachedAll.length > 0 ? cachedAll : prev)
+          );
+        }
       }
-    });
+    );
   }, []);
 
   // Sync shop reviews from Supabase partition
@@ -634,27 +742,29 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     const from = pageNum * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    // Fast public REST fetch with 4.5s timeout so auth locks or slow connections never hang the UI
+    // Fast public REST fetch with 15s timeout & cache: 'no-store' so mobile networks & Safari never serve stale products
     if (supabaseUrl && supabaseAnonKey) {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 4500) : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 15000) : null;
       try {
-        const endpoint = `${supabaseUrl}/rest/v1/products?select=*&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}`;
+        const endpoint = `${supabaseUrl}/rest/v1/products?select=*&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}&_t=${Date.now()}`;
         const res = await fetch(endpoint, {
+          cache: 'no-store',
           headers: {
             apikey: supabaseAnonKey,
             Authorization: `Bearer ${supabaseAnonKey}`,
           },
           signal: controller?.signal,
         });
-        if (timer) clearTimeout(timer);
         if (res.ok) {
           const data = (await res.json()) as Product[];
+          if (timer) clearTimeout(timer);
           if (Array.isArray(data)) {
             setHasMore(data.length === PAGE_SIZE);
             return data;
           }
         }
+        if (timer) clearTimeout(timer);
       } catch {
         if (timer) clearTimeout(timer);
       }
@@ -690,6 +800,17 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         .then((data) => {
           if (cancelled) return;
           if (data) {
+            // If Admin has local custom products in memory/IndexedDB/localStorage that aren't in Supabase yet, push them automatically
+            if (role === 'admin') {
+              const remoteIds = new Set(data.map((r) => r.id));
+              const deleted = getDeletedIds();
+              const localCustoms = loadCustomAdminProductsSync();
+              for (const lp of localCustoms) {
+                if (lp && lp.id && !remoteIds.has(lp.id) && !deleted.has(lp.id)) {
+                  upsertProductToSupabase(toDbProduct(lp)).catch(() => {});
+                }
+              }
+            }
             const merged = mergeWithMockProducts(data);
             setProducts((prev) => {
               if (productsSignature(merged) === productsSignature(prev)) {
@@ -707,12 +828,21 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     };
 
     syncProducts();
-    const timer = setInterval(syncProducts, 25000);
+    const timer = setInterval(syncProducts, 10000);
     const handleFocus = () => {
       syncProducts();
     };
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncProducts();
+      }
+    };
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', handleFocus);
+      window.addEventListener('pageshow', handleFocus);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
     return () => {
@@ -720,9 +850,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       clearInterval(timer);
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', handleFocus);
+        window.removeEventListener('pageshow', handleFocus);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
-  }, [fetchProducts]);
+  }, [fetchProducts, role]);
 
   const loadMore = useCallback(async () => {
     const nextPage = page + 1;
@@ -752,12 +886,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       return next;
     });
     const dbProduct = toDbProduct(product);
-    try {
-      const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm sản phẩm:', error.message);
-    } catch {
-      // ignore network error; product is safely persisted in IndexedDB + memory
-    }
+    await upsertProductToSupabase(dbProduct);
   }, [role]);
 
   const updateProduct = useCallback(async (id: string, product: Product) => {
@@ -769,12 +898,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       return next;
     });
     const dbProduct = toDbProduct(product);
-    try {
-      const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
-      if (error) console.error('[SUPABASE] Lỗi sửa sản phẩm:', error.message);
-    } catch (e) {
-      console.error('[SUPABASE] Network error updating product:', e);
-    }
+    await upsertProductToSupabase(dbProduct);
   }, [role]);
 
   const removeProduct = useCallback((id: string) => {
@@ -788,9 +912,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       saveCachedProducts(next);
       return next;
     });
-    supabase.from('products').delete().eq('id', id).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá sản phẩm:', error.message);
-    }, () => {});
+    deleteProductFromSupabase(id).catch(() => {});
   }, [role]);
 
   const addReview = useCallback((productId: string, review: Review) => {
@@ -811,12 +933,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         const newReviews = [sanitizedReview, ...p.reviews];
         const avgRating = newReviews.reduce((sum, r) => sum + r.rating, 0) / newReviews.length;
         const updated = { ...p, reviews: newReviews, rating: Math.round(avgRating * 10) / 10 };
-        supabase
-          .from('products')
-          .upsert(serializeForDb(updated))
-          .then(({ error }) => {
-            if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm review:', error.message);
-          }, () => {});
+        upsertProductToSupabase(toDbProduct(updated)).catch(() => {});
         return updated;
       });
       saveCachedProducts(next);
