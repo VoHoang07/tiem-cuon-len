@@ -215,6 +215,63 @@ export default function CheckoutScreen() {
     };
   }, [selectedAddress?.district]);
 
+  const hasMadeToOrder = useMemo(() => {
+    return checkoutItems.some((ci) => {
+      const liveProd = products.find((p) => p.id === ci.product.id);
+      return liveProd
+        ? liveProd.isMadeToOrder !== false
+        : ci.product.isMadeToOrder !== false;
+    });
+  }, [checkoutItems, products]);
+
+  const deliveryTimeEstimate = useMemo(() => {
+    if (hasMadeToOrder) {
+      if (shippingOption === 'pickup') {
+        return {
+          totalDays: '3–4 ngày',
+          breakdown: '3–4 ngày đan thủ công • Tiệm báo bạn ghé lấy ngay khi hoàn thiện',
+        };
+      }
+      if (shippingOption === 'express') {
+        return {
+          totalDays: '3–4 ngày',
+          breakdown: '3–4 ngày đan thủ công + Giao hỏa tốc 2h ngay khi hoàn thiện',
+        };
+      }
+      return isHCM
+        ? {
+            totalDays: '4–6 ngày',
+            breakdown: '3–4 ngày đan thủ công + 1–2 ngày giao nội thành TP.HCM',
+          }
+        : {
+            totalDays: '5–8 ngày',
+            breakdown: '3–4 ngày đan thủ công + 2–4 ngày giao liên tỉnh',
+          };
+    }
+
+    if (shippingOption === 'pickup') {
+      return {
+        totalDays: 'Trong ngày',
+        breakdown: 'Hàng có sẵn • Ghé Tiệm (Quận 8) nhận ngay trong ngày',
+      };
+    }
+    if (shippingOption === 'express') {
+      return {
+        totalDays: 'Trong 2 giờ',
+        breakdown: 'Hàng có sẵn • Giao hỏa tốc 2h nội thành TP.HCM',
+      };
+    }
+    return isHCM
+      ? {
+          totalDays: '1–2 ngày',
+          breakdown: 'Hàng có sẵn đóng gói ngay • Giao nội thành TP.HCM 1–2 ngày',
+        }
+      : {
+          totalDays: '2–4 ngày',
+          breakdown: 'Hàng có sẵn đóng gói ngay • Giao liên tỉnh 2–4 ngày',
+        };
+  }, [hasMadeToOrder, shippingOption, isHCM]);
+
   const standardShippingFee = useMemo(() => {
     if (
       shippingConfig.freeshipEnabled &&
@@ -233,11 +290,16 @@ export default function CheckoutScreen() {
   }, [shippingOption, standardShippingFee]);
 
   const shippingMethodLabel = useMemo(() => {
-    if (shippingOption === 'pickup') return 'Nhận tại Tiệm (Miễn phí)';
-    if (shippingOption === 'express')
-      return `Giao Hỏa Tốc 2h (Dự kiến ${expressEstimate.range} - Trả khi nhận)`;
-    return isHCM ? 'Giao tiêu chuẩn Nội thành' : 'Giao tiêu chuẩn Toàn quốc';
-  }, [shippingOption, isHCM, expressEstimate.range]);
+    if (shippingOption === 'pickup') {
+      return `Nhận tại Tiệm (${deliveryTimeEstimate.totalDays})`;
+    }
+    if (shippingOption === 'express') {
+      return `Giao Hỏa Tốc 2h (Dự kiến ${expressEstimate.range} • Nhận sau ${deliveryTimeEstimate.totalDays})`;
+    }
+    return isHCM
+      ? `Giao tiêu chuẩn Nội thành (Dự kiến ${deliveryTimeEstimate.totalDays})`
+      : `Giao tiêu chuẩn Toàn quốc (Dự kiến ${deliveryTimeEstimate.totalDays})`;
+  }, [shippingOption, isHCM, expressEstimate.range, deliveryTimeEstimate.totalDays]);
 
   const handleSaveShippingConfig = async () => {
     const hcm = Math.max(0, parseInt(draftHcmFee.replace(/[^0-9]/g, ''), 10) || 0);
@@ -572,7 +634,13 @@ export default function CheckoutScreen() {
               icon: <Truck size={20} color="#6BAF5C" />,
               iconBg: '#6BAF5C18',
               title: 'Giao tiêu chuẩn',
-              sub: isHCM ? 'Nội thành TP.HCM • 1–2 ngày' : 'Toàn quốc • 2–4 ngày',
+              sub: hasMadeToOrder
+                ? isHCM
+                  ? 'Nội thành TP.HCM • Tổng 4–6 ngày (3–4 ngày làm + 1–2 ngày ship)'
+                  : 'Toàn quốc • Tổng 5–8 ngày (3–4 ngày làm + 2–4 ngày ship)'
+                : isHCM
+                  ? 'Nội thành TP.HCM • 1–2 ngày'
+                  : 'Toàn quốc • 2–4 ngày',
               priceLabel:
                 standardShippingFee === 0 ? 'Miễn phí' : formatVND(standardShippingFee),
               isFree: standardShippingFee === 0,
@@ -583,7 +651,9 @@ export default function CheckoutScreen() {
               icon: <Zap size={20} color="#D97706" />,
               iconBg: '#FEF3C7',
               title: 'Giao Hỏa Tốc 2h (TP.HCM)',
-              sub: expressEstimate.sub,
+              sub: hasMadeToOrder
+                ? `${expressEstimate.sub} • Làm 3–4 ngày xong giao ngay 2h`
+                : expressEstimate.sub,
               priceLabel: `Dự kiến ${expressEstimate.range}`,
               isFree: false,
               show: isHCM,
@@ -593,7 +663,9 @@ export default function CheckoutScreen() {
               icon: <Store size={20} color="#765341" />,
               iconBg: '#F5EFE6',
               title: 'Nhận tại tiệm (Quận 8)',
-              sub: 'Tự qua lấy khi tiệm chuẩn bị xong',
+              sub: hasMadeToOrder
+                ? 'Làm thủ công 3–4 ngày • Tự qua lấy khi tiệm báo xong'
+                : 'Tự qua lấy khi tiệm chuẩn bị xong',
               priceLabel: 'Miễn phí',
               isFree: true,
               show: true,
@@ -630,6 +702,22 @@ export default function CheckoutScreen() {
                 </TouchableOpacity>
               );
             })}
+
+          {/* Total Crafting + Shipping Time Notice Box */}
+          <View
+            style={[
+              styles.deliveryEstimateBox,
+              !hasMadeToOrder && styles.deliveryEstimateBoxReady,
+            ]}>
+            <Text style={styles.deliveryEstimateTitle}>
+              {hasMadeToOrder
+                ? `🧶 Đơn có hàng đặt làm • Tổng thời gian nhận: khoảng ${deliveryTimeEstimate.totalDays}`
+                : `📦 Hàng có sẵn • Thời gian nhận dự kiến: ${deliveryTimeEstimate.totalDays}`}
+            </Text>
+            <Text style={styles.deliveryEstimateSub}>
+              {deliveryTimeEstimate.breakdown}
+            </Text>
+          </View>
         </View>
 
         {/* Payment Method — dynamic from Supabase */}
@@ -662,44 +750,55 @@ export default function CheckoutScreen() {
         {/* Order Summary */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
-          {checkoutItems.map((item) => (
-            <View key={item.product.id} style={styles.summaryItem}>
-              {item.product.image ? (
-                <Image
-                  source={
-                    typeof item.product.image === 'string'
-                      ? { uri: item.product.image }
-                      : (item.product.image as any)
-                  }
-                  style={styles.summaryThumb}
-                  resizeMode="cover"
-                />
-              ) : null}
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={styles.itemName} numberOfLines={2}>
-                  {item.product.name}
-                </Text>
-                {(item.product.selectedColorName || item.product.selectedAccessoryName) ? (
-                  <Text style={styles.summaryVariantText} numberOfLines={1}>
-                    {[
-                      item.product.selectedColorName
-                        ? `Màu: ${item.product.selectedColorName}`
-                        : null,
-                      item.product.selectedAccessoryName
-                        ? `${item.product.selectedAccessoryEmoji ? `${item.product.selectedAccessoryEmoji} ` : ''}${item.product.selectedAccessoryName}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' • ')}
-                  </Text>
+          {checkoutItems.map((item) => {
+            const liveProd = products.find((p) => p.id === item.product.id);
+            const isItemOrder = liveProd
+              ? liveProd.isMadeToOrder !== false
+              : item.product.isMadeToOrder !== false;
+            return (
+              <View key={item.product.id} style={styles.summaryItem}>
+                {item.product.image ? (
+                  <Image
+                    source={
+                      typeof item.product.image === 'string'
+                        ? { uri: item.product.image }
+                        : (item.product.image as any)
+                    }
+                    style={styles.summaryThumb}
+                    resizeMode="cover"
+                  />
                 ) : null}
-                <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.itemName} numberOfLines={2}>
+                    {item.product.name}
+                  </Text>
+                  {(item.product.selectedColorName || item.product.selectedAccessoryName) ? (
+                    <Text style={styles.summaryVariantText} numberOfLines={1}>
+                      {[
+                        item.product.selectedColorName
+                          ? `Màu: ${item.product.selectedColorName}`
+                          : null,
+                        item.product.selectedAccessoryName
+                          ? `${item.product.selectedAccessoryEmoji ? `${item.product.selectedAccessoryEmoji} ` : ''}${item.product.selectedAccessoryName}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' • ')}
+                    </Text>
+                  ) : null}
+                  <View style={styles.summaryMetaInline}>
+                    <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
+                    <Text style={styles.summaryStockBadge}>
+                      {isItemOrder ? '• 🧶 Hàng đặt (3–4 ngày)' : '• 📦 Có sẵn'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.itemPrice}>
+                  {formatVND(item.product.price * item.quantity)}
+                </Text>
               </View>
-              <Text style={styles.itemPrice}>
-                {formatVND(item.product.price * item.quantity)}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
           <View style={styles.divider} />
           <View style={styles.subRow}>
             <Text style={styles.subLabel}>Tạm tính ({checkoutItems.length} món)</Text>
@@ -717,6 +816,14 @@ export default function CheckoutScreen() {
                 : shippingFee === 0
                   ? 'Miễn phí (0₫)'
                   : formatVND(shippingFee)}
+            </Text>
+          </View>
+          <View style={styles.subRow}>
+            <Text style={styles.subLabel}>
+              {hasMadeToOrder ? 'Tổng thời gian làm & giao' : 'Thời gian giao dự kiến'}
+            </Text>
+            <Text style={[styles.subValue, { color: '#8B5E3C' }]}>
+              Khoảng {deliveryTimeEstimate.totalDays}
             </Text>
           </View>
           {shippingOption === 'standard' &&
@@ -1108,6 +1215,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: COLORS.darkText,
+  },
+  deliveryEstimateBox: {
+    backgroundColor: '#FFF9F0',
+    borderWidth: 1,
+    borderColor: '#EAD6BD',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+    gap: 3,
+  },
+  deliveryEstimateBoxReady: {
+    backgroundColor: '#F3FAF1',
+    borderColor: '#C5E4BF',
+  },
+  deliveryEstimateTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#3D2B1F',
+  },
+  deliveryEstimateSub: {
+    fontSize: 12,
+    color: '#6E5239',
+    fontWeight: '600',
+  },
+  summaryMetaInline: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  summaryStockBadge: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#8B5E3C',
   },
   subRow: {
     flexDirection: 'row',

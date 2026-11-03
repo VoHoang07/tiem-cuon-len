@@ -796,7 +796,7 @@ export function ProductStudioForm({
                       styles.stockModeText,
                       isMadeToOrder && styles.stockModeTextActive,
                     ]}>
-                    🧶 Sản phẩm Order (Đặt làm 1–3 ngày)
+                    🧶 Sản phẩm Order (Đặt làm 3–4 ngày)
                   </Text>
                 </TouchableOpacity>
 

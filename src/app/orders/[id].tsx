@@ -63,7 +63,7 @@ const TIMELINE_STEPS = [
   {
     key: 'crafting',
     title: 'Đan & Chuẩn bị mẫu',
-    desc: 'Thủ công tỉ mỉ 1–3 ngày',
+    desc: 'Thủ công tỉ mỉ 3–4 ngày',
   },
   {
     key: 'shipping',

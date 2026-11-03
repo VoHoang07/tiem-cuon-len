@@ -566,7 +566,7 @@ export default function ProductDetailScreen() {
               <Text style={styles.quietMetaDot}>•</Text>
               <Text style={styles.quietMetaText}>
                 {product.isMadeToOrder !== false
-                  ? '🧶 Sản phẩm Order (Đặt làm 1–3 ngày)'
+                  ? '🧶 Sản phẩm Order (Đặt làm 3–4 ngày)'
                   : product.quantity > 0
                   ? `📦 Có sẵn ${product.quantity} sản phẩm`
                   : 'Tạm hết hàng'}
@@ -931,7 +931,7 @@ export default function ProductDetailScreen() {
                   .join(' + ')})`
               : product.name
           }
-          subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt đan thủ công theo mẫu (1–3 ngày)`}
+          subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt đan thủ công theo mẫu (3–4 ngày)`}
           priceText={formatVND(effectivePrice)}
           url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
           image={activeDisplayImage || product.image}
