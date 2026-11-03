@@ -106,7 +106,7 @@ export default function CheckoutScreen() {
     setDraftThreshold(String(shippingConfig.freeshipThreshold));
   }, [shippingConfig]);
 
-  // Compute buyNow product (derive authoritative price from catalog + accessoryDelta, never trust URL price param)
+  // Compute buyNow product (derive authoritative price from catalog, never trust URL price param)
   const buyNowProduct = useMemo(() => {
     if (!isBuyNow || !productId) return null;
     const base = products.find((p) => p.id === productId) ?? null;
@@ -114,23 +114,19 @@ export default function CheckoutScreen() {
     const matchedColor = base.colorOptions?.find(
       (c) => c.name.toLowerCase() === (selectedColor || '').trim().toLowerCase()
     );
-    const matchedAccessory = base.accessoryOptions?.find(
-      (a) => a.name.toLowerCase() === (selectedAccessory || '').trim().toLowerCase()
-    );
-    const accessoryDelta = matchedAccessory?.priceDelta ?? 0;
-    const authoritativePrice = Math.max(1000, Number(base.price) + Number(accessoryDelta));
-    const suffixParts = [selectedColor, selectedAccessory].filter(Boolean);
+    const authoritativePrice = Math.max(1000, Number(base.price));
+    const colorLabel = (selectedColor || matchedColor?.name || '').trim();
     return {
       ...base,
-      name: suffixParts.length > 0 ? `${base.name} (${suffixParts.join(' - ')})` : base.name,
-      color: selectedColor || base.color,
-      selectedColorName: selectedColor || base.color,
+      name: colorLabel ? `${base.name} (${colorLabel})` : base.name,
+      color: colorLabel || base.color,
+      selectedColorName: colorLabel || base.color,
       selectedColorHex: matchedColor?.hex,
-      selectedAccessoryName: selectedAccessory || undefined,
+      selectedAccessoryName: undefined,
       image: matchedColor?.image || base.image,
       price: authoritativePrice,
     };
-  }, [isBuyNow, productId, products, selectedColor, selectedAccessory]);
+  }, [isBuyNow, productId, products, selectedColor]);
 
   const buyNowQtyNum = Math.max(1, Math.min(99, parseInt(buyNowQty ?? '1', 10) || 1));
 
@@ -262,7 +258,8 @@ export default function CheckoutScreen() {
 
   const hasMadeToOrder = useMemo(() => {
     return checkoutItems.some((ci) => {
-      const liveProd = products.find((p) => p.id === ci.product.id);
+      const baseId = String(ci.product.baseProductId || ci.product.id).split('__')[0];
+      const liveProd = products.find((p) => p.id === baseId);
       return liveProd
         ? liveProd.isMadeToOrder !== false
         : ci.product.isMadeToOrder !== false;
@@ -459,11 +456,28 @@ export default function CheckoutScreen() {
     const order = {
       id: orderId,
       userId: user?.id ?? user?.email ?? 'unknown',
-      items: checkoutItems.map((ci) => ({
-        product: ci.product,
-        quantity: ci.quantity,
-        price: ci.product.price,
-      })),
+      items: checkoutItems.map((ci) => {
+        const {
+          colorOptions,
+          accessoryOptions,
+          gallery,
+          reviews,
+          ...compactProd
+        } = ci.product;
+        const colorLabel = (ci.product.selectedColorName || ci.selectedColor || '').trim();
+        const displayName =
+          colorLabel && !compactProd.name.includes(`(${colorLabel})`)
+            ? `${compactProd.name} (${colorLabel})`
+            : compactProd.name;
+        return {
+          product: {
+            ...compactProd,
+            name: displayName,
+          },
+          quantity: ci.quantity,
+          price: ci.product.price,
+        };
+      }),
       total: checkoutTotal,
       shippingAddress: {
         ...selectedAddress,
@@ -888,7 +902,8 @@ export default function CheckoutScreen() {
             <View style={[styles.section, isDesktop && styles.summaryCardDesktop]}>
               <Text style={styles.sectionTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
               {checkoutItems.map((item) => {
-                const liveProd = products.find((p) => p.id === item.product.id);
+                const baseId = String(item.product.baseProductId || item.product.id).split('__')[0];
+                const liveProd = products.find((p) => p.id === baseId);
                 const isItemOrder = liveProd
                   ? liveProd.isMadeToOrder !== false
                   : item.product.isMadeToOrder !== false;
@@ -909,18 +924,9 @@ export default function CheckoutScreen() {
                       <Text style={styles.itemName} numberOfLines={2}>
                         {item.product.name}
                       </Text>
-                      {(item.product.selectedColorName || item.product.selectedAccessoryName) ? (
+                      {item.product.selectedColorName ? (
                         <Text style={styles.summaryVariantText} numberOfLines={1}>
-                          {[
-                            item.product.selectedColorName
-                              ? `Màu: ${item.product.selectedColorName}`
-                              : null,
-                            item.product.selectedAccessoryName
-                              ? `${item.product.selectedAccessoryEmoji ? `${item.product.selectedAccessoryEmoji} ` : ''}${item.product.selectedAccessoryName}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' • ')}
+                          {`Màu: ${item.product.selectedColorName}`}
                         </Text>
                       ) : null}
                       <View style={styles.summaryMetaInline}>

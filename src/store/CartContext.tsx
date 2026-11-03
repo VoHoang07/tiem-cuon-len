@@ -44,7 +44,6 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
   const baseId = getBaseProductId(p.id, p.baseProductId);
   const parts = p.id.split('__');
   const parsedColorId = p.selectedColorId || (parts.length >= 2 ? parts[1] : undefined);
-  const parsedAccId = p.selectedAccessoryId || (parts.length >= 3 ? parts[2] : undefined);
 
   const liveProduct = catalogProducts?.find((m) => m.id === baseId);
   const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
@@ -52,7 +51,6 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
   if (!source) return ci;
 
   const colorOptions = source.colorOptions || mock?.colorOptions;
-  const accessoryOptions = source.accessoryOptions || mock?.accessoryOptions;
 
   const colorOpt =
     colorOptions?.find((c) => c.id === parsedColorId) ||
@@ -63,39 +61,31 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     ) ||
     colorOptions?.[0];
 
-  const accOpt =
-    accessoryOptions?.find((a) => a.id === parsedAccId) ||
-    accessoryOptions?.find(
-      (a) =>
-        a.name.toLowerCase() === (p.selectedAccessoryName || '').trim().toLowerCase()
-    ) ||
-    accessoryOptions?.[0];
-
   const resolvedImage = colorOpt?.image || p.image || source.image || mock?.image || null;
-  // Always prefer live catalog base price + accessory delta when available so admin price edits apply immediately
+  // Always prefer live catalog base price when available so admin price edits apply immediately
   const resolvedPrice = liveProduct
-    ? liveProduct.price + (accOpt?.priceDelta ?? 0)
+    ? liveProduct.price
     : p.price && p.price > 0
       ? p.price
-      : source.price + (accOpt?.priceDelta ?? 0);
+      : source.price;
 
   return {
     ...ci,
     selectedColor: p.selectedColorName || colorOpt?.name || ci.selectedColor,
-    selectedAccessory:
-      p.selectedAccessoryName || accOpt?.name || ci.selectedAccessory,
+    selectedAccessory: undefined,
     product: {
       ...p,
       baseProductId: baseId,
       name: liveProduct?.name || p.name,
       image: resolvedImage,
       price: resolvedPrice,
+      isMadeToOrder: liveProduct ? liveProduct.isMadeToOrder : p.isMadeToOrder,
       selectedColorId: colorOpt?.id ?? parsedColorId,
       selectedColorName: p.selectedColorName || colorOpt?.name || p.color,
       selectedColorHex: p.selectedColorHex || colorOpt?.hex,
-      selectedAccessoryId: accOpt?.id ?? parsedAccId,
-      selectedAccessoryName: p.selectedAccessoryName || accOpt?.name,
-      selectedAccessoryEmoji: p.selectedAccessoryEmoji || accOpt?.emoji,
+      selectedAccessoryId: undefined,
+      selectedAccessoryName: undefined,
+      selectedAccessoryEmoji: undefined,
     },
   };
 }
@@ -131,7 +121,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     (items: CartItem[]) => {
       try {
         if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem(`cart_${cartOwnerId}`, JSON.stringify(items));
+          const compactItems = items.map((ci) => {
+            if (!ci?.product) return ci;
+            const { colorOptions, accessoryOptions, gallery, reviews, ...restProd } = ci.product;
+            return {
+              ...ci,
+              product: restProd,
+            };
+          });
+          window.localStorage.setItem(`cart_${cartOwnerId}`, JSON.stringify(compactItems));
         }
       } catch {
         // ignore
@@ -140,7 +138,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [cartOwnerId]
   );
 
-  // Keep existing cart items' prices in sync whenever catalogProducts updates
+  // Keep existing cart items' prices & images in sync whenever catalogProducts updates
   useEffect(() => {
     if (!catalogProducts || catalogProducts.length === 0) return;
     setCart((prev) => {
@@ -150,7 +148,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const updated = rehydrateCartItem(ci, catalogProducts);
         if (
           updated.product.price !== ci.product.price ||
-          updated.product.name !== ci.product.name
+          updated.product.name !== ci.product.name ||
+          updated.product.image !== ci.product.image
         ) {
           changed = true;
           return updated;

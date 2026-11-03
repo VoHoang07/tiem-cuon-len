@@ -108,9 +108,6 @@ export default function CartScreen() {
   const renderCartItem = ({ item }: { item: CartItem }) => {
     const colorLabel =
       item.product.selectedColorName || item.selectedColor || item.product.color;
-    const accLabel =
-      item.product.selectedAccessoryName || item.selectedAccessory;
-    const accEmoji = item.product.selectedAccessoryEmoji;
     const colorHex = item.product.selectedColorHex;
 
     return (
@@ -132,11 +129,6 @@ export default function CartScreen() {
                 {getCategoryEmoji(item.product.category)}
               </Text>
             )}
-            {accEmoji ? (
-              <View style={styles.itemAccCornerBadge}>
-                <Text style={styles.itemAccCornerEmoji}>{accEmoji}</Text>
-              </View>
-            ) : null}
           </View>
           <View style={styles.itemInfo}>
             <Text style={styles.itemName} numberOfLines={2}>
@@ -156,15 +148,6 @@ export default function CartScreen() {
                   ) : null}
                   <Text style={styles.variantTagText} numberOfLines={1}>
                     Màu: {colorLabel}
-                  </Text>
-                </View>
-              ) : null}
-
-              {accLabel ? (
-                <View style={styles.variantTagPill}>
-                  <Text style={styles.variantTagText} numberOfLines={1}>
-                    {accEmoji ? `${accEmoji} ` : ''}
-                    {accLabel}
                   </Text>
                 </View>
               ) : null}

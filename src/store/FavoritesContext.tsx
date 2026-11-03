@@ -18,36 +18,78 @@ interface FavoritesContextType {
 
 const FavoritesContext = createContext<FavoritesContextType | null>(null);
 
+function readLocalFavorites(key: string): string[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id): id is string => typeof id === 'string');
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function writeLocalFavorites(key: string, ids: string[]) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, JSON.stringify(ids));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function FavoritesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user) {
+      setFavorites(readLocalFavorites('favorites_guest'));
+      return;
+    }
+
+    const userKey = `favorites_${user.id}`;
+    const localUserFavs = readLocalFavorites(userKey);
+    const guestFavs = readLocalFavorites('favorites_guest');
+    const initialMerged = Array.from(new Set([...localUserFavs, ...guestFavs]));
+
+    if (guestFavs.length > 0) {
       try {
         if (typeof window !== 'undefined' && window.localStorage) {
-          const raw = window.localStorage.getItem('favorites_guest');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              setFavorites(parsed as string[]);
-              return;
-            }
-          }
+          window.localStorage.removeItem('favorites_guest');
         }
       } catch {
         // ignore
       }
-      setFavorites([]);
-      return;
     }
+
+    setFavorites(initialMerged);
+    writeLocalFavorites(userKey, initialMerged);
+
     supabase
       .from('favorites')
       .select('productId')
       .eq('userId', user.id)
-      .then(({ data }) => {
-        if (data) setFavorites((data as { productId: string }[]).map((f) => f.productId));
-      }, () => {});
+      .then(
+        ({ data }) => {
+          const remoteIds = Array.isArray(data)
+            ? (data as { productId: string }[]).map((f) => f.productId)
+            : [];
+          setFavorites((prev) => {
+            const merged = Array.from(new Set([...prev, ...remoteIds]));
+            writeLocalFavorites(userKey, merged);
+            return merged;
+          });
+        },
+        () => {}
+      );
   }, [user]);
 
   const toggleFavorite = useCallback((productId: string) => {
@@ -55,25 +97,17 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
       const exists = prev.includes(productId);
       const next = exists ? prev.filter((id) => id !== productId) : [...prev, productId];
 
+      const storageKey = user ? `favorites_${user.id}` : 'favorites_guest';
+      writeLocalFavorites(storageKey, next);
+
       if (!user) {
-        try {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem('favorites_guest', JSON.stringify(next));
-          }
-        } catch {
-          // ignore
-        }
         return next;
       }
 
       if (exists) {
-        supabase.from('favorites').delete().eq('userId', user.id).eq('productId', productId).then(({ error }) => {
-          if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá favorite:', error.message);
-        }, () => {});
+        supabase.from('favorites').delete().eq('userId', user.id).eq('productId', productId).then(() => {}, () => {});
       } else {
-        supabase.from('favorites').insert({ userId: user.id, productId }).then(({ error }) => {
-          if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm favorite:', error.message);
-        }, () => {});
+        supabase.from('favorites').insert({ userId: user.id, productId }).then(() => {}, () => {});
       }
       return next;
     });

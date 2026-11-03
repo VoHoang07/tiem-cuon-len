@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Order, OrderStatus } from '@/types/order';
-import { supabase } from '@/services/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 
 const ORDERS_CACHE_KEY_PREFIX = 'tcl_orders_cache_v2';
@@ -135,13 +135,29 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     const handleFocus = () => {
       fetchOrders();
     };
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchOrders();
+      }
+    };
+    const handlePageShow = () => {
+      fetchOrders();
+    };
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', handleFocus);
+      window.addEventListener('pageshow', handlePageShow);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
     }
     return () => {
       clearInterval(timer);
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', handleFocus);
+        window.removeEventListener('pageshow', handlePageShow);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
   }, [user, role, fetchOrders]);
@@ -158,11 +174,35 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     });
     try {
       const { error } = await supabase.from('orders').upsert(order, { onConflict: 'id' });
-      if (error) {
-        console.error('[SUPABASE] Lỗi tạo đơn:', error.message);
+      if (error && supabaseUrl && supabaseAnonKey) {
+        await fetch(`${supabaseUrl}/rest/v1/orders?on_conflict=id`, {
+          method: 'POST',
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal',
+          },
+          body: JSON.stringify(order),
+        });
       }
-    } catch (e) {
-      console.error('[SUPABASE] Network error:', e);
+    } catch {
+      if (supabaseUrl && supabaseAnonKey) {
+        try {
+          await fetch(`${supabaseUrl}/rest/v1/orders?on_conflict=id`, {
+            method: 'POST',
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates,return=minimal',
+            },
+            body: JSON.stringify(order),
+          });
+        } catch {
+          // ignore
+        }
+      }
     }
   }, [user?.id]);
 
@@ -175,7 +215,18 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     if (role !== 'admin') return;
     try {
       const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
-      if (error) console.error('[SUPABASE] Lỗi cập nhật đơn:', error.message);
+      if (error && supabaseUrl && supabaseAnonKey) {
+        await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
+          method: 'PATCH',
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: `Bearer ${supabaseAnonKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({ status }),
+        });
+      }
     } catch {
       // keep local update
     }
