@@ -25,12 +25,14 @@ import {
   Zap,
   Store,
   Settings,
+  MessageCircle,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { useAddresses } from '@/store/AddressContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
+import { useChat } from '@/store/ChatContext';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
@@ -83,6 +85,7 @@ export default function CheckoutScreen() {
     shippingConfig,
     updateShippingConfig,
   } = usePaymentMethods();
+  const { openChat, sendMessage, myMessages } = useChat();
   const [showAdminShipConfig, setShowAdminShipConfig] = useState(false);
   const [draftHcmFee, setDraftHcmFee] = useState(String(shippingConfig.hcmFee));
   const [draftProvFee, setDraftProvFee] = useState(String(shippingConfig.provincialFee));
@@ -136,10 +139,34 @@ export default function CheckoutScreen() {
 
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
   const [shippingOption, setShippingOption] = useState<'standard' | 'express' | 'pickup'>('standard');
+  const [hasAskedExpressChat, setHasAskedExpressChat] = useState(false);
+  const [expressFeeConfirmed, setExpressFeeConfirmed] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const lastOrderAtRef = useRef<number>(0);
+
+  // Reset express fee confirmation if address changes or user leaves express mode
+  useEffect(() => {
+    setExpressFeeConfirmed(false);
+    setHasAskedExpressChat(false);
+  }, [selectedAddressId]);
+
+  useEffect(() => {
+    if (shippingOption !== 'express') {
+      setExpressFeeConfirmed(false);
+    }
+  }, [shippingOption]);
+
+  // Detect if customer already sent an express inquiry in this chat session & surface latest admin reply
+  const latestAdminReply = useMemo(() => {
+    for (let i = myMessages.length - 1; i >= 0; i--) {
+      if (myMessages[i].senderRole === 'admin') {
+        return myMessages[i];
+      }
+    }
+    return null;
+  }, [myMessages]);
 
   // Set default payment method when data loads
   useEffect(() => {
@@ -332,11 +359,58 @@ export default function CheckoutScreen() {
     return 'pending_payment' as const;
   };
 
+  const handleAskExpressFeeInChat = () => {
+    if (!selectedAddress) {
+      Alert.alert('Thiếu địa chỉ', 'Vui lòng thêm địa chỉ nhận hàng trước khi hỏi giá Ship Hỏa Tốc.');
+      return;
+    }
+    const fullAddr = [
+      selectedAddress.detailAddress,
+      selectedAddress.ward,
+      selectedAddress.district,
+      selectedAddress.city,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const itemsSummary = checkoutItems
+      .map((ci) => `${ci.product.name} (x${ci.quantity})`)
+      .join(', ');
+    const firstProd = checkoutItems[0]?.product;
+
+    if (!hasAskedExpressChat) {
+      sendMessage(
+        `🚀 Cho mình hỏi giá Ship Hỏa Tốc 2h giao tới địa chỉ: "${fullAddr}" cho đơn: ${itemsSummary} (Dự kiến hệ thống: ${expressEstimate.range}). Tiệm báo giá ship giúp mình để mình xác nhận thanh toán nhé!`,
+        firstProd
+          ? {
+              id: firstProd.id,
+              name: firstProd.name,
+              price: firstProd.price,
+              category: firstProd.category,
+              image:
+                typeof firstProd.image === 'string' && firstProd.image.length < 500
+                  ? firstProd.image
+                  : null,
+            }
+          : null
+      );
+      setHasAskedExpressChat(true);
+    }
+    openChat();
+  };
+
   const handlePayment = async () => {
     if (isSubmittingOrder) return;
     if (!user?.id) {
       Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt hàng.');
       router.replace('/login');
+      return;
+    }
+    if (!selectedAddress) {
+      Alert.alert('Thiếu địa chỉ', 'Vui lòng thêm địa chỉ giao hàng trước khi thanh toán.');
+      return;
+    }
+    if (shippingOption === 'express' && !expressFeeConfirmed) {
+      handleAskExpressFeeInChat();
       return;
     }
     if (Date.now() - lastOrderAtRef.current < 15000) {
@@ -718,6 +792,69 @@ export default function CheckoutScreen() {
               {deliveryTimeEstimate.breakdown}
             </Text>
           </View>
+
+          {/* 2-Step Express Shipping Chat Quote & Confirmation Gate */}
+          {shippingOption === 'express' && (
+            <View
+              style={[
+                styles.expressGateBox,
+                expressFeeConfirmed && styles.expressGateBoxConfirmed,
+              ]}>
+              <Text style={styles.expressGateHeader}>
+                {expressFeeConfirmed
+                  ? '✅ Đã xác nhận phí Ship Hỏa Tốc với Tiệm'
+                  : '⚡ Xác nhận phí Ship Hỏa Tốc qua Chat trước khi thanh toán'}
+              </Text>
+              <Text style={styles.expressGateDesc}>
+                {expressFeeConfirmed
+                  ? 'Bạn đã đồng ý mức cước Hỏa Tốc qua khung Chat. Bây giờ bạn có thể bấm nút Thanh toán bên dưới!'
+                  : 'Vì cước xe Hỏa Tốc 2h thay đổi theo số km thực tế, bạn vui lòng bấm Bước 1 để nhắn địa chỉ qua khung Chat cho Tiệm báo giá, sau đó bấm Bước 2 (Đồng ý) để mở khóa Thanh toán.'}
+              </Text>
+
+              {latestAdminReply ? (
+                <View style={styles.expressAdminReplyBox}>
+                  <Text style={styles.expressAdminReplyLabel}>💬 Tin nhắn mới nhất từ Tiệm:</Text>
+                  <Text style={styles.expressAdminReplyText}>{latestAdminReply.text}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.expressGateActionsRow}>
+                <TouchableOpacity
+                  style={styles.expressChatBtn}
+                  onPress={handleAskExpressFeeInChat}
+                  activeOpacity={0.85}>
+                  <MessageCircle size={16} color="#FFFDF9" />
+                  <Text style={styles.expressChatBtnText}>
+                    {hasAskedExpressChat
+                      ? '💬 Mở lại khung Chat với Tiệm'
+                      : '💬 Bước 1: Nhắn Chat hỏi giá Ship'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.expressConfirmBtn,
+                    !hasAskedExpressChat && !latestAdminReply && styles.expressConfirmBtnDisabled,
+                    expressFeeConfirmed && styles.expressConfirmBtnActive,
+                  ]}
+                  disabled={!hasAskedExpressChat && !latestAdminReply}
+                  onPress={() => setExpressFeeConfirmed((prev) => !prev)}
+                  activeOpacity={0.85}>
+                  <Text
+                    style={[
+                      styles.expressConfirmBtnText,
+                      expressFeeConfirmed && styles.expressConfirmBtnTextActive,
+                    ]}>
+                    {expressFeeConfirmed
+                      ? '✅ Đã đồng ý giá Ship (Bấm lại nếu muốn hủy)'
+                      : hasAskedExpressChat || latestAdminReply
+                        ? '⭕ Bước 2: Tôi đồng ý giá Ship • Cho phép Thanh toán'
+                        : '🔒 Bước 2: Đồng ý giá Ship (Nhắn Bước 1 trước)'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Payment Method — dynamic from Supabase */}
@@ -841,20 +978,59 @@ export default function CheckoutScreen() {
           </View>
         </View>
 
-        {/* Pay Button */}
-        <TouchableOpacity
-          style={[styles.payBtn, !hasAddress && styles.payBtnDisabled]}
-          onPress={handlePayment}
-          disabled={!hasAddress}
-          activeOpacity={0.8}>
-          <Text style={styles.payBtnText}>
-            {hasAddress
-              ? selectedPayment?.type === 'cod'
-                ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
-                : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
-              : 'Thêm địa chỉ để thanh toán'}
-          </Text>
-        </TouchableOpacity>
+        {/* Pay Button (with Express 2-Step Chat Verification Gate) */}
+        {shippingOption === 'express' && !expressFeeConfirmed ? (
+          <View style={styles.expressBottomGateWrap}>
+            {!hasAskedExpressChat && !latestAdminReply ? (
+              <TouchableOpacity
+                style={[styles.payBtn, styles.payBtnExpressChat, !hasAddress && styles.payBtnDisabled]}
+                onPress={handleAskExpressFeeInChat}
+                disabled={!hasAddress}
+                activeOpacity={0.85}>
+                <Text style={styles.payBtnText}>
+                  {hasAddress
+                    ? '💬 Bước 1: Nhắn Chat hỏi giá Ship Hỏa Tốc'
+                    : 'Thêm địa chỉ để hỏi giá Ship'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.expressBottomConfirmGroup}>
+                <TouchableOpacity
+                  style={styles.expressBottomOpenChatBtn}
+                  onPress={handleAskExpressFeeInChat}
+                  activeOpacity={0.85}>
+                  <MessageCircle size={17} color="#92400E" />
+                  <Text style={styles.expressBottomOpenChatText}>
+                    Mở lại khung Chat xem báo giá Ship
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.expressBottomAgreeBtn}
+                  onPress={() => setExpressFeeConfirmed(true)}
+                  activeOpacity={0.85}>
+                  <Text style={styles.expressBottomAgreeText}>
+                    ✅ Bước 2: Tôi đồng ý giá Ship Tiệm báo • Mở khóa Thanh toán
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.payBtn, !hasAddress && styles.payBtnDisabled]}
+            onPress={handlePayment}
+            disabled={!hasAddress}
+            activeOpacity={0.8}>
+            <Text style={styles.payBtnText}>
+              {hasAddress
+                ? selectedPayment?.type === 'cod'
+                  ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
+                  : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
+                : 'Thêm địa chỉ để thanh toán'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -1251,6 +1427,138 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     color: '#8B5E3C',
+  },
+  expressGateBox: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    borderRadius: 14,
+    padding: 13,
+    marginTop: 6,
+    gap: 8,
+  },
+  expressGateBoxConfirmed: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  expressGateHeader: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  expressGateDesc: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#78350F',
+    fontWeight: '600',
+  },
+  expressAdminReplyBox: {
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  expressAdminReplyLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  expressAdminReplyText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2C1E14',
+  },
+  expressGateActionsRow: {
+    gap: 8,
+    marginTop: 2,
+  },
+  expressChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#D97706',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  expressChatBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFDF9',
+  },
+  expressConfirmBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1.5,
+    borderColor: '#D97706',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  expressConfirmBtnDisabled: {
+    opacity: 0.5,
+    borderColor: '#D6C7B2',
+  },
+  expressConfirmBtnActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  expressConfirmBtnText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#92400E',
+    textAlign: 'center',
+  },
+  expressConfirmBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  expressBottomGateWrap: {
+    marginHorizontal: 14,
+    marginBottom: SPACING.xxl,
+  },
+  payBtnExpressChat: {
+    backgroundColor: '#D97706',
+    marginHorizontal: 0,
+    marginBottom: 0,
+  },
+  expressBottomConfirmGroup: {
+    gap: 10,
+  },
+  expressBottomOpenChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    borderRadius: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  expressBottomOpenChatText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  expressBottomAgreeBtn: {
+    backgroundColor: '#059669',
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    ...SHADOWS.medium,
+  },
+  expressBottomAgreeText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   subRow: {
     flexDirection: 'row',

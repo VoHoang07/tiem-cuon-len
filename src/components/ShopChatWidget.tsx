@@ -37,6 +37,9 @@ const CLIENT_QUICK_PROMPTS = [
 ];
 
 const ADMIN_QUICK_REPLIES = [
+  '🚀 Phí ship Hỏa tốc qua địa chỉ bạn là 25k nhé, bạn bấm Đồng ý để thanh toán nha!',
+  '🚀 Phí ship Hỏa tốc qua mình là 35k nhé, bạn bấm Đồng ý để thanh toán nha!',
+  '🚀 Phí ship Hỏa tốc qua mình là 45k nhé, bạn bấm Đồng ý để thanh toán nha!',
   'Dạ mẫu này tiệm đang sẵn hàng ạ 🧶',
   'Tiệm nhận đan theo màu bạn chọn nhé!',
   'Bạn nhắn SĐT & địa chỉ để tiệm lên đơn nha!',
@@ -129,12 +132,19 @@ export function ShopChatWidget() {
     return myMessages;
   }, [isAdmin, activeAdminConversation, myMessages]);
 
-  // Show quick suggestion chips only when starting out or when a product is pinged
+  const hasExpressInquiry = useMemo(() => {
+    return displayedMessages.some(
+      (m) => m.text.includes('Hỏa Tốc') || m.text.includes('hỏa tốc')
+    );
+  }, [displayedMessages]);
+
+  // Show quick suggestion chips when starting out, when a product is pinged, or when Admin replies to Express inquiry
   const showQuickChips = useMemo(() => {
     if (showProductPicker) return false;
     if (pendingProduct) return true;
+    if (isAdmin && hasExpressInquiry) return true;
     return displayedMessages.length <= 2;
-  }, [showProductPicker, pendingProduct, displayedMessages.length]);
+  }, [showProductPicker, pendingProduct, isAdmin, hasExpressInquiry, displayedMessages.length]);
 
   // Auto-scroll to bottom when messages change or chat opens
   useEffect(() => {
@@ -578,6 +588,18 @@ export function ShopChatWidget() {
                 )}
               </ScrollView>
             </View>
+          )}
+
+          {/* Return to Checkout Bar when Customer is confirming Express Shipping Fee */}
+          {!isAdmin && normalizedRoute === 'checkout' && (
+            <TouchableOpacity
+              style={styles.checkoutReturnBar}
+              onPress={() => setIsOpen(false)}
+              activeOpacity={0.85}>
+              <Text style={styles.checkoutReturnText}>
+                ← Quay lại trang Thanh toán để bấm Đồng ý giá Ship
+              </Text>
+            </TouchableOpacity>
           )}
 
           {/* Bottom Input Bar */}
@@ -1279,5 +1301,17 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: {
     opacity: 0.4,
+  },
+  checkoutReturnBar: {
+    backgroundColor: '#059669',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkoutReturnText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '800',
   },
 });
