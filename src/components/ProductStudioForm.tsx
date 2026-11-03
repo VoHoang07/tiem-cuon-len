@@ -44,26 +44,39 @@ const MAX_WIDTH = 1040;
 const COLOR_SWATCHES = [
   { name: 'Kem Sữa', hex: '#F5EBE0' },
   { name: 'Trắng Tinh', hex: '#FAF7F2' },
+  { name: 'Trắng Ngà', hex: '#FDF8F0' },
+  { name: 'Be Yến Mạch', hex: '#E6D5C3' },
   { name: 'Hồng Phấn', hex: '#F4ACB7' },
+  { name: 'Hồng Đào', hex: '#FEC5BB' },
+  { name: 'Hồng Sen', hex: '#EC4899' },
+  { name: 'Hồng Đất', hex: '#D98A82' },
   { name: 'Đỏ Dâu', hex: '#E63946' },
-  { name: 'Vàng Bơ', hex: '#FDE047' },
+  { name: 'Đỏ Rượu', hex: '#991B1B' },
+  { name: 'Đỏ Cam', hex: '#EF4444' },
   { name: 'Cam Đào', hex: '#F4A261' },
+  { name: 'Cam Đất', hex: '#E07A5F' },
+  { name: 'Vàng Bơ', hex: '#FDE047' },
+  { name: 'Vàng Tươi', hex: '#FACC15' },
+  { name: 'Vàng Mù Tạt', hex: '#D97706' },
   { name: 'Xanh Bơ', hex: '#B7E4C7' },
+  { name: 'Xanh Mint', hex: '#6EE7B7' },
+  { name: 'Xanh Matcha', hex: '#84A98C' },
+  { name: 'Xanh Lá', hex: '#22C55E' },
+  { name: 'Xanh Rêu', hex: '#3F6212' },
   { name: 'Xanh Dương', hex: '#93C5FD' },
+  { name: 'Xanh Baby', hex: '#BAE6FD' },
+  { name: 'Xanh Ngọc', hex: '#2DD4BF' },
+  { name: 'Xanh Biển', hex: '#2563EB' },
+  { name: 'Xanh Navy', hex: '#1E3A8A' },
   { name: 'Tím Khoai Môn', hex: '#CDB4DB' },
+  { name: 'Tím Lavender', hex: '#A78BFA' },
+  { name: 'Tím Huế', hex: '#7E22CE' },
   { name: 'Nâu Caramel', hex: '#A67B5B' },
+  { name: 'Nâu Sữa', hex: '#C69C6D' },
+  { name: 'Nâu Socola', hex: '#5C4033' },
+  { name: 'Xám Khói', hex: '#9CA3AF' },
+  { name: 'Đen Tuyền', hex: '#1F2937' },
 ];
-
-const QUICK_ACCESSORIES = [
-  { name: 'Ôm dâu tây đỏ', emoji: '🍓', priceDelta: 0 },
-  { name: 'Đeo nơ lụa cổ', emoji: '🎀', priceDelta: 0 },
-  { name: 'Đội mũ hoa cúc', emoji: '🌼', priceDelta: 10000 },
-  { name: 'Đeo túi chéo mini', emoji: '👜', priceDelta: 10000 },
-  { name: 'Hộp quà mica + Đèn LED', emoji: '🎁', priceDelta: 15000 },
-];
-
-const PRICE_DELTAS = [0, 5000, 10000, 15000, 25000];
-const EMOJI_LIST = ['🍓', '🎀', '🌼', '🎁', '👜', '👑', '🧣', '✨', '🌸'];
 
 function resolveImgUri(src: any): string | null {
   if (!src) return null;
@@ -100,14 +113,27 @@ function formatVariantNameFromFilename(fileName: string, fallbackIdx: number): s
   return readable || `Mẫu #${fallbackIdx + 1}`;
 }
 
+function encodeCanvasHd(canvas: HTMLCanvasElement, quality: number = 0.92): string {
+  try {
+    const webp = canvas.toDataURL('image/webp', quality);
+    if (webp && webp.startsWith('data:image/webp')) {
+      return webp;
+    }
+  } catch {
+    // Fallback to JPEG below
+  }
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 /**
- * Keep 100% lossless original file on Web for normal HD/2K/4K photos.
- * If an uploaded photo is small (< 750px, e.g. 247x225), automatically upscale + pad to 1080x1080 HD so it never blurs or gets cropped.
+ * Optimizes uploaded photos on Web to crisp 1200x1200 HD WebP/JPEG (quality 0.92)
+ * so even 13+ photos in a single product stay razor-sharp while keeping payload compact (~50KB/photo)
+ * for instant Supabase + storage persistence.
  */
 async function optimizeHdImageIfWeb(
   dataUri: string,
-  maxSide: number = 2560,
-  quality: number = 0.98
+  maxSide: number = 1200,
+  quality: number = 0.92
 ): Promise<string> {
   if (
     Platform.OS !== 'web' ||
@@ -159,15 +185,10 @@ async function optimizeHdImageIfWeb(
           sqCtx.imageSmoothingEnabled = true;
           sqCtx.imageSmoothingQuality = 'high';
           sqCtx.drawImage(tmpCanvas, Math.round((side - upW) / 2), Math.round((side - upH) / 2));
-          resolve(sqCanvas.toDataURL('image/png') || dataUri);
+          resolve(encodeCanvasHd(sqCanvas, quality) || dataUri);
           return;
         }
 
-        // Case 2: Already HD/2K/4K and <= ~10MB -> keep 100% original untouched file!
-        if (origW <= maxSide && origH <= maxSide && dataUri.length < 10_500_000) {
-          resolve(dataUri);
-          return;
-        }
         let targetW = origW;
         let targetH = origH;
         if (targetW > maxSide || targetH > maxSide) {
@@ -190,6 +211,8 @@ async function optimizeHdImageIfWeb(
           resolve(dataUri);
           return;
         }
+        stepCtx.fillStyle = '#FFFDF9';
+        stepCtx.fillRect(0, 0, curW, curH);
         stepCtx.imageSmoothingEnabled = true;
         stepCtx.imageSmoothingQuality = 'high';
         stepCtx.drawImage(img, 0, 0, curW, curH);
@@ -218,13 +241,12 @@ async function optimizeHdImageIfWeb(
           resolve(dataUri);
           return;
         }
+        ctx.fillStyle = '#FFFDF9';
+        ctx.fillRect(0, 0, targetW, targetH);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(stepCanvas, 0, 0, curW, curH, 0, 0, targetW, targetH);
-        const isPng = dataUri.startsWith('data:image/png');
-        const out = isPng
-          ? canvas.toDataURL('image/png')
-          : canvas.toDataURL('image/jpeg', quality);
+        const out = encodeCanvasHd(canvas, quality);
         resolve(out || dataUri);
       };
       img.onerror = () => resolve(dataUri);
@@ -435,20 +457,7 @@ export function ProductStudioForm({
     ];
   });
 
-  const [accessoryOptions, setAccessoryOptions] = useState<
-    ProductAccessoryOption[]
-  >(() => {
-    if (
-      initialProduct?.accessoryOptions &&
-      initialProduct.accessoryOptions.length > 0
-    ) {
-      return initialProduct.accessoryOptions;
-    }
-    if (initialProduct) return [];
-    return [
-      { id: 'a_1', name: 'Ôm dâu tây đỏ', emoji: '🍓', priceDelta: 0 },
-    ];
-  });
+  const [paletteClickMode, setPaletteClickMode] = useState<'update' | 'add'>('update');
 
   const [extraPhotos, setExtraPhotos] = useState<string[]>(() => {
     if (!initialProduct?.gallery) return [];
@@ -600,33 +609,24 @@ export function ProductStudioForm({
     setActiveSlot({ type: 'color', index: Math.max(0, idx - 1) });
   };
 
-  /* ---- Handlers for Accessory Options ---- */
-  const handleAddAccessory = (preset?: {
-    name: string;
-    emoji: string;
-    priceDelta: number;
-  }) => {
-    const idx = accessoryOptions.length;
-    const next: ProductAccessoryOption = {
-      id: `a_${Date.now()}_${idx + 1}`,
-      name: preset?.name ?? '',
-      emoji: preset?.emoji ?? EMOJI_LIST[idx % EMOJI_LIST.length],
-      priceDelta: preset?.priceDelta ?? 0,
-    };
-    setAccessoryOptions([...accessoryOptions, next]);
-  };
-
-  const handleUpdateAccessory = (
-    idx: number,
-    patch: Partial<ProductAccessoryOption>
-  ) => {
-    setAccessoryOptions(
-      accessoryOptions.map((a, i) => (i === idx ? { ...a, ...patch } : a))
-    );
-  };
-
-  const handleRemoveAccessory = (idx: number) => {
-    setAccessoryOptions(accessoryOptions.filter((_, i) => i !== idx));
+  const handleSelectSwatchFromPalette = (sw: { name: string; hex: string }) => {
+    if (paletteClickMode === 'add') {
+      const nextIdx = colorOptions.length;
+      const newColor: ProductColorOption = {
+        id: `c_${Date.now()}_${nextIdx + 1}`,
+        name: sw.name,
+        hex: sw.hex,
+        image: undefined,
+      };
+      const next = [...colorOptions, newColor];
+      setColorOptions(next);
+      setActiveSlot({ type: 'color', index: next.length - 1 });
+      return;
+    }
+    handleUpdateActiveColor({
+      hex: sw.hex,
+      name: sw.name,
+    });
   };
 
   /* ---- Auto Generate Description ---- */
@@ -684,14 +684,7 @@ export function ProductStudioForm({
       image: c.image || firstAvailableImg || undefined,
     }));
 
-    const cleanAccessories = accessoryOptions
-      .filter((a) => a.name.trim().length > 0)
-      .map((a, idx) => ({
-        ...a,
-        id: a.id || `a_${idx + 1}`,
-        name: a.name.trim(),
-        priceDelta: Number(a.priceDelta || 0),
-      }));
+    const cleanAccessories: ProductAccessoryOption[] = [];
 
     const builtGallery: ProductGalleryItem[] = extraPhotos.map((uri, idx) => ({
       id: `g_extra_${idx + 1}`,
@@ -1328,132 +1321,84 @@ export function ProductStudioForm({
                     )}
                   </View>
 
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.swatchesMiniRow}>
-                    {COLOR_SWATCHES.map((sw) => {
-                      const isCurrent =
-                        (activeColor.hex || '').toLowerCase() ===
-                        sw.hex.toLowerCase();
-                      return (
-                        <TouchableOpacity
-                          key={sw.hex}
-                          style={[
-                            styles.swatchCircle,
-                            { backgroundColor: sw.hex },
-                            isCurrent && styles.swatchCircleSelected,
-                          ]}
-                          onPress={() =>
-                            handleUpdateActiveColor({
-                              hex: sw.hex,
-                              name: activeColor.name.startsWith('Màu')
-                                ? sw.name
-                                : activeColor.name,
-                            })
-                          }
-                        />
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-
-            {/* ACCESSORY OPTIONS (Matches product/[id].tsx accessory rows) */}
-            <View style={styles.fieldBlock}>
-              <View style={styles.labelWithActionRow}>
-                <Text style={styles.fieldLabel}>
-                  Phụ kiện gắn kèm ({accessoryOptions.length})
-                </Text>
-                <TouchableOpacity
-                  style={styles.sparkleMiniBtn}
-                  onPress={() => handleAddAccessory()}
-                  activeOpacity={0.8}>
-                  <Plus size={13} color="#4A3728" />
-                  <Text style={styles.sparkleMiniBtnText}>Thêm phụ kiện</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Quick 1-click preset pills */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.quickPresetsRow}>
-                {QUICK_ACCESSORIES.map((qa) => (
-                  <TouchableOpacity
-                    key={qa.name}
-                    style={styles.quickPresetChip}
-                    onPress={() => handleAddAccessory(qa)}>
-                    <Text style={styles.quickPresetChipText}>
-                      + {qa.emoji} {qa.name}
+                  <View style={styles.paletteHeaderRow}>
+                    <Text style={styles.paletteSubLabel}>
+                      Bảng {COLOR_SWATCHES.length} màu len thủ công:
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <View style={styles.accessoryList}>
-                {accessoryOptions.map((acc, idx) => (
-                  <View key={acc.id || idx} style={styles.accessoryRowCard}>
-                    <View style={styles.accessoryTopLine}>
+                    <View style={styles.paletteModeSwitch}>
                       <TouchableOpacity
-                        style={styles.emojiCycleBtn}
-                        onPress={() => {
-                          const cur = EMOJI_LIST.indexOf(acc.emoji || '🍓');
-                          const nextEm =
-                            EMOJI_LIST[(cur + 1) % EMOJI_LIST.length];
-                          handleUpdateAccessory(idx, { emoji: nextEm });
-                        }}>
-                        <Text style={{ fontSize: 16 }}>{acc.emoji || '🍓'}</Text>
+                        style={[
+                          styles.paletteModeBtn,
+                          paletteClickMode === 'update' &&
+                            styles.paletteModeBtnActive,
+                        ]}
+                        onPress={() => setPaletteClickMode('update')}
+                        activeOpacity={0.8}>
+                        <Text
+                          style={[
+                            styles.paletteModeBtnText,
+                            paletteClickMode === 'update' &&
+                              styles.paletteModeBtnTextActive,
+                          ]}>
+                          Đổi màu đang chọn
+                        </Text>
                       </TouchableOpacity>
-
-                      <TextInput
-                        style={styles.accNameInput}
-                        value={acc.name}
-                        onChangeText={(txt) =>
-                          handleUpdateAccessory(idx, { name: txt })
-                        }
-                        placeholder="Tên phụ kiện (VD: Ôm dâu tây đỏ)"
-                        placeholderTextColor={COLORS.lightText}
-                      />
-
                       <TouchableOpacity
-                        style={styles.deleteMiniBtn}
-                        onPress={() => handleRemoveAccessory(idx)}>
-                        <Trash2 size={14} color={COLORS.error} />
+                        style={[
+                          styles.paletteModeBtn,
+                          paletteClickMode === 'add' &&
+                            styles.paletteModeBtnActive,
+                        ]}
+                        onPress={() => setPaletteClickMode('add')}
+                        activeOpacity={0.8}>
+                        <Text
+                          style={[
+                            styles.paletteModeBtnText,
+                            paletteClickMode === 'add' &&
+                              styles.paletteModeBtnTextActive,
+                          ]}>
+                          + Chạm để thêm màu mới
+                        </Text>
                       </TouchableOpacity>
-                    </View>
-
-                    {/* Cycle / pick price delta */}
-                    <View style={styles.accPricePills}>
-                      {PRICE_DELTAS.map((val) => {
-                        const active = (acc.priceDelta ?? 0) === val;
-                        return (
-                          <TouchableOpacity
-                            key={val}
-                            style={[
-                              styles.accPriceMiniPill,
-                              active && styles.accPriceMiniPillActive,
-                            ]}
-                            onPress={() =>
-                              handleUpdateAccessory(idx, { priceDelta: val })
-                            }>
-                            <Text
-                              style={[
-                                styles.accPriceMiniText,
-                                active && styles.accPriceMiniTextActive,
-                              ]}>
-                              {val === 0
-                                ? 'Miễn phí'
-                                : `+${Math.round(val / 1000)}k`}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
                     </View>
                   </View>
-                ))}
-              </View>
+
+                  <View style={styles.swatchesGridWrap}>
+                    {COLOR_SWATCHES.map((sw) => {
+                      const isCurrent =
+                        paletteClickMode === 'update' &&
+                        (activeColor.hex || '').toLowerCase() ===
+                          sw.hex.toLowerCase() &&
+                        activeColor.name.trim().toLowerCase() ===
+                          sw.name.toLowerCase();
+                      return (
+                        <TouchableOpacity
+                          key={`${sw.name}_${sw.hex}`}
+                          style={[
+                            styles.swatchChipBtn,
+                            isCurrent && styles.swatchChipBtnSelected,
+                          ]}
+                          onPress={() => handleSelectSwatchFromPalette(sw)}
+                          activeOpacity={0.8}>
+                          <View
+                            style={[
+                              styles.swatchCircle,
+                              { backgroundColor: sw.hex },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.swatchChipText,
+                              isCurrent && styles.swatchChipTextSelected,
+                            ]}>
+                            {paletteClickMode === 'add' ? `+ ${sw.name}` : sw.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Primary Save Button */}
@@ -2002,109 +1947,85 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4A3728',
   },
-  swatchesMiniRow: {
+  paletteHeaderRow: {
     flexDirection: 'row',
-    gap: 7,
-    paddingVertical: 1,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  paletteSubLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#6E5A4B',
+  },
+  paletteModeSwitch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFE6DA',
+    padding: 3,
+    borderRadius: 999,
+  },
+  paletteModeBtn: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  paletteModeBtnActive: {
+    backgroundColor: '#5C4033',
+  },
+  paletteModeBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#5C4738',
+  },
+  paletteModeBtnTextActive: {
+    color: '#FFFDF9',
+    fontWeight: '700',
+  },
+  swatchesGridWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingTop: 2,
+  },
+  swatchChipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1,
+    borderColor: '#E2D4C4',
+  },
+  swatchChipBtnSelected: {
+    backgroundColor: '#F1E7DA',
+    borderColor: '#5C4033',
+    borderWidth: 1.5,
+  },
+  swatchChipText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#4A3728',
+  },
+  swatchChipTextSelected: {
+    fontWeight: '700',
+    color: '#3D2B1F',
   },
   swatchCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: 'rgba(61,43,31,0.22)',
   },
   swatchCircleSelected: {
     borderWidth: 2,
     borderColor: '#3D2B1F',
-    transform: [{ scale: 1.12 }],
-  },
-
-  /* Accessories List */
-  quickPresetsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  quickPresetChip: {
-    backgroundColor: '#FAF6F0',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#E2D4C4',
-  },
-  quickPresetChipText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    color: '#5C4738',
-  },
-  accessoryList: {
-    gap: 8,
-  },
-  accessoryRowCard: {
-    gap: 7,
-    backgroundColor: '#FAF6F0',
-    borderRadius: 12,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#E6DDD0',
-  },
-  accessoryTopLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  emojiCycleBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#FFFDF9',
-    borderWidth: 1,
-    borderColor: '#E2D4C4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  accNameInput: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: '#FFFDF9',
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#3D2B1F',
-    borderWidth: 1,
-    borderColor: '#E2D4C4',
-  },
-  accPricePills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 5,
-    paddingLeft: 2,
-  },
-  accPriceMiniPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#FFFDF9',
-    borderWidth: 1,
-    borderColor: '#DFCBB4',
-  },
-  accPriceMiniPillActive: {
-    backgroundColor: '#5C4033',
-    borderColor: '#5C4033',
-  },
-  accPriceMiniText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#5C4738',
-  },
-  accPriceMiniTextActive: {
-    color: '#FFFDF9',
-    fontWeight: '700',
   },
   deleteMiniBtn: {
     width: 28,

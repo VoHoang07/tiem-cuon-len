@@ -14,8 +14,112 @@ import { useAuth } from '@/store/AuthContext';
 
 const PAGE_SIZE = 50;
 const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v11';
+const CUSTOM_ADMIN_PRODUCTS_KEY = 'tcl_custom_admin_products_v1';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
 const VARIANTS_META_PREFIX = '__tcl_variants_v1__:';
+
+// In-memory map + IndexedDB + localStorage persistence so newly added/edited products NEVER disappear when syncProducts runs
+const customAdminProductsMemory = new Map<string, Product>();
+
+function saveCustomProductsToIdb(list: Product[]) {
+  if (typeof window === 'undefined' || !window.indexedDB) return;
+  try {
+    const req = window.indexedDB.open('tcl_products_idb_v1', 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('store')) {
+        db.createObjectStore('store');
+      }
+    };
+    req.onsuccess = () => {
+      try {
+        const db = req.result;
+        const tx = db.transaction('store', 'readwrite');
+        tx.objectStore('store').put(list, 'custom_products');
+      } catch {
+        // ignore
+      }
+    };
+  } catch {
+    // ignore
+  }
+}
+
+function loadCustomProductsFromIdb(): Promise<Product[]> {
+  if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    try {
+      const req = window.indexedDB.open('tcl_products_idb_v1', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('store')) {
+          db.createObjectStore('store');
+        }
+      };
+      req.onsuccess = () => {
+        try {
+          const db = req.result;
+          const tx = db.transaction('store', 'readonly');
+          const getReq = tx.objectStore('store').get('custom_products');
+          getReq.onsuccess = () => {
+            resolve(Array.isArray(getReq.result) ? (getReq.result as Product[]) : []);
+          };
+          getReq.onerror = () => resolve([]);
+        } catch {
+          resolve([]);
+        }
+      };
+      req.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+function loadCustomAdminProductsSync(): Product[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(CUSTOM_ADMIN_PRODUCTS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          for (const p of parsed) {
+            if (p && p.id) customAdminProductsMemory.set(p.id, p);
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [...customAdminProductsMemory.values()];
+}
+
+function persistCustomAdminProduct(product: Product) {
+  customAdminProductsMemory.set(product.id, product);
+  const all = [...customAdminProductsMemory.values()];
+  saveCustomProductsToIdb(all);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(CUSTOM_ADMIN_PRODUCTS_KEY, JSON.stringify(all));
+    }
+  } catch {
+    // If localStorage hits 5MB quota, IndexedDB + memory still hold 100% of the data
+  }
+}
+
+function removeCustomAdminProduct(id: string) {
+  customAdminProductsMemory.delete(id);
+  const all = [...customAdminProductsMemory.values()];
+  saveCustomProductsToIdb(all);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(CUSTOM_ADMIN_PRODUCTS_KEY, JSON.stringify(all));
+    }
+  } catch {
+    // ignore
+  }
+}
 
 function hydrateDbProduct(raw: Product): Product {
   if (!raw || !Array.isArray(raw.tags)) return raw;
@@ -104,6 +208,15 @@ function findMatchingMockProduct(
   const direct = mockById.get(item.id);
   if (direct) return direct;
 
+  // Custom products created by Admin (id starts with user_, except the seeded user_bunny_keychain_01) are NEVER mock products
+  if (
+    typeof item.id === 'string' &&
+    item.id.startsWith('user_') &&
+    item.id !== 'user_bunny_keychain_01'
+  ) {
+    return undefined;
+  }
+
   const mappedLegacyId = LEGACY_ID_TO_MOCK_ID[item.id];
   if (mappedLegacyId && mockById.get(mappedLegacyId)) {
     return mockById.get(mappedLegacyId);
@@ -183,9 +296,13 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
   // Track remote overrides for mock products (price, name, description, etc.)
   const remoteOverridesByMockId = new Map<string, Partial<Product>>();
   const customAdminProducts: Product[] = [];
+  const seenCustomIds = new Set<string>();
   const seenCustomNames = new Set<string>();
 
-  for (const rawItem of remoteOrCached) {
+  const localCustom = loadCustomAdminProductsSync();
+  const combinedSource = [...localCustom, ...remoteOrCached];
+
+  for (const rawItem of combinedSource) {
     const item = hydrateDbProduct(rawItem);
     if (!item || deletedIds.has(item.id) || RETIRED_PRODUCT_IDS.has(item.id)) {
       continue;
@@ -249,7 +366,8 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
     }
 
     const normName = (item.name || '').trim().toLowerCase();
-    if (!normName || seenCustomNames.has(normName)) continue;
+    if (!normName || seenCustomIds.has(item.id) || seenCustomNames.has(normName)) continue;
+    seenCustomIds.add(item.id);
     seenCustomNames.add(normName);
     customAdminProducts.push(item);
   }
@@ -472,6 +590,21 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
 
+  // Hydrate custom admin products from IndexedDB on mount in case localStorage was exceeded
+  useEffect(() => {
+    loadCustomProductsFromIdb().then((idbList) => {
+      if (idbList.length > 0) {
+        const deleted = getDeletedIds();
+        for (const p of idbList) {
+          if (p && p.id && !deleted.has(p.id)) {
+            customAdminProductsMemory.set(p.id, p);
+          }
+        }
+        setProducts((prev) => mergeWithMockProducts(prev));
+      }
+    });
+  }, []);
+
   // Sync shop reviews from Supabase partition
   useEffect(() => {
     supabase
@@ -610,21 +743,26 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchProducts]);
 
-  const addProduct = useCallback((product: Product) => {
+  const addProduct = useCallback(async (product: Product) => {
     if (role !== 'admin') return;
+    persistCustomAdminProduct(product);
     setProducts((prev) => {
-      const next = [product, ...prev];
+      const next = [product, ...prev.filter((p) => p.id !== product.id)];
       saveCachedProducts(next);
       return next;
     });
     const dbProduct = toDbProduct(product);
-    supabase.from('products').upsert(dbProduct, { onConflict: 'id' }).then(({ error }) => {
+    try {
+      const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
       if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm sản phẩm:', error.message);
-    }, () => {});
+    } catch {
+      // ignore network error; product is safely persisted in IndexedDB + memory
+    }
   }, [role]);
 
   const updateProduct = useCallback(async (id: string, product: Product) => {
     if (role !== 'admin') return;
+    persistCustomAdminProduct(product);
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === id ? product : p));
       saveCachedProducts(next);
@@ -641,6 +779,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const removeProduct = useCallback((id: string) => {
     if (role !== 'admin') return;
+    removeCustomAdminProduct(id);
     const deleted = getDeletedIds();
     deleted.add(id);
     saveDeletedIds(deleted);

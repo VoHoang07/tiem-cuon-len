@@ -202,10 +202,7 @@ export default function ProductDetailScreen() {
 
   const activeColor: ProductColorOption | null =
     colorOptions.find((c) => c.id === selectedColorId) ?? colorOptions[0] ?? null;
-  const activeAccessory: ProductAccessoryOption | null =
-    accessoryOptions.find((a) => a.id === selectedAccessoryId) ??
-    accessoryOptions[0] ??
-    null;
+  const activeAccessory: ProductAccessoryOption | null = null;
 
   const safeGalleryIndex =
     activeGalleryIndex >= 0 && activeGalleryIndex < galleryItems.length
@@ -667,55 +664,6 @@ export default function ProductDetailScreen() {
                             isSelected && styles.optionPillTextSelected,
                           ]}>
                           {c.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* 2. Responsive Accessory Selector (Attaches to Selected Color, Never Overflows on Mobile) */}
-            {accessoryOptions.length > 0 && (
-              <View style={styles.selectorGroup}>
-                <Text style={styles.selectorLabel}>
-                  Phụ kiện gắn kèm ({activeColor?.name ?? product.color}):{' '}
-                  <Text style={styles.selectorValue}>
-                    {activeAccessory?.name ?? 'Nguyên bản'}
-                  </Text>
-                </Text>
-                <View style={styles.accessoryList}>
-                  {accessoryOptions.map((acc) => {
-                    const isSelected = activeAccessory?.id === acc.id;
-                    return (
-                      <TouchableOpacity
-                        key={acc.id}
-                        style={[
-                          styles.accessoryRowBtn,
-                          isSelected && styles.accessoryRowBtnSelected,
-                        ]}
-                        onPress={() => handleSelectAccessory(acc)}
-                        activeOpacity={0.8}>
-                        <View style={styles.accessoryRowLeft}>
-                          <Text style={styles.optionEmoji}>
-                            {acc.emoji || '🎀'}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.accessoryRowLabel,
-                              isSelected && styles.optionPillTextSelected,
-                            ]}>
-                            {acc.name}
-                          </Text>
-                        </View>
-                        <Text
-                          style={[
-                            styles.accessoryRowPrice,
-                            isSelected && styles.accessoryRowPriceSelected,
-                          ]}>
-                          {acc.priceDelta && acc.priceDelta > 0
-                            ? `+${formatVND(acc.priceDelta)}`
-                            : 'Miễn phí'}
                         </Text>
                       </TouchableOpacity>
                     );
