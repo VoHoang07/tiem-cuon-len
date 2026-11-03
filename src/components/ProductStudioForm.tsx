@@ -72,9 +72,37 @@ function resolveImgUri(src: any): string | null {
   return null;
 }
 
+const ZODIAC_FILENAME_MAP: Record<string, string> = {
+  bach_duong: 'Bạch Dương ♈',
+  kim_nguu: 'Kim Ngưu ♉',
+  song_tu: 'Song Tử ♊',
+  cu_giai: 'Cự Giải ♋',
+  su_tu: 'Sư Tử ♌',
+  xu_nu: 'Xử Nữ ♍',
+  thien_binh: 'Thiên Bình ♎',
+  thien_yet: 'Thiên Yết ♏',
+  nhan_ma: 'Nhân Mã ♐',
+  ma_ket: 'Ma Kết ♑',
+  bao_binh: 'Bảo Bình ♒',
+  song_ngu: 'Song Ngư ♓',
+};
+
+function formatVariantNameFromFilename(fileName: string, fallbackIdx: number): string {
+  const base = fileName
+    .replace(/\.[^.]+$/, '')
+    .replace(/^\d+[\s_-]*/, '')
+    .trim();
+  const norm = base.toLowerCase().replace(/[\s-]+/g, '_');
+  if (ZODIAC_FILENAME_MAP[norm]) {
+    return ZODIAC_FILENAME_MAP[norm];
+  }
+  const readable = base.replace(/[_-]+/g, ' ').trim();
+  return readable || `Mẫu #${fallbackIdx + 1}`;
+}
+
 /**
- * Keep 100% lossless original file on Web unless the file is massive (> 10MB base64).
- * When downscaling is needed, use progressive 2x step-down canvas scaling up to 2560px at 0.98 quality.
+ * Keep 100% lossless original file on Web for normal HD/2K/4K photos.
+ * If an uploaded photo is small (< 750px, e.g. 247x225), automatically upscale + pad to 1080x1080 HD so it never blurs or gets cropped.
  */
 async function optimizeHdImageIfWeb(
   dataUri: string,
@@ -88,17 +116,55 @@ async function optimizeHdImageIfWeb(
   ) {
     return dataUri;
   }
-  // Keep 100% original untouched file for all normal HD/2K/4K photos (< ~10MB base64)
-  if (dataUri.length < 10_500_000) {
-    return dataUri;
-  }
   return new Promise((resolve) => {
     try {
       const img = new window.Image();
       img.onload = () => {
         const origW = img.width || maxSide;
         const origH = img.height || maxSide;
-        if (origW <= maxSide && origH <= maxSide) {
+
+        // Case 1: Small image (< 750px, e.g. 247x225 cropped cards) -> Super-upscale to 1080x1080 1:1 square HD
+        if (origW < 750 && origH < 750) {
+          const scale = Math.min(4, Math.max(2, Math.ceil(1000 / Math.max(origW, origH))));
+          const upW = origW * scale;
+          const upH = origH * scale;
+
+          const tmpCanvas = document.createElement('canvas');
+          tmpCanvas.width = upW;
+          tmpCanvas.height = upH;
+          const tmpCtx = tmpCanvas.getContext('2d');
+          if (!tmpCtx) {
+            resolve(dataUri);
+            return;
+          }
+          tmpCtx.imageSmoothingEnabled = true;
+          tmpCtx.imageSmoothingQuality = 'high';
+          tmpCtx.drawImage(img, 0, 0, upW, upH);
+
+          // Sample corner pixel to pad into a clean 1:1 square so objectFit: cover never crops edges
+          const corner = tmpCtx.getImageData(Math.min(8, upW - 1), Math.min(8, upH - 1), 1, 1).data;
+          const bgCss = `rgb(${corner[0]}, ${corner[1]}, ${corner[2]})`;
+          const side = Math.round(Math.max(upW, upH) * 1.04);
+
+          const sqCanvas = document.createElement('canvas');
+          sqCanvas.width = side;
+          sqCanvas.height = side;
+          const sqCtx = sqCanvas.getContext('2d');
+          if (!sqCtx) {
+            resolve(dataUri);
+            return;
+          }
+          sqCtx.fillStyle = bgCss;
+          sqCtx.fillRect(0, 0, side, side);
+          sqCtx.imageSmoothingEnabled = true;
+          sqCtx.imageSmoothingQuality = 'high';
+          sqCtx.drawImage(tmpCanvas, Math.round((side - upW) / 2), Math.round((side - upH) / 2));
+          resolve(sqCanvas.toDataURL('image/png') || dataUri);
+          return;
+        }
+
+        // Case 2: Already HD/2K/4K and <= ~10MB -> keep 100% original untouched file!
+        if (origW <= maxSide && origH <= maxSide && dataUri.length < 10_500_000) {
           resolve(dataUri);
           return;
         }
@@ -167,6 +233,54 @@ async function optimizeHdImageIfWeb(
       resolve(dataUri);
     }
   });
+}
+
+async function pickMultipleHdImages(): Promise<{ uri: string; fileName: string }[]> {
+  if (
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined'
+  ) {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = 'image/png,image/jpeg,image/webp,image/avif,image/*';
+      let settled = false;
+      const finish = (items: { uri: string; fileName: string }[]) => {
+        if (settled) return;
+        settled = true;
+        resolve(items);
+      };
+      input.onchange = async () => {
+        const fileList = input.files ? Array.from(input.files) : [];
+        if (fileList.length === 0) {
+          finish([]);
+          return;
+        }
+        const results: { uri: string; fileName: string }[] = [];
+        for (const file of fileList) {
+          const dataUri = await new Promise<string | null>((resFile) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              resFile(typeof reader.result === 'string' ? reader.result : null);
+            reader.onerror = () => resFile(null);
+            reader.readAsDataURL(file);
+          });
+          if (dataUri) {
+            const optimized = await optimizeHdImageIfWeb(dataUri);
+            results.push({ uri: optimized, fileName: file.name });
+          }
+        }
+        finish(results);
+      };
+      input.oncancel = () => finish([]);
+      input.click();
+    });
+  }
+
+  const single = await pickHdImage(false);
+  return single ? [{ uri: single, fileName: '' }] : [];
 }
 
 async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
@@ -346,10 +460,18 @@ export function ProductStudioForm({
       .map((g) => g.image as string);
   });
 
-  // Track whether the admin is currently viewing/editing a Color slot or an Extra Angle slot
+  const [coverImage, setCoverImage] = useState<string | null>(() => {
+    return typeof initialProduct?.image === 'string'
+      ? initialProduct.image
+      : null;
+  });
+
+  // Track whether the admin is currently viewing/editing the Cover photo, a Color slot, or an Extra Angle slot
   const [activeSlot, setActiveSlot] = useState<
-    { type: 'color'; index: number } | { type: 'extra'; index: number }
-  >({ type: 'color', index: 0 });
+    | { type: 'cover' }
+    | { type: 'color'; index: number }
+    | { type: 'extra'; index: number }
+  >({ type: 'cover' });
 
   const safeColorIdx =
     activeSlot.type === 'color' &&
@@ -361,16 +483,20 @@ export function ProductStudioForm({
   const activeColor = colorOptions[safeColorIdx] ?? colorOptions[0];
 
   const currentDisplayImage =
-    activeSlot.type === 'extra'
+    activeSlot.type === 'cover'
+      ? coverImage || initialProduct?.image || colorOptions.find((c) => c.image)?.image
+      : activeSlot.type === 'extra'
       ? extraPhotos[activeSlot.index]
-      : activeColor?.image || colorOptions.find((c) => c.image)?.image || initialProduct?.image;
+      : activeColor?.image || coverImage || initialProduct?.image;
 
   /* ---- Handlers for Photo Selection ---- */
   const handlePickCurrentSlotPhoto = async (useCamera: boolean = false) => {
     const uri = await pickHdImage(useCamera);
     if (!uri) return;
 
-    if (activeSlot.type === 'extra') {
+    if (activeSlot.type === 'cover') {
+      setCoverImage(uri);
+    } else if (activeSlot.type === 'extra') {
       const next = [...extraPhotos];
       next[activeSlot.index] = uri;
       setExtraPhotos(next);
@@ -379,21 +505,55 @@ export function ProductStudioForm({
         i === safeColorIdx ? { ...c, image: uri } : c
       );
       setColorOptions(next);
+      if (!coverImage) {
+        setCoverImage(uri);
+      }
     }
   };
 
   const handleAddExtraAnglePhoto = async () => {
-    const uri = await pickHdImage(false);
-    if (!uri) return;
-    const next = [...extraPhotos, uri];
+    const picked = await pickMultipleHdImages();
+    if (picked.length === 0) return;
+    const uris = picked.map((p) => p.uri);
+    const next = [...extraPhotos, ...uris];
     setExtraPhotos(next);
     setActiveSlot({ type: 'extra', index: next.length - 1 });
+  };
+
+  const handleBatchAddColorPhotos = async () => {
+    const picked = await pickMultipleHdImages();
+    if (picked.length === 0) return;
+
+    const hasOnlyEmptyDefaults =
+      colorOptions.length <= 2 &&
+      colorOptions.every((c) => !c.image && (c.name === 'Kem Sữa' || c.name === 'Hồng Phấn'));
+
+    const baseList = hasOnlyEmptyDefaults ? [] : [...colorOptions];
+    const newItems: ProductColorOption[] = picked.map((item, i) => {
+      const idx = baseList.length + i;
+      const inferredName = item.fileName
+        ? formatVariantNameFromFilename(item.fileName, idx)
+        : COLOR_SWATCHES[idx % COLOR_SWATCHES.length].name;
+      return {
+        id: `c_${Date.now()}_${idx + 1}`,
+        name: inferredName,
+        hex: inferColorHex(inferredName, idx),
+        image: item.uri,
+      };
+    });
+
+    const next = [...baseList, ...newItems];
+    setColorOptions(next);
+    if (!coverImage && newItems[0]?.image) {
+      setCoverImage(newItems[0].image);
+    }
+    setActiveSlot({ type: 'color', index: next.length - 1 });
   };
 
   const handleRemoveExtraPhoto = (idx: number) => {
     const next = extraPhotos.filter((_, i) => i !== idx);
     setExtraPhotos(next);
-    setActiveSlot({ type: 'color', index: 0 });
+    setActiveSlot({ type: 'cover' });
   };
 
   /* ---- Handlers for Color Options ---- */
@@ -512,6 +672,7 @@ export function ProductStudioForm({
       }));
 
     const firstAvailableImg =
+      coverImage ||
       cleanColors.find((c) => Boolean(c.image))?.image ||
       extraPhotos[0] ||
       initialProduct?.image ||
@@ -666,17 +827,25 @@ export function ProductStudioForm({
                   activeOpacity={0.8}>
                   <ImageIcon size={44} color="#7A5230" />
                   <Text style={styles.emptyImageTitle}>
-                    Bấm để tải ảnh sắc nét (HD)
+                    {activeSlot.type === 'cover'
+                      ? 'Bấm để chọn Ảnh Trang Bìa (Đầu tiên)'
+                      : 'Bấm để tải ảnh sắc nét (HD)'}
                   </Text>
                   <Text style={styles.emptyImageSub}>
-                    Đang chọn màu: {activeColor?.name || 'Màu #1'}
+                    {activeSlot.type === 'cover'
+                      ? '🌟 Ảnh bìa hiển thị ngoài trang chủ & đầu trang sản phẩm'
+                      : `Đang chọn phân loại: ${activeColor?.name || 'Màu #1'}`}
                   </Text>
                 </TouchableOpacity>
               )}
 
               {/* Top-left slot indicator */}
               <View style={styles.slotBadge}>
-                {activeSlot.type === 'color' ? (
+                {activeSlot.type === 'cover' ? (
+                  <Text style={styles.slotBadgeText}>
+                    🌟 Ảnh Trang Bìa (Hiển thị đầu tiên)
+                  </Text>
+                ) : activeSlot.type === 'color' ? (
                   <>
                     <View
                       style={[
@@ -685,7 +854,7 @@ export function ProductStudioForm({
                       ]}
                     />
                     <Text style={styles.slotBadgeText}>
-                      Ảnh màu: {activeColor?.name || 'Màu #1'}
+                      Ảnh phân loại: {activeColor?.name || 'Màu #1'}
                     </Text>
                   </>
                 ) : (
@@ -703,7 +872,13 @@ export function ProductStudioForm({
                   activeOpacity={0.85}>
                   <ImageIcon size={14} color="#3D2B1F" />
                   <Text style={styles.photoOverlayBtnText}>
-                    {currentDisplayImage ? 'Đổi ảnh mẫu này' : 'Chọn ảnh từ máy'}
+                    {activeSlot.type === 'cover'
+                      ? coverImage
+                        ? 'Đổi ảnh bìa'
+                        : 'Chọn ảnh bìa'
+                      : currentDisplayImage
+                      ? 'Đổi ảnh mẫu này'
+                      : 'Chọn ảnh từ máy'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -716,17 +891,87 @@ export function ProductStudioForm({
               </View>
             </View>
 
-            {/* Thumbnail Strip: Color Thumbnails + Extra Angle Thumbnails + Add Button */}
+            {/* Thumbnail Strip: 1. Cover Photo + 2. Color Thumbnails + 3. Extra Angle Thumbnails + Add Button */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.thumbRow}>
+              {/* 1. Dedicated Cover Photo Slot (Trang Bìa) */}
+              <TouchableOpacity
+                style={styles.thumbItemWrap}
+                onPress={() => setActiveSlot({ type: 'cover' })}
+                activeOpacity={0.8}>
+                <View
+                  style={[
+                    styles.thumbBox,
+                    activeSlot.type === 'cover' && styles.thumbBoxActive,
+                  ]}>
+                  {(coverImage || initialProduct?.image) ? (
+                    Platform.OS === 'web' &&
+                    resolveImgUri(coverImage || initialProduct?.image) ? (
+                      React.createElement('img', {
+                        src: resolveImgUri(coverImage || initialProduct?.image)!,
+                        alt: 'Ảnh bìa',
+                        decoding: 'async',
+                        style: {
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                        },
+                      })
+                    ) : (
+                      <Image
+                        source={
+                          typeof (coverImage || initialProduct?.image) === 'string'
+                            ? { uri: (coverImage || initialProduct?.image) as string }
+                            : ((coverImage || initialProduct?.image) as any)
+                        }
+                        style={styles.thumbImg}
+                        resizeMode="cover"
+                      />
+                    )
+                  ) : (
+                    <View style={styles.thumbEmpty}>
+                      <ImageIcon size={16} color="#D97706" />
+                    </View>
+                  )}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      backgroundColor: 'rgba(180, 83, 9, 0.88)',
+                      paddingVertical: 2,
+                      alignItems: 'center',
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 9,
+                        fontWeight: '900',
+                        color: '#FFFBEB',
+                        letterSpacing: 0.4,
+                      }}>
+                      ★ BÌA
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.thumbLabelText,
+                    { fontWeight: '800', color: '#92400E' },
+                  ]}
+                  numberOfLines={1}>
+                  Ảnh bìa
+                </Text>
+              </TouchableOpacity>
+
+              {/* 2. Color / Variant Thumbnails */}
               {colorOptions.map((c, idx) => {
                 const isSelected =
                   activeSlot.type === 'color' && safeColorIdx === idx;
-                const thumbImg =
-                  c.image ||
-                  (idx === 0 ? initialProduct?.image : undefined);
+                const thumbImg = c.image;
                 return (
                   <TouchableOpacity
                     key={c.id || idx}
@@ -1027,7 +1272,20 @@ export function ProductStudioForm({
                   onPress={handleAddColorOption}
                   activeOpacity={0.8}>
                   <Plus size={14} color="#4A3728" />
-                  <Text style={styles.addOptionPillText}>Thêm màu</Text>
+                  <Text style={styles.addOptionPillText}>Thêm màu / mẫu</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.addOptionPill,
+                    { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
+                  ]}
+                  onPress={handleBatchAddColorPhotos}
+                  activeOpacity={0.8}>
+                  <ImageIcon size={13} color="#92400E" />
+                  <Text style={[styles.addOptionPillText, { color: '#92400E' }]}>
+                    Chọn nhiều ảnh phân loại cùng lúc
+                  </Text>
                 </TouchableOpacity>
               </View>
 

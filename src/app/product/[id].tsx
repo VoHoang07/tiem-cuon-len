@@ -122,6 +122,17 @@ export default function ProductDetailScreen() {
     const c0 = colorOptions[0];
     const a0 = accessoryOptions[0];
 
+    // 1. Always put the dedicated Cover Photo (Trang Bìa) first if it differs from the first color option's photo
+    if (product.image && (!c0?.image || c0.image !== product.image)) {
+      items.push({
+        id: 'g_cover',
+        label: 'Ảnh bìa',
+        angleTag: 'Ảnh bìa',
+        image: product.image,
+        zoomMode: 'normal',
+      });
+    }
+
     if (colorOptions.length > 0) {
       colorOptions.forEach((c, idx) => {
         const img = c.image || product.image;
