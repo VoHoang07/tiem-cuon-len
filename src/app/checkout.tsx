@@ -163,6 +163,58 @@ export default function CheckoutScreen() {
     );
   }, [selectedAddress?.city]);
 
+  // Auto-reset to standard shipping if customer switches to a non-HCM address
+  useEffect(() => {
+    if (!isHCM && shippingOption === 'express') {
+      setShippingOption('standard');
+    }
+  }, [isHCM, shippingOption]);
+
+  // Estimate Grab/Ahamove 2h fee from Shop (Quận 8, TP.HCM) to customer's District
+  const expressEstimate = useMemo(() => {
+    const distRaw = (selectedAddress?.district || '').trim();
+    const d = distRaw.toLowerCase();
+    if (!d) {
+      return {
+        range: '~20k – 45k',
+        sub: 'Grab / Ahamove • Tiệm báo giá trước khi gọi xe',
+      };
+    }
+    const isNear =
+      d.includes('quận 8') ||
+      d.includes('quận 5') ||
+      d.includes('quận 6') ||
+      d.includes('quận 7') ||
+      d.includes('quận 4') ||
+      d.includes('quận 10') ||
+      d.includes('quận 11') ||
+      (d.includes('quận 1') && !d.includes('quận 12')) ||
+      d.includes('bình chánh');
+    if (isNear) {
+      return {
+        range: '~18k – 30k',
+        sub: `Tới ${distRaw} • Tiệm báo giá trước khi gọi xe`,
+      };
+    }
+    const isMid =
+      d.includes('quận 3') ||
+      d.includes('phú nhuận') ||
+      d.includes('bình thạnh') ||
+      d.includes('tân bình') ||
+      d.includes('tân phú') ||
+      d.includes('nhà bè');
+    if (isMid) {
+      return {
+        range: '~30k – 45k',
+        sub: `Tới ${distRaw} • Tiệm báo giá trước khi gọi xe`,
+      };
+    }
+    return {
+      range: '~45k – 65k',
+      sub: `Tới ${distRaw} • Tiệm báo giá trước khi gọi xe`,
+    };
+  }, [selectedAddress?.district]);
+
   const standardShippingFee = useMemo(() => {
     if (
       shippingConfig.freeshipEnabled &&
@@ -183,9 +235,9 @@ export default function CheckoutScreen() {
   const shippingMethodLabel = useMemo(() => {
     if (shippingOption === 'pickup') return 'Nhận tại Tiệm (Miễn phí)';
     if (shippingOption === 'express')
-      return 'Giao Hỏa Tốc 2h (Khách trả cước theo App)';
+      return `Giao Hỏa Tốc 2h (Dự kiến ${expressEstimate.range} - Trả khi nhận)`;
     return isHCM ? 'Giao tiêu chuẩn Nội thành' : 'Giao tiêu chuẩn Toàn quốc';
-  }, [shippingOption, isHCM]);
+  }, [shippingOption, isHCM, expressEstimate.range]);
 
   const handleSaveShippingConfig = async () => {
     const hcm = Math.max(0, parseInt(draftHcmFee.replace(/[^0-9]/g, ''), 10) || 0);
@@ -524,55 +576,60 @@ export default function CheckoutScreen() {
               priceLabel:
                 standardShippingFee === 0 ? 'Miễn phí' : formatVND(standardShippingFee),
               isFree: standardShippingFee === 0,
+              show: true,
             },
             {
               id: 'express' as const,
               icon: <Zap size={20} color="#D97706" />,
               iconBg: '#FEF3C7',
-              title: 'Giao Hỏa Tốc 2h',
-              sub: 'Grab / Ahamove • Trả cước trực tiếp cho tài xế',
-              priceLabel: 'Trả khi nhận',
+              title: 'Giao Hỏa Tốc 2h (TP.HCM)',
+              sub: expressEstimate.sub,
+              priceLabel: `Dự kiến ${expressEstimate.range}`,
               isFree: false,
+              show: isHCM,
             },
             {
               id: 'pickup' as const,
               icon: <Store size={20} color="#765341" />,
               iconBg: '#F5EFE6',
-              title: 'Nhận tại tiệm',
+              title: 'Nhận tại tiệm (Quận 8)',
               sub: 'Tự qua lấy khi tiệm chuẩn bị xong',
               priceLabel: 'Miễn phí',
               isFree: true,
+              show: true,
             },
-          ].map((opt) => {
-            const active = shippingOption === opt.id;
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                style={[styles.paymentOption, active && styles.paymentOptionSelected]}
-                onPress={() => setShippingOption(opt.id)}
-                activeOpacity={0.8}>
-                <View style={[styles.paymentOptionLeft, { flex: 1 }]}>
-                  <View style={[styles.paymentIconWrap, { backgroundColor: opt.iconBg }]}>
-                    {opt.icon}
+          ]
+            .filter((opt) => opt.show)
+            .map((opt) => {
+              const active = shippingOption === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[styles.paymentOption, active && styles.paymentOptionSelected]}
+                  onPress={() => setShippingOption(opt.id)}
+                  activeOpacity={0.8}>
+                  <View style={[styles.paymentOptionLeft, { flex: 1 }]}>
+                    <View style={[styles.paymentIconWrap, { backgroundColor: opt.iconBg }]}>
+                      {opt.icon}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.paymentText}>{opt.title}</Text>
+                      <Text style={styles.shippingSubtext}>{opt.sub}</Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.paymentText}>{opt.title}</Text>
-                    <Text style={styles.shippingSubtext}>{opt.sub}</Text>
+                  <View style={styles.shippingRight}>
+                    <Text
+                      style={[
+                        styles.shippingFeeTag,
+                        opt.isFree && { color: '#4E8C40' },
+                      ]}>
+                      {opt.priceLabel}
+                    </Text>
+                    {active && <Check size={18} color={COLORS.primary} />}
                   </View>
-                </View>
-                <View style={styles.shippingRight}>
-                  <Text
-                    style={[
-                      styles.shippingFeeTag,
-                      opt.isFree && { color: '#4E8C40' },
-                    ]}>
-                    {opt.priceLabel}
-                  </Text>
-                  {active && <Check size={18} color={COLORS.primary} />}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                </TouchableOpacity>
+              );
+            })}
         </View>
 
         {/* Payment Method — dynamic from Supabase */}
@@ -656,7 +713,7 @@ export default function CheckoutScreen() {
                 shippingOption !== 'express' && shippingFee === 0 && { color: '#4E8C40' },
               ]}>
               {shippingOption === 'express'
-                ? 'Trả theo App khi nhận'
+                ? `Dự kiến ${expressEstimate.range} (trả khi nhận)`
                 : shippingFee === 0
                   ? 'Miễn phí (0₫)'
                   : formatVND(shippingFee)}
