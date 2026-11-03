@@ -86,7 +86,7 @@ export default function CheckoutScreen() {
     shippingConfig,
     updateShippingConfig,
   } = usePaymentMethods();
-  const { openChat, sendMessage, myMessages } = useChat();
+  const { openChat, sendMessage, myMessages, isOpen: isChatOpen } = useChat();
   const { width: rawWidth } = useWindowDimensions();
   const windowWidth =
     rawWidth > 0
@@ -150,6 +150,7 @@ export default function CheckoutScreen() {
   const [shippingOption, setShippingOption] = useState<'standard' | 'express' | 'pickup'>('standard');
   const [hasAskedExpressChat, setHasAskedExpressChat] = useState(false);
   const [expressFeeConfirmed, setExpressFeeConfirmed] = useState(false);
+  const [showExpressCard, setShowExpressCard] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
@@ -159,11 +160,13 @@ export default function CheckoutScreen() {
   useEffect(() => {
     setExpressFeeConfirmed(false);
     setHasAskedExpressChat(false);
+    setShowExpressCard(false);
   }, [selectedAddressId]);
 
   useEffect(() => {
     if (shippingOption !== 'express') {
       setExpressFeeConfirmed(false);
+      setShowExpressCard(false);
     }
   }, [shippingOption]);
 
@@ -425,7 +428,7 @@ export default function CheckoutScreen() {
       return;
     }
     if (shippingOption === 'express' && !expressFeeConfirmed && !bypassExpressCheck) {
-      handleAskExpressFeeInChat();
+      setShowExpressCard(true);
       return;
     }
     if (Date.now() - lastOrderAtRef.current < 15000) {
@@ -976,77 +979,23 @@ export default function CheckoutScreen() {
 
               {/* Pay Button inside Summary Card on Desktop, or below on Mobile */}
               <View style={isDesktop ? styles.desktopPayBtnWrap : styles.mobilePayBtnWrap}>
-                {shippingOption === 'express' && !expressFeeConfirmed ? (
-                  <View style={[styles.expressBottomGateWrap, isDesktop && { marginHorizontal: 0, marginBottom: 0 }]}>
-                    {!hasAskedExpressChat && !latestAdminReply ? (
-                      <>
-                        <TouchableOpacity
-                          style={[
-                            styles.payBtn,
-                            styles.payBtnExpressChat,
-                            !hasAddress && styles.payBtnDisabled,
-                          ]}
-                          onPress={handleAskExpressFeeInChat}
-                          disabled={!hasAddress}
-                          activeOpacity={0.85}>
-                          <Text style={styles.payBtnText}>
-                            {hasAddress
-                              ? '💬 Nhắn Chat hỏi giá Ship Hỏa Tốc'
-                              : 'Thêm địa chỉ để hỏi giá Ship'}
-                          </Text>
-                        </TouchableOpacity>
-                        <Text style={styles.expressMinimalHint}>
-                          Nhắn Tiệm báo giá ship thực tế qua Chat trước khi thanh toán
-                        </Text>
-                      </>
-                    ) : (
-                      <View style={styles.expressBottomConfirmGroup}>
-                        <View style={styles.expressCompactReplyRow}>
-                          <Text style={styles.expressCompactReplyText} numberOfLines={2}>
-                            {latestAdminReply
-                              ? `💬 Tiệm báo: "${latestAdminReply.text}"`
-                              : '💬 Đã gửi yêu cầu hỏi giá Ship qua Chat'}
-                          </Text>
-                          <TouchableOpacity onPress={handleAskExpressFeeInChat}>
-                            <Text style={styles.expressCompactOpenLink}>Mở Chat</Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity
-                          style={styles.expressBottomAgreeBtn}
-                          onPress={() => {
-                            setExpressFeeConfirmed(true);
-                            handlePayment(true);
-                          }}
-                          activeOpacity={0.85}>
-                          <Text style={styles.expressBottomAgreeText}>
-                            {selectedPayment?.type === 'cod'
-                              ? `✅ Đồng ý giá Ship & Đặt COD (${formatVND(checkoutTotal)})`
-                              : `✅ Đồng ý giá Ship & Quét QR (${formatVND(checkoutTotal)})`}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.payBtn,
-                      isDesktop && styles.payBtnDesktop,
-                      !hasAddress && styles.payBtnDisabled,
-                    ]}
-                    onPress={() => handlePayment()}
-                    disabled={!hasAddress}
-                    activeOpacity={0.8}>
-                    <Text style={styles.payBtnText}>
-                      {hasAddress
-                        ? selectedPayment?.type === 'cod'
-                          ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
-                          : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
-                        : 'Thêm địa chỉ để thanh toán'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={[
+                    styles.payBtn,
+                    isDesktop && styles.payBtnDesktop,
+                    !hasAddress && styles.payBtnDisabled,
+                  ]}
+                  onPress={() => handlePayment()}
+                  disabled={!hasAddress}
+                  activeOpacity={0.8}>
+                  <Text style={styles.payBtnText}>
+                    {hasAddress
+                      ? selectedPayment?.type === 'cod'
+                        ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
+                        : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
+                      : 'Thêm địa chỉ để thanh toán'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -1054,6 +1003,101 @@ export default function CheckoutScreen() {
 
         <View style={{ height: isDesktop ? 32 : 60 }} />
       </ScrollView>
+
+      {/* Express 2h Confirmation Card Overlay when customer clicks Thanh toán */}
+      {showExpressCard && !isChatOpen && (
+        <View style={styles.expressOverlayBackdrop}>
+          <View style={styles.expressOverlayCard}>
+            <View style={styles.expressOverlayHeader}>
+              <View style={styles.expressOverlayIconWrap}>
+                <Zap size={20} color="#D97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.expressOverlayTitle}>
+                  Xác nhận giá Ship Hỏa Tốc 2h
+                </Text>
+                <Text style={styles.expressOverlaySub}>
+                  Dự kiến tới {selectedAddress?.district || 'TP.HCM'}: {expressEstimate.range}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.expressOverlayCloseBtn}
+                onPress={() => setShowExpressCard(false)}>
+                <Text style={styles.expressOverlayCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Clickable Card to jump to Chat with Shop */}
+            <TouchableOpacity
+              style={styles.expressChatJumpCard}
+              onPress={handleAskExpressFeeInChat}
+              activeOpacity={0.85}>
+              <View style={styles.expressChatJumpIcon}>
+                <MessageCircle size={22} color="#FAF5EE" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.expressChatJumpTitle}>
+                  💬 Nhấn vào đây để Chat với Shop biết giá Hỏa Tốc
+                </Text>
+                <Text style={styles.expressChatJumpDesc}>
+                  {hasAskedExpressChat || latestAdminReply
+                    ? 'Đã mở hội thoại Hỏa Tốc • Nhấn để xem tin nhắn báo giá của Shop'
+                    : 'Nhảy sang khung Chat gửi địa chỉ để Shop báo giá ship chính xác'}
+                </Text>
+              </View>
+              <ChevronRight size={18} color="#92400E" />
+            </TouchableOpacity>
+
+            {latestAdminReply ? (
+              <View style={styles.expressReplyBanner}>
+                <Text style={styles.expressReplyBannerText} numberOfLines={3}>
+                  💬 Shop báo: &ldquo;{latestAdminReply.text}&rdquo;
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Confirm Express Payment Button */}
+            <TouchableOpacity
+              style={[
+                styles.expressConfirmPayBtn,
+                !hasAskedExpressChat && !latestAdminReply && styles.expressConfirmPayBtnLocked,
+              ]}
+              onPress={() => {
+                if (!hasAskedExpressChat && !latestAdminReply) {
+                  Alert.alert(
+                    'Chat với Shop trước nhé',
+                    'Vui lòng nhấn vào thẻ "Chat với Shop biết giá Hỏa Tốc" ở trên để hỏi giá ship trước khi xác nhận thanh toán.'
+                  );
+                  return;
+                }
+                setExpressFeeConfirmed(true);
+                setShowExpressCard(false);
+                handlePayment(true);
+              }}
+              activeOpacity={0.85}>
+              <Text style={styles.expressConfirmPayBtnText}>
+                {hasAskedExpressChat || latestAdminReply
+                  ? selectedPayment?.type === 'cod'
+                    ? `✅ Xác nhận thanh toán Hỏa Tốc • COD (${formatVND(checkoutTotal)})`
+                    : `✅ Xác nhận thanh toán Hỏa Tốc • Quét QR (${formatVND(checkoutTotal)})`
+                  : '🔒 Xác nhận thanh toán Hỏa Tốc (Cần bấm Chat với Shop trước)'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Option to switch to Standard Shipping and pay normally */}
+            <TouchableOpacity
+              style={styles.expressSwitchMethodBtn}
+              onPress={() => {
+                setShippingOption('standard');
+                setShowExpressCard(false);
+              }}>
+              <Text style={styles.expressSwitchMethodText}>
+                🔄 Đổi sang Giao tiêu chuẩn (Thanh toán bình thường)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1826,4 +1870,136 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   goHomeBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.primary },
+  expressOverlayBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(44, 30, 20, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    zIndex: 999,
+  },
+  expressOverlayCard: {
+    width: '100%',
+    maxWidth: 440,
+    backgroundColor: '#FFFDF9',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: '#E5D5C3',
+    gap: 14,
+    ...SHADOWS.large,
+  },
+  expressOverlayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  expressOverlayIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  expressOverlayTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#2C1E14',
+  },
+  expressOverlaySub: {
+    fontSize: 12.5,
+    color: '#92400E',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  expressOverlayCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expressOverlayCloseText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#5C4332',
+  },
+  expressChatJumpCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    borderRadius: 16,
+    padding: 14,
+  },
+  expressChatJumpIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#D97706',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expressChatJumpTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#78350F',
+  },
+  expressChatJumpDesc: {
+    fontSize: 12,
+    color: '#92400E',
+    marginTop: 3,
+    lineHeight: 17,
+  },
+  expressReplyBanner: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  expressReplyBannerText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  expressConfirmPayBtn: {
+    backgroundColor: '#059669',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    ...SHADOWS.small,
+  },
+  expressConfirmPayBtnLocked: {
+    backgroundColor: '#9CA3AF',
+  },
+  expressConfirmPayBtnText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  expressSwitchMethodBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F3ECE2',
+  },
+  expressSwitchMethodText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#4A3525',
+  },
 });

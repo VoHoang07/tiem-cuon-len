@@ -135,7 +135,7 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
         <View style={styles.decorCircleLarge} pointerEvents="none" />
         <View style={styles.decorCircleSmall} pointerEvents="none" />
 
-        <View style={styles.bespokeContentLeft}>
+        <View style={[styles.bespokeContentLeft, !isMobile && styles.bespokeContentLeftDesktop]}>
           <View style={styles.badgePill}>
             <Sparkles size={12} color="#3D2B1F" />
             <Text style={styles.badgePillText}>
@@ -318,7 +318,7 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
 
         <View style={[styles.shopReviewsGrid, isMobile && styles.shopReviewsGridMobile]}>
           {shopReviews.slice(0, 6).map((rev) => (
-            <View key={rev.id} style={[styles.shopReviewItem, isMobile && styles.shopReviewItemMobile]}>
+            <View key={rev.id} style={[styles.shopReviewItem, !isMobile && styles.shopReviewItemDesktop]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <Text style={styles.shopReviewerName} numberOfLines={1}>
                   {rev.userName}
@@ -347,7 +347,7 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
       <View style={[styles.footerCard, isMobile && styles.footerCardMobile]}>
         <View style={[styles.columnsRow, isMobile && styles.columnsRowMobile]}>
           {/* Column 1: Brand Story */}
-          <View style={[styles.brandCol, isMobile && styles.brandColMobile]}>
+          <View style={[styles.brandCol, !isMobile && styles.brandColDesktop]}>
             <View style={styles.brandHeaderRow}>
               <View style={styles.brandIconCircle}>
                 <Text style={styles.brandIconEmoji}>🧶</Text>
@@ -372,7 +372,7 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
           </View>
 
           {/* Column 2: Categories */}
-          <View style={styles.linksCol}>
+          <View style={[styles.linksCol, !isMobile && styles.linksColDesktop]}>
             <Text style={styles.colTitle}>BỘ SƯU TẬP</Text>
             <TouchableOpacity
               style={styles.footerLinkBtn}
@@ -417,7 +417,7 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
           </View>
 
           {/* Column 3: Role-specific Quick Links */}
-          <View style={styles.linksCol}>
+          <View style={[styles.linksCol, !isMobile && styles.linksColDesktop]}>
             <Text style={styles.colTitle}>
               {isAdmin ? 'QUẢN TRỊ TIỆM' : 'DÀNH CHO BẠN'}
             </Text>
@@ -586,8 +586,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(61, 43, 31, 0.05)',
   },
   bespokeContentLeft: {
-    flex: 1,
+    width: '100%',
     minWidth: 0,
+  },
+  bespokeContentLeftDesktop: {
+    flex: 1,
+    width: 'auto',
   },
   badgePill: {
     flexDirection: 'row',
@@ -803,17 +807,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   shopReviewItem: {
-    flex: 1,
-    minWidth: 240,
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 13,
     borderWidth: 1,
     borderColor: '#EAE0D5',
   },
-  shopReviewItemMobile: {
-    minWidth: 0,
-    width: '100%',
+  shopReviewItemDesktop: {
+    flex: 1,
+    minWidth: 240,
+    width: 'auto',
   },
   shopReviewerName: {
     fontSize: 13,
@@ -858,11 +862,12 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   brandCol: {
-    flex: 1.5,
+    width: '100%',
     minWidth: 0,
   },
-  brandColMobile: {
-    flex: 1,
+  brandColDesktop: {
+    flex: 1.5,
+    width: 'auto',
   },
   brandHeaderRow: {
     flexDirection: 'row',
@@ -920,8 +925,12 @@ const styles = StyleSheet.create({
   },
 
   linksCol: {
-    flex: 1,
+    width: '100%',
     gap: 7,
+  },
+  linksColDesktop: {
+    flex: 1,
+    width: 'auto',
   },
   colTitle: {
     fontSize: 11,

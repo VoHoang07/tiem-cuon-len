@@ -369,22 +369,18 @@ export default function RegisterScreen() {
                       />
                     </View>
                     <TextInput
-                      style={[
-                        styles.input,
-                        Platform.OS === 'web' && !showPassword && styles.webPasswordMask,
-                      ]}
+                      style={styles.input}
                       placeholder="Ít nhất 6 ký tự"
                       placeholderTextColor={COLORS.lightText}
                       value={password}
                       onChangeText={setPassword}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
-                      secureTextEntry={Platform.OS === 'web' ? false : !showPassword}
+                      secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
                       spellCheck={false}
-                      autoComplete="off"
-                      textContentType="oneTimeCode"
+                      autoComplete="new-password"
                     />
                   </View>
                 </View>
@@ -408,22 +404,18 @@ export default function RegisterScreen() {
                       />
                     </View>
                     <TextInput
-                      style={[
-                        styles.input,
-                        Platform.OS === 'web' && !showPassword && styles.webPasswordMask,
-                      ]}
+                      style={styles.input}
                       placeholder="Nhập lại mật khẩu"
                       placeholderTextColor={COLORS.lightText}
                       value={confirmPassword}
                       onChangeText={setConfirmPassword}
                       onFocus={() => setFocusedField('confirm')}
                       onBlur={() => setFocusedField(null)}
-                      secureTextEntry={Platform.OS === 'web' ? false : !showPassword}
+                      secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
                       spellCheck={false}
-                      autoComplete="off"
-                      textContentType="oneTimeCode"
+                      autoComplete="new-password"
                       onSubmitEditing={handleRegister}
                     />
                     <TouchableOpacity

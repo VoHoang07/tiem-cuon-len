@@ -409,22 +409,18 @@ export default function LoginScreen() {
                       />
                     </View>
                     <TextInput
-                      style={[
-                        styles.input,
-                        Platform.OS === 'web' && !showPassword && styles.webPasswordMask,
-                      ]}
+                      style={styles.input}
                       placeholder={LOGIN_PASSWORD_PLACEHOLDER}
                       placeholderTextColor={COLORS.lightText}
                       value={password}
                       onChangeText={setPassword}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
-                      secureTextEntry={Platform.OS === 'web' ? false : !showPassword}
+                      secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
                       spellCheck={false}
-                      autoComplete="off"
-                      textContentType="oneTimeCode"
+                      autoComplete="current-password"
                       onSubmitEditing={handleLogin}
                     />
                     <TouchableOpacity
