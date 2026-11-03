@@ -5,6 +5,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   useWindowDimensions,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -20,6 +22,8 @@ import {
   ShieldCheck,
   HelpCircle,
   Share2,
+  Star,
+  MessageSquare,
 } from 'lucide-react-native';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
@@ -39,12 +43,40 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
   onScrollToTop,
 }: BoutiqueFooterProps) {
   const router = useRouter();
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const { openChat, conversations, unreadCount } = useChat();
-  const { products } = useShop();
+  const { products, shopReviews, addShopReview } = useShop();
   const { orders } = useOrders();
   const isAdmin = role === 'admin';
   const [showShareModal, setShowShareModal] = React.useState(false);
+  const [showShopReviewForm, setShowShopReviewForm] = React.useState(false);
+  const [shopRating, setShopRating] = React.useState(5);
+  const [shopComment, setShopComment] = React.useState('');
+
+  const avgShopRating = React.useMemo(() => {
+    if (!shopReviews || shopReviews.length === 0) return '5.0';
+    const sum = shopReviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+    return (sum / shopReviews.length).toFixed(1);
+  }, [shopReviews]);
+
+  const handleSubmitShopReview = () => {
+    if (!shopComment.trim()) {
+      Alert.alert('Thiếu nội dung', 'Vui lòng nhập đôi lời nhận xét về Tiệm nhé.');
+      return;
+    }
+    addShopReview({
+      id: `shop_rev_${Date.now()}`,
+      userId: user?.email || 'customer',
+      userName: user?.name || 'Khách yêu len',
+      rating: shopRating,
+      comment: shopComment.trim(),
+      date: new Date().toISOString(),
+    });
+    setShopComment('');
+    setShopRating(5);
+    setShowShopReviewForm(false);
+    Alert.alert('Cảm ơn bạn! 🧶', 'Đánh giá về Tiệm Cuộn Len đã được ghi nhận.');
+  };
 
   const { width: rawWindowWidth } = useWindowDimensions();
   const windowWidth =
@@ -206,6 +238,108 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
               <Text style={styles.secondaryCtaText}>Khám phá kệ len sẵn có ↑</Text>
             </TouchableOpacity>
           )}
+        </View>
+      </View>
+
+      {/* 1.5 Shop Reviews Section (Đánh giá Shop) */}
+      <View style={[styles.shopReviewCard, isMobile && styles.shopReviewCardMobile]}>
+        <View style={styles.shopReviewHeader}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text style={styles.shopReviewTitle}>⭐ Đánh giá Shop — Tiệm Cuộn Len</Text>
+              <View style={styles.shopRatingPill}>
+                <Star size={13} color="#F59E0B" fill="#F59E0B" />
+                <Text style={styles.shopRatingPillText}>
+                  {avgShopRating}/5 ({shopReviews.length} đánh giá)
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.shopReviewSub}>
+              Cảm nhận thực tế từ khách hàng sau khi nhận đơn hàng hoàn thành tại Tiệm
+            </Text>
+          </View>
+
+          {!showShopReviewForm && (
+            <TouchableOpacity
+              style={styles.writeShopReviewBtn}
+              onPress={() => setShowShopReviewForm(true)}
+              activeOpacity={0.8}>
+              <MessageSquare size={14} color="#FAF5EE" />
+              <Text style={styles.writeShopReviewBtnText}>Viết đánh giá Shop</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {showShopReviewForm && (
+          <View style={styles.shopReviewFormBox}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#3D2B1F' }}>
+                Chọn số sao đánh giá Tiệm:
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity key={star} onPress={() => setShopRating(star)}>
+                    <Star
+                      size={22}
+                      color="#F59E0B"
+                      fill={star <= shopRating ? '#F59E0B' : 'transparent'}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <TextInput
+              style={styles.shopReviewInput}
+              value={shopComment}
+              onChangeText={setShopComment}
+              placeholder="Chia sẻ trải nghiệm tư vấn, đóng gói hộp quà, giao hàng của Tiệm..."
+              placeholderTextColor={COLORS.lightText}
+              multiline
+            />
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+              <TouchableOpacity
+                style={styles.shopCancelBtn}
+                onPress={() => {
+                  setShowShopReviewForm(false);
+                  setShopComment('');
+                }}>
+                <Text style={styles.shopCancelBtnText}>Huỷ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shopSubmitBtn}
+                onPress={handleSubmitShopReview}>
+                <Text style={styles.shopSubmitBtnText}>Gửi đánh giá Shop</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        <View style={[styles.shopReviewsGrid, isMobile && styles.shopReviewsGridMobile]}>
+          {shopReviews.slice(0, 6).map((rev) => (
+            <View key={rev.id} style={[styles.shopReviewItem, isMobile && styles.shopReviewItemMobile]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={styles.shopReviewerName} numberOfLines={1}>
+                  {rev.userName}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 2 }}>
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      size={12}
+                      color="#F59E0B"
+                      fill={s <= rev.rating ? '#F59E0B' : 'transparent'}
+                    />
+                  ))}
+                </View>
+              </View>
+              <Text style={styles.shopReviewComment}>{rev.comment}</Text>
+              <Text style={styles.shopReviewDate}>
+                ✓ Đã mua hàng tại Tiệm • {new Date(rev.date).toLocaleDateString('vi-VN')}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -553,6 +687,151 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
     color: '#3D2B1F',
+  },
+
+  /* 1.5 Shop Reviews Card */
+  shopReviewCard: {
+    backgroundColor: '#FAF5EE',
+    borderRadius: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 22,
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    gap: 14,
+  },
+  shopReviewCardMobile: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 20,
+  },
+  shopReviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  shopReviewTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#2C1E14',
+  },
+  shopRatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  shopRatingPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  shopReviewSub: {
+    fontSize: 12.5,
+    color: '#6E5239',
+    marginTop: 3,
+  },
+  writeShopReviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#3D2B1F',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+  writeShopReviewBtnText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#FAF5EE',
+  },
+  shopReviewFormBox: {
+    backgroundColor: '#FFFDF9',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
+    gap: 10,
+  },
+  shopReviewInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#2C1E14',
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
+  shopCancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#EDE3D5',
+  },
+  shopCancelBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5C4332',
+  },
+  shopSubmitBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#3D2B1F',
+  },
+  shopSubmitBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FAF5EE',
+  },
+  shopReviewsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  shopReviewsGridMobile: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+  shopReviewItem: {
+    flex: 1,
+    minWidth: 240,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: '#EAE0D5',
+  },
+  shopReviewItemMobile: {
+    minWidth: 0,
+    width: '100%',
+  },
+  shopReviewerName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2C1E14',
+    flex: 1,
+    marginRight: 8,
+  },
+  shopReviewComment: {
+    fontSize: 12.5,
+    color: '#4A3525',
+    lineHeight: 18,
+  },
+  shopReviewDate: {
+    fontSize: 11,
+    color: '#2E7D32',
+    fontWeight: '600',
+    marginTop: 7,
   },
 
   /* 2. Minimalist Boutique Footer Card */

@@ -6,6 +6,7 @@ import { FavoritesProvider, useFavorites } from '@/store/FavoritesContext';
 
 interface ShopContextType {
   products: Product[];
+  shopReviews: Review[];
   cart: CartItem[];
   favorites: string[];
   isLoading: boolean;
@@ -15,6 +16,7 @@ interface ShopContextType {
   updateProduct: (id: string, product: Product) => Promise<void>;
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
+  addShopReview: (review: Review) => void;
   addToCart: (product: Product, quantity: number) => Promise<void>;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
@@ -42,7 +44,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 }
 
 function ShopBridge({ children }: { children: ReactNode }) {
-  const { products, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, refetchProducts } = useProducts();
+  const { products, shopReviews, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, addShopReview, refetchProducts } = useProducts();
   const { cart, cartHydrated, cartTotal, cartCount, addToCart, removeFromCart, updateCartQuantity, clearCart, refetchCart } = useCart();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
@@ -53,6 +55,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       products,
+      shopReviews,
       cart,
       favorites,
       isLoading,
@@ -62,6 +65,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
       updateProduct,
       removeProduct,
       addReview,
+      addShopReview,
       addToCart,
       removeFromCart,
       updateCartQuantity,
@@ -75,6 +79,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
     }),
     [
       products,
+      shopReviews,
       cart,
       favorites,
       isLoading,
@@ -84,6 +89,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
       updateProduct,
       removeProduct,
       addReview,
+      addShopReview,
       addToCart,
       removeFromCart,
       updateCartQuantity,

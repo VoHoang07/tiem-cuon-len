@@ -29,6 +29,7 @@ import {
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
+import { useOrders } from '@/store/OrderContext';
 import {
   Product,
   Review,
@@ -65,6 +66,7 @@ export default function ProductDetailScreen() {
   } = useShop();
   const { user, role, isAuthenticated } = useAuth();
   const { openChatWithProduct } = useChat();
+  const { orders } = useOrders();
 
   const { width: rawWindowWidth } = useWindowDimensions();
   const windowWidth =
@@ -250,8 +252,17 @@ export default function ProductDetailScreen() {
   };
 
   const fav = isFavorite(product.id);
-  const canReview = role === 'customer';
   const isAdmin = role === 'admin';
+  const hasCompletedOrderForProduct = orders.some(
+    (o) =>
+      o.status === 'Hoàn thành' &&
+      o.items.some(
+        (item) =>
+          String(item.product.baseProductId || item.product.id).split('__')[0] ===
+          product.id
+      )
+  );
+  const canReview = isAdmin || (role === 'customer' && hasCompletedOrderForProduct);
 
   const submitReview = () => {
     if (!reviewText.trim()) {
@@ -775,14 +786,20 @@ export default function ProductDetailScreen() {
             <Text style={styles.sectionTitle}>
               {PD_REVIEWS} ({product.reviews.length})
             </Text>
-            {canReview && !showReviewForm && (
+            {canReview && !showReviewForm ? (
               <TouchableOpacity
                 style={styles.writeReviewBtn}
                 onPress={() => setShowReviewForm(true)}>
                 <MessageSquare size={14} color="#4A3728" />
                 <Text style={styles.writeReviewText}>Viết đánh giá</Text>
               </TouchableOpacity>
-            )}
+            ) : !canReview && !showReviewForm ? (
+              <View style={{ backgroundColor: '#F6F0E6', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: '#E5D8C8' }}>
+                <Text style={{ fontSize: 11.5, color: '#6E5239', fontWeight: '600' }}>
+                  📦 Mở đánh giá sau khi giao đơn thành công
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {showReviewForm && (

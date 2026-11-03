@@ -26,9 +26,11 @@ import {
   User as UserIcon,
   CheckCircle2,
   Clock,
+  Star,
 } from 'lucide-react-native';
 import { useOrders } from '@/store/OrderContext';
 import { useAuth } from '@/store/AuthContext';
+import { useShop } from '@/store/ShopContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import {
@@ -81,7 +83,8 @@ export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { orders, updateOrderStatus, updateOrderShipping } = useOrders();
-  const { role } = useAuth();
+  const { user, role } = useAuth();
+  const { addReview, addShopReview } = useShop();
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
 
@@ -95,6 +98,16 @@ export default function OrderDetailScreen() {
   );
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
+
+  // Product & Shop Review state when order is Completed ('Hoàn thành')
+  const [activeReviewItemId, setActiveReviewItemId] = useState<string | null>(null);
+  const [itemRating, setItemRating] = useState<number>(5);
+  const [itemComment, setItemComment] = useState<string>('');
+  const [reviewedItemIds, setReviewedItemIds] = useState<Record<string, boolean>>({});
+
+  const [shopRating, setShopRating] = useState<number>(5);
+  const [shopComment, setShopComment] = useState<string>('');
+  const [shopReviewed, setShopReviewed] = useState<boolean>(false);
 
   useEffect(() => {
     if (order?.shippingAddress?.shippingCarrier) {
@@ -203,6 +216,15 @@ export default function OrderDetailScreen() {
                     onPress={() => router.push(`/payment/${order.id}`)}>
                     <QrCode size={15} color="#FAF5EE" />
                     <Text style={styles.payNowText}>Thanh toán QR</Text>
+                  </TouchableOpacity>
+                )}
+                {!isAdmin && order.status === 'Đang giao' && (
+                  <TouchableOpacity
+                    style={styles.updateStatusBtn}
+                    onPress={() => updateOrderStatus(order.id, 'Hoàn thành')}>
+                    <Text style={styles.updateStatusText}>
+                      ✅ Đã nhận được hàng
+                    </Text>
                   </TouchableOpacity>
                 )}
                 {isAdmin && nextStatus && (
@@ -533,42 +555,195 @@ export default function OrderDetailScreen() {
             )}
           </View>
 
-          {/* 3. Ordered Items */}
+          {/* 3. Ordered Items + Inline Product Review when Completed */}
           <View style={[styles.section, isMobile && styles.sectionMobile]}>
             <Text style={styles.sectionTitle}>
               Sản phẩm trong đơn ({order.items.reduce((s, i) => s + i.quantity, 0)} món)
             </Text>
-            {order.items.map((item) => (
-              <View key={item.product.id} style={styles.itemRow}>
-                <View style={styles.itemIcon}>
-                  {item.product.image ? (
-                    <Image
-                      source={
-                        typeof item.product.image === 'string'
-                          ? { uri: item.product.image }
-                          : (item.product.image as any)
-                      }
-                      style={styles.itemProductImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Package size={20} color={COLORS.primary} />
+            {order.items.map((item) => {
+              const baseId = String(item.product.id || '').split('__')[0];
+              const isReviewOpen = activeReviewItemId === item.product.id;
+              const isItemReviewed = Boolean(reviewedItemIds[item.product.id]);
+
+              return (
+                <View key={item.product.id} style={styles.itemBlockWrap}>
+                  <View style={styles.itemRow}>
+                    <TouchableOpacity
+                      style={styles.itemIcon}
+                      onPress={() => router.push(`/product/${baseId}`)}>
+                      {item.product.image ? (
+                        <Image
+                          source={
+                            typeof item.product.image === 'string'
+                              ? { uri: item.product.image }
+                              : (item.product.image as any)
+                          }
+                          style={styles.itemProductImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Package size={20} color={COLORS.primary} />
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName} numberOfLines={2}>
+                        {item.product.name}
+                      </Text>
+                      <Text style={styles.itemMeta}>
+                        SL: {item.quantity} x {formatVND(item.price)}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Text style={styles.itemTotal}>
+                        {formatVND(item.price * item.quantity)}
+                      </Text>
+                      {order.status === 'Hoàn thành' && (
+                        <TouchableOpacity
+                          style={[
+                            styles.rateItemBtn,
+                            isItemReviewed && styles.rateItemBtnDone,
+                          ]}
+                          disabled={isItemReviewed}
+                          onPress={() => {
+                            if (isReviewOpen) {
+                              setActiveReviewItemId(null);
+                            } else {
+                              setActiveReviewItemId(item.product.id);
+                              setItemRating(5);
+                              setItemComment('');
+                            }
+                          }}>
+                          <Text
+                            style={[
+                              styles.rateItemBtnText,
+                              isItemReviewed && styles.rateItemBtnTextDone,
+                            ]}>
+                            {isItemReviewed
+                              ? '✅ Đã đánh giá SP'
+                              : isReviewOpen
+                                ? 'Đóng'
+                                : '⭐ Đánh giá SP'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+
+                  {order.status === 'Hoàn thành' && isReviewOpen && !isItemReviewed && (
+                    <View style={styles.inlineReviewBox}>
+                      <View style={styles.starsPickerRow}>
+                        <Text style={styles.starsPickerLabel}>Chấm sao sản phẩm:</Text>
+                        <View style={styles.starsRow}>
+                          {[1, 2, 3, 4, 5].map((st) => (
+                            <TouchableOpacity key={st} onPress={() => setItemRating(st)}>
+                              <Star
+                                size={22}
+                                color="#F59E0B"
+                                fill={st <= itemRating ? '#F59E0B' : 'transparent'}
+                              />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                      <TextInput
+                        style={styles.inlineReviewInput}
+                        value={itemComment}
+                        onChangeText={setItemComment}
+                        placeholder="Chia sẻ vài câu cảm nhận về mẫu len này nhé..."
+                        placeholderTextColor={COLORS.lightText}
+                        multiline
+                      />
+                      <TouchableOpacity
+                        style={styles.submitInlineReviewBtn}
+                        onPress={() => {
+                          const text = itemComment.trim() || 'Sản phẩm rất xinh và ưng ý ạ!';
+                          addReview(baseId, {
+                            id: `rev_${Date.now()}`,
+                            userId: user?.email || order.userId || 'customer',
+                            userName:
+                              order.shippingAddress?.fullName ||
+                              user?.name ||
+                              'Khách đã mua',
+                            rating: itemRating,
+                            comment: text,
+                            date: new Date().toISOString(),
+                          });
+                          setReviewedItemIds((prev) => ({ ...prev, [item.product.id]: true }));
+                          setActiveReviewItemId(null);
+                          setItemComment('');
+                        }}>
+                        <Text style={styles.submitInlineReviewText}>
+                          Gửi đánh giá sản phẩm ({itemRating} ★)
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
                 </View>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName} numberOfLines={2}>
-                    {item.product.name}
-                  </Text>
-                  <Text style={styles.itemMeta}>
-                    SL: {item.quantity} x {formatVND(item.price)}
+              );
+            })}
+          </View>
+
+          {/* 3B. Shop Review Box when Order is Completed ('Hoàn thành') */}
+          {order.status === 'Hoàn thành' && (
+            <View style={[styles.section, isMobile && styles.sectionMobile]}>
+              <Text style={styles.sectionTitle}>⭐ Đánh giá Shop (Tiệm Cuộn Len)</Text>
+              {shopReviewed ? (
+                <View style={styles.shopReviewedBanner}>
+                  <Text style={styles.shopReviewedText}>
+                    ✅ Cảm ơn bạn đã gửi đánh giá {shopRating} ★ cho Tiệm Cuộn Len! Đánh giá của bạn đã hiển thị ở mục Đánh giá Shop trên trang chủ.
                   </Text>
                 </View>
-                <Text style={styles.itemTotal}>
-                  {formatVND(item.price * item.quantity)}
-                </Text>
-              </View>
-            ))}
-          </View>
+              ) : (
+                <View style={styles.inlineReviewBox}>
+                  <View style={styles.starsPickerRow}>
+                    <Text style={styles.starsPickerLabel}>Chấm sao dịch vụ & đóng gói của Tiệm:</Text>
+                    <View style={styles.starsRow}>
+                      {[1, 2, 3, 4, 5].map((st) => (
+                        <TouchableOpacity key={st} onPress={() => setShopRating(st)}>
+                          <Star
+                            size={22}
+                            color="#F59E0B"
+                            fill={st <= shopRating ? '#F59E0B' : 'transparent'}
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <TextInput
+                    style={styles.inlineReviewInput}
+                    value={shopComment}
+                    onChangeText={setShopComment}
+                    placeholder="Nhận xét về cách tư vấn, đóng gói hộp quà và tốc độ giao hàng của Tiệm..."
+                    placeholderTextColor={COLORS.lightText}
+                    multiline
+                  />
+                  <TouchableOpacity
+                    style={styles.submitInlineReviewBtn}
+                    onPress={() => {
+                      const text =
+                        shopComment.trim() ||
+                        'Shop tư vấn nhiệt tình, đóng gói hộp quà cẩn thận 5 sao!';
+                      addShopReview({
+                        id: `shop_rev_${Date.now()}`,
+                        userId: user?.email || order.userId || 'customer',
+                        userName:
+                          order.shippingAddress?.fullName ||
+                          user?.name ||
+                          'Khách đã mua',
+                        rating: shopRating,
+                        comment: text,
+                        date: new Date().toISOString(),
+                      });
+                      setShopReviewed(true);
+                    }}>
+                    <Text style={styles.submitInlineReviewText}>
+                      Gửi đánh giá Shop ({shopRating} ★)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* 4. Payment & Order Total */}
           <View style={[styles.section, isMobile && styles.sectionMobile]}>
@@ -1100,13 +1275,97 @@ const styles = StyleSheet.create({
   },
 
   /* Items & Totals */
+  itemBlockWrap: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0E6D8',
+  },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0E6D8',
     gap: 10,
+  },
+  rateItemBtn: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  rateItemBtnDone: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  rateItemBtnText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  rateItemBtnTextDone: {
+    color: '#047857',
+  },
+  inlineReviewBox: {
+    backgroundColor: '#FAF5EE',
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    gap: 8,
+  },
+  starsPickerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  starsPickerLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  inlineReviewInput: {
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1,
+    borderColor: '#DFCBB5',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#2C1E14',
+    minHeight: 56,
+    textAlignVertical: 'top',
+  },
+  submitInlineReviewBtn: {
+    backgroundColor: '#3D2B1F',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  submitInlineReviewText: {
+    color: '#FFFDF9',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  shopReviewedBanner: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 12,
+  },
+  shopReviewedText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#065F46',
+    lineHeight: 19,
   },
   itemIcon: {
     width: 44,

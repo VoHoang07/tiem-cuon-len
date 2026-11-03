@@ -399,6 +399,7 @@ function toDbProduct(product: Product) {
 
 interface ProductContextType {
   products: Product[];
+  shopReviews: Review[];
   isLoading: boolean;
   hasMore: boolean;
   loadMore: () => Promise<void>;
@@ -406,7 +407,59 @@ interface ProductContextType {
   updateProduct: (id: string, product: Product) => Promise<void>;
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
+  addShopReview: (review: Review) => void;
   refetchProducts: () => Promise<void>;
+}
+
+const SHOP_REVIEWS_CACHE_KEY = 'tcl_shop_reviews_v1';
+const SHOP_REVIEWS_ROW_ID = 'tcl_shop_reviews_v1';
+const SHOP_REVIEWS_PARTITION = '__TCL_SHOP_REVIEWS_V1__';
+const SHOP_REVIEWS_HOLDER_USER = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
+
+const DEFAULT_SHOP_REVIEWS: Review[] = [
+  {
+    id: 'shop_rev_1',
+    userId: 'khach_1',
+    userName: 'Ngọc Anh',
+    rating: 5,
+    comment: 'Móc khóa thỏ len ở ngoài xinh hơn trong hình nhiều, đóng gói hộp quà rất chỉn chu và thơm!',
+    date: '2026-10-28T10:00:00.000Z',
+  },
+  {
+    id: 'shop_rev_2',
+    userId: 'khach_2',
+    userName: 'Minh Thư',
+    rating: 5,
+    comment: 'Shop tư vấn màu nhiệt tình, đan cực kỳ chắc tay, giao hàng đúng hẹn 10 điểm ạ.',
+    date: '2026-10-30T14:30:00.000Z',
+  },
+];
+
+function loadCachedShopReviews(): Review[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(SHOP_REVIEWS_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as Review[];
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_SHOP_REVIEWS;
+}
+
+function saveCachedShopReviews(list: Review[]) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(SHOP_REVIEWS_CACHE_KEY, JSON.stringify(list));
+    }
+  } catch {
+    // ignore
+  }
 }
 
 const ProductContext = createContext<ProductContextType | null>(null);
@@ -414,9 +467,35 @@ const ProductContext = createContext<ProductContextType | null>(null);
 export function ProductProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth();
   const [products, setProducts] = useState<Product[]>(() => loadCachedProducts());
+  const [shopReviews, setShopReviews] = useState<Review[]>(() => loadCachedShopReviews());
   const [loaded, setLoaded] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
+
+  // Sync shop reviews from Supabase partition
+  useEffect(() => {
+    supabase
+      .from('addresses')
+      .select('detailAddress')
+      .eq('fullName', SHOP_REVIEWS_PARTITION)
+      .limit(1)
+      .then(
+        ({ data }) => {
+          if (data && data.length > 0 && data[0].detailAddress) {
+            try {
+              const parsed = JSON.parse(data[0].detailAddress);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setShopReviews(parsed);
+                saveCachedShopReviews(parsed);
+              }
+            } catch {
+              // ignore
+            }
+          }
+        },
+        () => {}
+      );
+  }, []);
 
   const fetchProducts = useCallback(async (pageNum: number = 0): Promise<Product[] | null> => {
     const from = pageNum * PAGE_SIZE;
@@ -576,33 +655,72 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   }, [role]);
 
   const addReview = useCallback((productId: string, review: Review) => {
+    const baseId = String(productId || '').split('__')[0];
     const safeRating = Math.max(1, Math.min(5, Number(review.rating) || 5));
     const safeComment = String(review.comment || '').replace(/[<>]/g, '').trim().slice(0, 500);
     const safeUserName = String(review.userName || 'Khách hàng').replace(/[<>]/g, '').trim().slice(0, 80);
-    if (!safeComment) return;
+    if (!safeComment || !baseId) return;
     const sanitizedReview: Review = {
       ...review,
       userName: safeUserName,
       rating: safeRating,
       comment: safeComment,
     };
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id !== productId) return p;
-        const newReviews = [...p.reviews, sanitizedReview];
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (p.id !== baseId) return p;
+        const newReviews = [sanitizedReview, ...p.reviews];
         const avgRating = newReviews.reduce((sum, r) => sum + r.rating, 0) / newReviews.length;
         const updated = { ...p, reviews: newReviews, rating: Math.round(avgRating * 10) / 10 };
-        supabase.from('products').update({ reviews: newReviews, rating: updated.rating }).eq('id', productId).then(({ error }) => {
-          if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm review:', error.message);
-        }, () => {});
+        supabase
+          .from('products')
+          .upsert(serializeForDb(updated))
+          .then(({ error }) => {
+            if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm review:', error.message);
+          }, () => {});
         return updated;
-      })
-    );
+      });
+      saveCachedProducts(next);
+      return next;
+    });
+  }, []);
+
+  const addShopReview = useCallback((review: Review) => {
+    const safeRating = Math.max(1, Math.min(5, Number(review.rating) || 5));
+    const safeComment = String(review.comment || '').replace(/[<>]/g, '').trim().slice(0, 500);
+    const safeUserName = String(review.userName || 'Khách hàng').replace(/[<>]/g, '').trim().slice(0, 80);
+    if (!safeComment) return;
+    const sanitized: Review = {
+      ...review,
+      userName: safeUserName,
+      rating: safeRating,
+      comment: safeComment,
+    };
+    setShopReviews((prev) => {
+      const next = [sanitized, ...prev].slice(0, 50);
+      saveCachedShopReviews(next);
+      supabase
+        .from('addresses')
+        .upsert({
+          id: SHOP_REVIEWS_ROW_ID,
+          userId: SHOP_REVIEWS_HOLDER_USER,
+          fullName: SHOP_REVIEWS_PARTITION,
+          phone: 'shop_reviews',
+          city: 'HCM',
+          district: 'Q8',
+          ward: '1',
+          detailAddress: JSON.stringify(next),
+          isDefault: false,
+        })
+        .then(() => {}, () => {});
+      return next;
+    });
   }, []);
 
   const contextValue = useMemo(
     () => ({
       products,
+      shopReviews,
       isLoading: !loaded,
       hasMore,
       loadMore,
@@ -610,10 +728,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       updateProduct,
       removeProduct,
       addReview,
+      addShopReview,
       refetchProducts,
     }),
     [
       products,
+      shopReviews,
       loaded,
       hasMore,
       loadMore,
@@ -621,6 +741,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       updateProduct,
       removeProduct,
       addReview,
+      addShopReview,
       refetchProducts,
     ]
   );
