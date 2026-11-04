@@ -27,6 +27,43 @@ const COVER_IMG_REF = '__COVER__';
 
 // In-memory map + IndexedDB + localStorage persistence so newly added/edited products NEVER disappear when syncProducts runs
 const customAdminProductsMemory = new Map<string, Product>();
+const hydratedMediaMemory = new Map<
+  string,
+  {
+    image?: Product['image'];
+    colorOptions?: Product['colorOptions'];
+    accessoryOptions?: Product['accessoryOptions'];
+    gallery?: Product['gallery'];
+    isMadeToOrder?: boolean;
+    cleanTags?: string[];
+  }
+>();
+
+function cacheProductMediaInMemory(p: Product) {
+  if (!p || !p.id) return;
+  const hasImage =
+    typeof p.image === 'string' && p.image.length > 0;
+  const hasColors =
+    Array.isArray(p.colorOptions) && p.colorOptions.length > 0;
+  if (hasImage || hasColors) {
+    const prev = hydratedMediaMemory.get(p.id);
+    hydratedMediaMemory.set(p.id, {
+      image: hasImage ? p.image : prev?.image,
+      colorOptions: hasColors ? p.colorOptions : prev?.colorOptions,
+      accessoryOptions: p.accessoryOptions || prev?.accessoryOptions,
+      gallery: p.gallery || prev?.gallery,
+      isMadeToOrder:
+        typeof p.isMadeToOrder === 'boolean'
+          ? p.isMadeToOrder
+          : prev?.isMadeToOrder,
+      cleanTags: Array.isArray(p.tags)
+        ? p.tags.filter(
+            (t) => typeof t === 'string' && !t.startsWith(VARIANTS_META_PREFIX)
+          )
+        : prev?.cleanTags,
+    });
+  }
+}
 
 function saveToIdb(key: string, value: any) {
   if (typeof window === 'undefined' || !window.indexedDB) return;
@@ -112,6 +149,7 @@ function loadCustomAdminProductsSync(): Product[] {
 
 function persistCustomAdminProduct(product: Product) {
   customAdminProductsMemory.set(product.id, product);
+  cacheProductMediaInMemory(product);
   const all = [...customAdminProductsMemory.values()];
   saveCustomProductsToIdb(all);
   try {
@@ -125,6 +163,7 @@ function persistCustomAdminProduct(product: Product) {
 
 function removeCustomAdminProduct(id: string) {
   customAdminProductsMemory.delete(id);
+  hydratedMediaMemory.delete(id);
   const all = [...customAdminProductsMemory.values()];
   saveCustomProductsToIdb(all);
   try {
@@ -137,7 +176,28 @@ function removeCustomAdminProduct(id: string) {
 }
 
 function hydrateDbProduct(raw: Product): Product {
-  if (!raw || !Array.isArray(raw.tags)) return raw;
+  if (!raw) return raw;
+  const cachedMedia = hydratedMediaMemory.get(raw.id);
+
+  if (!Array.isArray(raw.tags)) {
+    const merged: Product = cachedMedia
+      ? {
+          ...raw,
+          image: raw.image || cachedMedia.image || null,
+          tags: cachedMedia.cleanTags || [],
+          colorOptions: raw.colorOptions || cachedMedia.colorOptions,
+          accessoryOptions: raw.accessoryOptions || cachedMedia.accessoryOptions,
+          gallery: raw.gallery || cachedMedia.gallery,
+          isMadeToOrder:
+            typeof raw.isMadeToOrder === 'boolean'
+              ? raw.isMadeToOrder
+              : cachedMedia.isMadeToOrder,
+        }
+      : raw;
+    cacheProductMediaInMemory(merged);
+    return merged;
+  }
+
   const cleanTags: string[] = [];
   let parsedMeta: {
     colorOptions?: Product['colorOptions'];
@@ -158,34 +218,52 @@ function hydrateDbProduct(raw: Product): Product {
     }
   }
 
+  const resolvedImage = raw.image || cachedMedia?.image || null;
+
   if (!parsedMeta) {
-    return raw;
+    const fallback: Product = {
+      ...raw,
+      image: resolvedImage,
+      tags: cleanTags.length > 0 ? cleanTags : cachedMedia?.cleanTags || [],
+      colorOptions: raw.colorOptions || cachedMedia?.colorOptions,
+      accessoryOptions: raw.accessoryOptions || cachedMedia?.accessoryOptions,
+      gallery: raw.gallery || cachedMedia?.gallery,
+      isMadeToOrder:
+        typeof raw.isMadeToOrder === 'boolean'
+          ? raw.isMadeToOrder
+          : cachedMedia?.isMadeToOrder,
+    };
+    cacheProductMediaInMemory(fallback);
+    return fallback;
   }
 
-  return {
+  const hydrated: Product = {
     ...raw,
+    image: resolvedImage,
     tags: cleanTags,
     colorOptions:
       Array.isArray(parsedMeta.colorOptions) && parsedMeta.colorOptions.length > 0
         ? parsedMeta.colorOptions.map((c) => ({
             ...c,
-            image: c.image === COVER_IMG_REF ? raw.image : c.image,
+            image: c.image === COVER_IMG_REF ? resolvedImage : c.image,
           }))
-        : raw.colorOptions,
+        : raw.colorOptions || cachedMedia?.colorOptions,
     accessoryOptions:
       Array.isArray(parsedMeta.accessoryOptions) &&
       parsedMeta.accessoryOptions.length > 0
         ? parsedMeta.accessoryOptions
-        : raw.accessoryOptions,
+        : raw.accessoryOptions || cachedMedia?.accessoryOptions,
     gallery:
       Array.isArray(parsedMeta.gallery) && parsedMeta.gallery.length > 0
         ? parsedMeta.gallery
-        : raw.gallery,
+        : raw.gallery || cachedMedia?.gallery,
     isMadeToOrder:
       typeof parsedMeta.isMadeToOrder === 'boolean'
         ? parsedMeta.isMadeToOrder
-        : raw.isMadeToOrder,
+        : raw.isMadeToOrder ?? cachedMedia?.isMadeToOrder,
   };
+  cacheProductMediaInMemory(hydrated);
+  return hydrated;
 }
 
 const RETIRED_PRODUCT_IDS = new Set([
@@ -211,6 +289,9 @@ const RETIRED_PRODUCT_IDS = new Set([
   'user_1779641892818',
   'user_1779641818466',
   'user_1779641784566',
+  'user_1793815534368',
+  'user_1793811029163',
+  'user_1793809418221',
 ]);
 
 const LEGACY_ID_TO_MOCK_ID: Record<string, string> = {
@@ -389,7 +470,28 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
     }
 
     const normName = (item.name || '').trim().toLowerCase();
-    if (!normName || seenCustomIds.has(item.id) || seenCustomNames.has(normName)) continue;
+    if (!normName || seenCustomIds.has(item.id)) continue;
+    if (seenCustomNames.has(normName)) {
+      const existingIdx = customAdminProducts.findIndex(
+        (existing) => (existing.name || '').trim().toLowerCase() === normName
+      );
+      if (existingIdx !== -1) {
+        const existingItem = customAdminProducts[existingIdx];
+        const existingRichness =
+          (existingItem.colorOptions?.filter((c) => Boolean(c.image)).length || 0) * 10 +
+          (existingItem.colorOptions?.length || 0) +
+          (existingItem.image ? 5 : 0);
+        const nextRichness =
+          (item.colorOptions?.filter((c) => Boolean(c.image)).length || 0) * 10 +
+          (item.colorOptions?.length || 0) +
+          (item.image ? 5 : 0);
+        if (nextRichness > existingRichness) {
+          seenCustomIds.add(item.id);
+          customAdminProducts[existingIdx] = item;
+        }
+      }
+      continue;
+    }
     seenCustomIds.add(item.id);
     seenCustomNames.add(normName);
     customAdminProducts.push(item);
@@ -719,10 +821,18 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     Promise.all([loadFromIdb('cached_all_products'), loadCustomProductsFromIdb()]).then(
       ([cachedAll, idbCustom]) => {
         const deleted = getDeletedIds();
+        if (cachedAll.length > 0) {
+          for (const p of cachedAll) {
+            if (p && p.id && !deleted.has(p.id)) {
+              cacheProductMediaInMemory(p);
+            }
+          }
+        }
         if (idbCustom.length > 0) {
           for (const p of idbCustom) {
             if (p && p.id && !deleted.has(p.id)) {
               customAdminProductsMemory.set(p.id, p);
+              cacheProductMediaInMemory(p);
             }
           }
         }
@@ -760,59 +870,128 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       );
   }, []);
 
-  const fetchProducts = useCallback(async (pageNum: number = 0): Promise<Product[] | null> => {
-    const from = pageNum * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    const PRODUCT_COLUMNS =
-      'id,name,description,price,image,category,material,color,quantity,rating,reviews,tags,createdAt';
-
-    // Fast public REST fetch with 15s timeout & cache: 'no-store' so mobile networks & Safari never serve stale products
-    if (supabaseUrl && supabaseAnonKey) {
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 15000) : null;
-      try {
-        const endpoint = `${supabaseUrl}/rest/v1/products?select=${PRODUCT_COLUMNS}&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}&_t=${Date.now()}`;
-        const res = await fetch(endpoint, {
-          cache: 'no-store',
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
-          signal: controller?.signal,
-        });
-        if (res.ok) {
-          const data = (await res.json()) as Product[];
-          if (timer) clearTimeout(timer);
-          if (Array.isArray(data)) {
-            setHasMore(data.length === PAGE_SIZE);
-            return data;
+  const hydrateMissingProductMedia = useCallback(
+    async (baseRows: Product[]) => {
+      if (!supabaseUrl || !supabaseAnonKey || !Array.isArray(baseRows)) return;
+      const deleted = getDeletedIds();
+      const missingIds = baseRows
+        .filter((r) => {
+          if (!r || !r.id || deleted.has(r.id) || RETIRED_PRODUCT_IDS.has(r.id)) {
+            return false;
           }
+          const cached = hydratedMediaMemory.get(r.id);
+          return !cached || !cached.image;
+        })
+        .map((r) => r.id);
+
+      if (missingIds.length === 0) return;
+
+      const CHUNK_SIZE = 2;
+      for (let i = 0; i < missingIds.length; i += CHUNK_SIZE) {
+        const chunk = missingIds.slice(i, i + CHUNK_SIZE);
+        const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
+        try {
+          const res = await fetch(
+            `${supabaseUrl}/rest/v1/products?select=id,image,tags&id=in.(${inFilter})`,
+            {
+              cache: 'no-store',
+              headers: {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+              },
+            }
+          );
+          if (res.ok) {
+            const mediaRows = (await res.json()) as Array<{
+              id: string;
+              image?: Product['image'];
+              tags?: string[];
+            }>;
+            if (Array.isArray(mediaRows) && mediaRows.length > 0) {
+              for (const mr of mediaRows) {
+                const target = baseRows.find((b) => b.id === mr.id);
+                if (target) {
+                  target.image = mr.image ?? target.image;
+                  target.tags = mr.tags ?? target.tags;
+                  hydrateDbProduct(target);
+                }
+              }
+              const merged = mergeWithMockProducts(baseRows);
+              setProducts(merged);
+              saveCachedProducts(merged);
+            }
+          }
+        } catch {
+          // continue next chunk
         }
-        if (timer) clearTimeout(timer);
-      } catch {
-        if (timer) clearTimeout(timer);
       }
-    }
+    },
+    []
+  );
 
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select(PRODUCT_COLUMNS)
-        .order('createdAt', { ascending: false })
-        .range(from, to);
+  const fetchProducts = useCallback(
+    async (pageNum: number = 0): Promise<Product[] | null> => {
+      const from = pageNum * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      // Stage 1: Fetch lightweight catalog metadata (~4 KB, < 0.5s on mobile) without multi-MB Base64 blobs
+      const METADATA_COLUMNS =
+        'id,name,description,price,category,material,color,quantity,rating,reviews,createdAt';
 
-      if (error) {
-        if (__DEV__) console.error('[SUPABASE] Lỗi load sản phẩm:', error.message);
+      if (supabaseUrl && supabaseAnonKey) {
+        const controller =
+          typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller
+          ? setTimeout(() => controller.abort(), 12000)
+          : null;
+        try {
+          const endpoint = `${supabaseUrl}/rest/v1/products?select=${METADATA_COLUMNS}&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}`;
+          const res = await fetch(endpoint, {
+            cache: 'no-store',
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+            },
+            signal: controller?.signal,
+          });
+          if (res.ok) {
+            const data = (await res.json()) as Product[];
+            if (timer) clearTimeout(timer);
+            if (Array.isArray(data)) {
+              setHasMore(data.length === PAGE_SIZE);
+              // Kick off Stage 2 progressive media hydration in small 2-item chunks without blocking catalog display
+              void hydrateMissingProductMedia(data);
+              return data;
+            }
+          }
+          if (timer) clearTimeout(timer);
+        } catch {
+          if (timer) clearTimeout(timer);
+        }
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select(METADATA_COLUMNS)
+          .order('createdAt', { ascending: false })
+          .range(from, to);
+
+        if (error) {
+          if (__DEV__)
+            console.error('[SUPABASE] Lỗi load sản phẩm:', error.message);
+          return null;
+        }
+
+        const rows = (data as Product[]) || [];
+        setHasMore(rows.length === PAGE_SIZE);
+        void hydrateMissingProductMedia(rows);
+        return rows;
+      } catch {
         return null;
       }
-
-      const rows = (data as Product[]) || [];
-      setHasMore(rows.length === PAGE_SIZE);
-      return rows;
-    } catch {
-      return null;
-    }
-  }, []);
+    },
+    [hydrateMissingProductMedia]
+  );
 
   useEffect(() => {
     let cancelled = false;

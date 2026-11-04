@@ -194,6 +194,13 @@ export default function ProfileScreen() {
                   <PlusCircle size={14} color={COLORS.white} />
                   <Text style={styles.quickAddHeaderText}>Thêm sản phẩm</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.headerLogoutBtn}
+                  onPress={handleLogout}
+                  activeOpacity={0.8}>
+                  <LogOut size={14} color={COLORS.error} />
+                  <Text style={styles.headerLogoutText}>{PROF_LOGOUT}</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -338,13 +345,22 @@ export default function ProfileScreen() {
                   <Mail size={14} color={COLORS.mediumText} />
                   <Text style={styles.customerEmail}>{user.email}</Text>
                 </View>
-                <TouchableOpacity
-                  style={[styles.editBtn, { marginTop: 12 }]}
-                  onPress={() => router.push('/profile/edit')}
-                  activeOpacity={0.8}>
-                  <Edit3 size={14} color="#3D2B1F" />
-                  <Text style={styles.editBtnText}>{PROF_EDIT_PROFILE}</Text>
-                </TouchableOpacity>
+                <View style={styles.headerActionRow}>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => router.push('/profile/edit')}
+                    activeOpacity={0.8}>
+                    <Edit3 size={14} color="#3D2B1F" />
+                    <Text style={styles.editBtnText}>{PROF_EDIT_PROFILE}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.headerLogoutBtn}
+                    onPress={handleLogout}
+                    activeOpacity={0.8}>
+                    <LogOut size={14} color={COLORS.error} />
+                    <Text style={styles.headerLogoutText}>{PROF_LOGOUT}</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             ) : (
               <View style={styles.guestAuthRow}>
@@ -681,6 +697,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: COLORS.white,
+  },
+  headerLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF5F5',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  headerLogoutText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.error,
   },
   statsRow: {
     flexDirection: 'row',

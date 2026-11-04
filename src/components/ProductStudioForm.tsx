@@ -631,6 +631,7 @@ export function ProductStudioForm({
   const [savedDrafts, setSavedDrafts] = useState<AdminProductDraft[]>([]);
   const [draftStatusMsg, setDraftStatusMsg] = useState<string | null>(null);
   const [frameFitMode, setFrameFitMode] = useState<'contain_square' | 'cover_square'>('contain_square');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const draftHydratedRef = useRef(false);
 
   const applyDraftToForm = (d: AdminProductDraft) => {
@@ -1032,6 +1033,7 @@ export function ProductStudioForm({
 
   /* ---- Save Product ---- */
   const handleSave = async () => {
+    if (isSubmitting) return;
     if (!name.trim()) {
       Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên sản phẩm.');
       return;
@@ -1041,6 +1043,9 @@ export function ProductStudioForm({
       Alert.alert('Thiếu giá bán', 'Vui lòng nhập giá bán hợp lệ (VNĐ).');
       return;
     }
+
+    setIsSubmitting(true);
+    try {
 
     const cleanColors = colorOptions
       .filter((c) => Boolean(c.image) || c.name.trim().length > 0)
@@ -1129,11 +1134,14 @@ export function ProductStudioForm({
       createdAt: initialProduct?.createdAt || new Date().toISOString(),
     };
 
-    if (mode === 'add') {
-      await deleteAdminDraft(currentDraftId);
-      await clearWorkingDraft();
+      if (mode === 'add') {
+        await deleteAdminDraft(currentDraftId);
+        await clearWorkingDraft();
+      }
+      await onSubmitProduct(productPayload);
+    } finally {
+      setIsSubmitting(false);
     }
-    await onSubmitProduct(productPayload);
   };
 
   return (
@@ -2146,12 +2154,21 @@ export function ProductStudioForm({
                 </TouchableOpacity>
               )}
               <TouchableOpacity
-                style={[styles.submitPrimaryBtn, { flex: 1 }]}
+                style={[
+                  styles.submitPrimaryBtn,
+                  { flex: 1 },
+                  isSubmitting && { opacity: 0.65 },
+                ]}
+                disabled={isSubmitting}
                 onPress={handleSave}
                 activeOpacity={0.85}>
                 <Check size={18} color="#FFFDF9" />
                 <Text style={styles.submitPrimaryBtnText}>
-                  {mode === 'add' ? 'Đăng sản phẩm lên kệ' : 'Lưu cập nhật sản phẩm'}
+                  {isSubmitting
+                    ? 'Đang lưu & đồng bộ sản phẩm...'
+                    : mode === 'add'
+                    ? 'Đăng sản phẩm lên kệ'
+                    : 'Lưu cập nhật sản phẩm'}
                 </Text>
               </TouchableOpacity>
             </View>

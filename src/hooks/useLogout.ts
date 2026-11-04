@@ -9,22 +9,26 @@ export function useLogout() {
 
   const handleLogout = () => {
     const performLogout = async () => {
-      await logout();
-      router.replace('/');
+      try {
+        await logout();
+      } finally {
+        router.replace('/');
+      }
     };
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // window.confirm hoạt động ổn định trên web hơn Alert.alert
-      if (window.confirm(PROF_LOGOUT_CONFIRM)) {
-        performLogout();
-      }
+    if (Platform.OS === 'web') {
+      // Trên Web & Mobile Safari/WebView (Zalo, Messenger, Chrome Mobile), window.confirm thường bị chặn làm kẹt nút Đăng xuất.
+      // Thực thi đăng xuất trực tiếp ngay khi người dùng bấm nút Đăng xuất.
+      void performLogout();
     } else {
       Alert.alert(PROF_LOGOUT_TITLE, PROF_LOGOUT_CONFIRM, [
         { text: 'Hủy', style: 'cancel' },
         {
           text: PROF_LOGOUT,
           style: 'destructive',
-          onPress: performLogout,
+          onPress: () => {
+            void performLogout();
+          },
         },
       ]);
     }

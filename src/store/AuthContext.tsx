@@ -64,6 +64,57 @@ function toAuthUser(session: Session | null, localAvatar?: string | null): AuthU
 const NETWORK_ERROR_MSG =
   'Không kết nối được Supabase. Vui lòng kiểm tra mạng hoặc cấu hình API.';
 
+function purgeLocalSupabaseSessionTokens() {
+  try {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage) {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (
+            k &&
+            (k.startsWith('sb-') ||
+              k.includes('supabase.auth.token') ||
+              k.includes('-auth-token'))
+          ) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => {
+          try {
+            window.localStorage.removeItem(k);
+          } catch {
+            // ignore
+          }
+        });
+      }
+      if (window.sessionStorage) {
+        const sessionKeys: string[] = [];
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const k = window.sessionStorage.key(i);
+          if (
+            k &&
+            (k.startsWith('sb-') ||
+              k.includes('supabase.auth.token') ||
+              k.includes('-auth-token'))
+          ) {
+            sessionKeys.push(k);
+          }
+        }
+        sessionKeys.forEach((k) => {
+          try {
+            window.sessionStorage.removeItem(k);
+          } catch {
+            // ignore
+          }
+        });
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -82,7 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (storedGuestAvatar && !cancelled) {
           setGuestAvatar(storedGuestAvatar);
         }
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+        if (sessionErr) {
+          purgeLocalSupabaseSessionTokens();
+        }
         if (!cancelled) {
           const localAvatar = session?.user
             ? await AsyncStorage.getItem(`${AVATAR_STORAGE_PREFIX}${session.user.id}`)
@@ -91,8 +145,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (err: unknown) {
         if (__DEV__) console.error('[AUTH] Lỗi getSession:', err);
+        purgeLocalSupabaseSessionTokens();
         if (!cancelled) {
-          setConfigError(NETWORK_ERROR_MSG);
           setUser(null);
         }
       } finally {
@@ -205,11 +259,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [configError]);
 
   const logout = useCallback(async () => {
+    // 1. Immediately clear user state and purge local storage tokens so mobile browsers never get stuck
+    setUser(null);
+    purgeLocalSupabaseSessionTokens();
     try {
-      await supabase.auth.signOut();
+      await Promise.race([
+        supabase.auth.signOut({ scope: 'local' }),
+        new Promise((resolve) => setTimeout(resolve, 1200)),
+      ]);
+      // Fire-and-forget global revocation without blocking UI
+      supabase.auth.signOut().catch(() => {});
     } catch (err: unknown) {
       if (__DEV__) console.error('[AUTH] Lỗi logout:', err);
     }
+    purgeLocalSupabaseSessionTokens();
     setUser(null);
   }, []);
 
