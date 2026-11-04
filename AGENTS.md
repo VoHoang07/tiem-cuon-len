@@ -70,3 +70,18 @@
 7. **[Web Image Quality & Aspect Ratio Framing]** Ảnh sản phẩm tải lên từ điện thoại (`3:4`, `9:16`) hoặc ảnh nhỏ bị mờ, vỡ hạt hoặc bị cắt mất đầu/đuôi sản phẩm trong khung vuông -> Nén canvas 1 bước từ ảnh lớn gây răng cưa (bilinear aliasing) và `objectFit: 'cover'` cắt mất rìa của ảnh chữ nhật -> **Luật bất khả kháng:** Mọi ảnh tải lên trên Web trong `ProductStudioForm.tsx` bắt buộc đi qua bộ kiểm tra Magic Bytes + đổi tên UUID v4 (`fileUploadGuard.ts`) và hàm hạ cỡ đa bước 2x (`optimizeHdImageIfWeb`) về chuẩn khung vuông **Ultra-HD `1440×1440` (1:1)** chất lượng `0.94`, tự động căn vừa khung cho ảnh chữ nhật kèm nền studio mờ để không bao giờ làm mất chi tiết sản phẩm.
 8. **[TypeScript CLI & Clean Source Tree]** Chạy lệnh `npx tsc` trực tiếp không có cấu hình chuẩn khi thiếu `expo/tsconfig.base` làm phát sinh hàng loạt file `.js` rác nằm lẫn trong thư mục `src/` -> `tsc` mặc định bật chế độ emit file `.js` nếu không đọc được file cấu hình gốc -> **Luật bất khả kháng:** Không bao giờ để file `.js` biên dịch tự động tồn tại trong `src/` (mọi code trong `src/` chỉ dùng `.ts` và `.tsx`); sử dụng `npm run security:check` và `npm run build:web` (`npx expo export -p web`) để xác thực toàn bộ dự án trước khi commit.
 9. **[Database Schema CamelCase Naming & Safe Index Creation]** Chạy SQL tạo Index trong Supabase SQL Editor báo lỗi `ERROR: 42703: column "created_at" does not exist` -> Các bảng trong Supabase (`products`, `orders`, `addresses`, `cart_items`, `favorites`) sử dụng tên cột `camelCase` đặt trong dấu ngoặc kép (`"createdAt"`, `"userId"`, `"fullName"`, `"detailAddress"`) thay vì `snake_case`, hoặc bảng `products` trên môi trường thực tế có thể thiếu cột thời gian tuỳ phiên bản -> **Luật bất khả kháng:** Mọi truy vấn SQL và `CREATE INDEX` bắt buộc viết đúng tên cột `"createdAt"`, `"userId"` có dấu ngoặc kép và bọc trong khối `DO $$ BEGIN ... EXCEPTION WHEN OTHERS THEN NULL; END $$;` để luôn thực thi an toàn 100% trên Supabase SQL Editor.
+
+---
+
+## 5. SHORTCUT TRIGGERS (LỆNH TẮT & CHẾ ĐỘ MẶC ĐỊNH)
+
+### 1. KHI CÓ TỪ KHÓA Ở ĐẦU CÂU:
+- **`fix: [lỗi]`** *(Sửa lỗi/bug)*: Tìm nguyên nhân gốc để sửa -> Quét toàn dự án xem có chỗ nào bị tương tự không để sửa luôn -> Chạy typecheck/build (`npm run security:check` / `npm run build:web`) -> Bắt buộc ghi bài học vào mục **"4. SELF-EVOLVING MEMORY"**.
+- **`edit: [yêu cầu]`** hoặc **`sửa: [yêu cầu]`** *(Chỉnh sửa giao diện, text, logic, cấu hình sẵn có)*: Kiểm tra ảnh hưởng để không làm hỏng tính năng cũ -> Thực hiện chỉnh sửa -> Chạy typecheck/build kiểm tra.
+- **`add: [yêu cầu]`** *(Thêm tính năng/tiện ích mới)*: Lên phương án (Pha 1) -> Viết code kèm đủ trạng thái `Loading/Success/Error` (Pha 2) -> Chạy typecheck/build (Pha 3).
+- **`opt: [yêu cầu]`** *(Tối ưu tốc độ/hiệu năng)*: Đo lường & tìm điểm nghẽn -> Tối ưu code/query mà không làm gãy **CRITICAL PATHS** -> Chạy build kiểm chứng.
+- **`audit`** *(Kiểm toán nhanh)*: Rà soát lại hiệu năng, UX và bảo mật của các file vừa sửa trong `git diff`.
+
+### 2. CHẾ ĐỘ TỰ NHẬN DIỆN (DEFAULT FALLBACK - KHI KHÔNG GÕ TỪ KHÓA):
+Nếu người dùng chỉ gõ một câu yêu cầu bình thường bằng tiếng Việt mà không có từ khóa ở đầu:
+- Tự động phân tích ngữ cảnh câu nói để xếp nó vào đúng nhóm (`fix`, `edit`, `add`, hoặc `opt`) và **TỰ ĐỘNG chạy ngầm đầy đủ quy trình 3 pha + kiểm tra build + tự học (nếu là lỗi)** của nhóm đó mà không được bỏ qua bất kỳ bước bảo vệ nào.
