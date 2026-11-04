@@ -1,10 +1,4 @@
 import { Category, ProductColorOption, ProductAccessoryOption } from '@/types/product';
-import {
-  GEN_CATEGORY_INTRO,
-  GEN_ADJECTIVES,
-  GEN_MATERIAL_PHRASES,
-  GEN_CLOSING_PHRASES,
-} from '@/constants/strings';
 
 const COLOR_HEX_MAP: Record<string, string> = {
   'kem sữa': '#F5EBE0',
@@ -134,16 +128,82 @@ export function inferCategory(name: string): Category {
   return 'Crochet';
 }
 
-function getMaterialPhrase(material: string): string {
-  return (
-    GEN_MATERIAL_PHRASES[material] ||
-    `${material.toLowerCase()} chất lượng cao, tạo cảm giác thủ công ấm áp`
-  );
-}
-
-function pickRandom<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+const PROFESSIONAL_CATEGORY_SPECS: Record<
+  string,
+  {
+    summary: string;
+    craftsmanship: string;
+    usage: string;
+    care: string;
+  }
+> = {
+  Keychains: {
+    summary: 'Mẫu móc khoá đan móc thủ công nhỏ gọn, form đứng chắc chắn và giữ dáng tốt khi sử dụng lâu dài.',
+    craftsmanship: 'Mũi móc đều tay, nhồi bông gòn bi kháng khuẩn độ đàn hồi cao, đi kèm khoen kim loại chống gỉ.',
+    usage: 'Treo chìa khoá, balo, túi xách hoặc làm quà tặng tinh tế.',
+    care: 'Vệ sinh nhẹ bằng khăn ẩm hoặc giặt tay nhanh với nước lạnh, phơi nơi thoáng mát.',
+  },
+  Bags: {
+    summary: 'Túi đan móc thủ công thiết kế chuẩn form, kết cấu sợi đan dày dặn và chịu lực tốt.',
+    craftsmanship: 'Đường móc chắc chắn, quai đeo êm vai, tỉ mỉ từng mối nối để không bị dão khi đựng đồ.',
+    usage: 'Đựng điện thoại, ví tiền, phụ kiện cá nhân khi đi dạo phố, cà phê hoặc du lịch.',
+    care: 'Giặt tay nhẹ nhàng với xà phòng dịu nhẹ, phơi phẳng tự nhiên, tránh vắt xoắn mạnh.',
+  },
+  Dolls: {
+    summary: 'Thú bông amigurumi đan móc thủ công 100%, bề mặt sợi mềm mịn và an toàn khi tiếp xúc.',
+    craftsmanship: 'Các chi tiết được khâu ráp thủ công chắc chắn, nhồi bông gòn cao cấp giữ form căng tròn.',
+    usage: 'Trang trí góc làm việc, phòng ngủ hoặc làm quà tặng dịp đặc biệt.',
+    care: 'Giặt tay nhẹ hoặc vệ sinh bề mặt bằng bọt xà phòng dịu nhẹ, phơi khô nơi thoáng gió.',
+  },
+  Crochet: {
+    summary: 'Sản phẩm hoa & đồ trang trí đan móc thủ công, giữ trọn màu sắc tươi sáng theo thời gian.',
+    craftsmanship: 'Cánh hoa và lá được định hình kẽm bọc sợi chắc chắn, dễ dàng điều chỉnh dáng hoa theo ý thích.',
+    usage: 'Trang trí bàn làm việc, kệ sách, chụp ảnh decor hoặc làm quà tặng kỷ niệm bền đẹp.',
+    care: 'Phủi bụi nhẹ bằng cọ mềm hoặc khăn khô sạch, hạn chế ngâm nước trực tiếp.',
+  },
+  Yarn: {
+    summary: 'Cuộn len sợi tuyển chọn chuyên dụng cho đan móc thủ công, sợi đều và lên màu chuẩn.',
+    craftsmanship: 'Sợi mềm mại, ít xù lông, độ xoắn ổn định giúp dễ dàng đi kim và rõ mũi móc.',
+    usage: 'Phù hợp móc thú bông, móc khoá, túi xách, khăn choàng và các dự án DIY.',
+    care: 'Bảo quản nơi khô ráo, thoáng mát, tránh ẩm ướt và ánh nắng gắt trực tiếp.',
+  },
+  Accessories: {
+    summary: 'Phụ kiện thủ công thiết kế gọn đẹp, tính ứng dụng cao và dễ phối cùng trang phục hằng ngày.',
+    craftsmanship: 'Hoàn thiện tỉ mỉ từng đường kim mũi chỉ, chất liệu êm nhẹ tạo cảm giác thoải mái khi dùng.',
+    usage: 'Sử dụng hằng ngày, phối đồ chụp ảnh hoặc làm quà tặng nhỏ gọn.',
+    care: 'Giặt tay nhẹ nhàng với nước lạnh, phơi khô tự nhiên ở nơi thoáng mát.',
+  },
+  VelvetWire: {
+    summary: 'Sản phẩm tạo hình từ kẽm nhung (pipe cleaner) dày mịn, màu sắc sắc nét và giữ form bền bỉ.',
+    craftsmanship: 'Lớp nhung dày phủ đều lõi kẽm dẻo dai, uốn nắn tỉ mỉ và cố định keo chắc chắn.',
+    usage: 'Trang trí không gian sống, bàn học hoặc làm quà tặng thủ công độc đáo.',
+    care: 'Bảo quản nơi khô ráo, dùng cọ mềm phủi bụi định kỳ, tránh đè nén mạnh.',
+  },
+  VelvetPots: {
+    summary: 'Chậu hoa kẽm nhung để bàn thiết kế cân đối, màu sắc hài hoà giúp không gian thêm sinh động.',
+    craftsmanship: 'Từng cánh hoa và tán lá được uốn thủ công từ kẽm nhung loại dày, gắn cố định vững vàng trong chậu.',
+    usage: 'Đặt trang trí bàn làm việc, quầy thu ngân, kệ sách hoặc làm quà tặng khai trương, sinh nhật.',
+    care: 'Vệ sinh bụi bằng cọ mềm hoặc máy thổi bụi mini, tránh tiếp xúc trực tiếp với nước.',
+  },
+  VelvetFlowers: {
+    summary: 'Hoa kẽm nhung thủ công phối màu trang nhã, giữ nguyên vẻ đẹp lâu dài mà không lo héo úa.',
+    craftsmanship: 'Cánh hoa uốn nắn đều đặn từ sợi kẽm nhung mịn, cành hoa cứng cáp và giấy gói chỉnh chu.',
+    usage: 'Làm quà tặng lễ tốt nghiệp, sinh nhật, kỷ niệm hoặc cắm bình trang trí phòng.',
+    care: 'Tránh nơi ẩm ướt, dùng cọ mềm làm sạch bụi nhẹ nhàng trên bề mặt nhung.',
+  },
+  VelvetAccessories: {
+    summary: 'Phụ kiện kẽm nhung thủ công nhỏ xinh, điểm nhấn nổi bật cho tóc và trang phục.',
+    craftsmanship: 'Khung kẹp/cài chắc chắn kết hợp chi tiết kẽm nhung uốn gọn gàng, không lộ mối kẽm.',
+    usage: 'Phối phụ kiện đi học, đi chơi, chụp ảnh hoặc làm quà tặng bạn bè.',
+    care: 'Cất giữ nơi khô thoáng, hạn chế tì đè vật nặng lên phần tạo hình nhung.',
+  },
+  VelvetStems: {
+    summary: 'Set nguyên liệu sợi kẽm nhung loại 1, lông nhung dày mịn và bảng màu chuẩn đẹp.',
+    craftsmanship: 'Lõi thép dẻo dễ uốn gập nhiều lần mà không gãy, mật độ sợi nhung dày không lộ lõi.',
+    usage: 'Dùng làm hoa kẽm nhung, thú mini, phụ kiện trang trí và đồ thủ công DIY tại nhà.',
+    care: 'Bảo quản trong túi kín nơi khô ráo để sợi nhung luôn sạch và bông mịn.',
+  },
+};
 
 export function generateProductDescription(product: {
   name: string;
@@ -152,24 +212,20 @@ export function generateProductDescription(product: {
   color: string;
   tags: string[];
 }): string {
-  const categoryIntro =
-    GEN_CATEGORY_INTRO[product.category] || 'This handmade crochet creation';
-  const adjective = pickRandom(GEN_ADJECTIVES);
-  const materialPhrase = getMaterialPhrase(product.material);
-  const closing = pickRandom(GEN_CLOSING_PHRASES);
+  const spec =
+    PROFESSIONAL_CATEGORY_SPECS[product.category] ||
+    PROFESSIONAL_CATEGORY_SPECS.Crochet;
 
-  const colorPhrase = product.color.toLowerCase().includes('multicolor')
-    ? 'với tông màu đa sắc tươi vui'
-    : product.color.toLowerCase().includes('mixed')
-      ? 'với sự pha trộn tinh tế các gam pastel'
-      : `với tông ${product.color.toLowerCase()} dịu dàng`;
+  const cleanName = product.name.trim() || 'Sản phẩm thủ công';
+  const cleanMaterial = product.material.trim() || 'Len Cotton Milk loại 1';
+  const cleanColor = product.color.trim() || 'Chuẩn theo phân loại';
 
-  const templates = [
-    `${categoryIntro} ${adjective} và được chăm chút tỉ mỉ từ ${materialPhrase}. ${product.name} nổi bật ${colorPhrase} cùng kết cấu thủ công duyên dáng, tạo nên vẻ đẹp độc nhất vô nhị. ${closing}`,
-    `Được làm thủ công bằng tình yêu, ${product.name.toLowerCase()} ${adjective} này sử dụng ${materialPhrase}. ${colorPhrase.charAt(0).toUpperCase() + colorPhrase.slice(1)} cùng từng chi tiết tỉ mỉ tạo nên sản phẩm vừa cao cấp vừa cá nhân. ${closing}`,
-    `${product.name.toLowerCase()} ${adjective} này là minh chứng cho vẻ đẹp của nghệ thuật crochet thủ công. Được làm từ ${materialPhrase}, sản phẩm nổi bật ${colorPhrase} và sự chú ý tinh tế đến từng chi tiết. ${closing}`,
-    `Mỗi ${product.name.toLowerCase()} đều được làm thủ công bằng tình yêu với ${materialPhrase}. Thiết kế ${adjective}, ${colorPhrase} cùng từng đường móc cẩn thận tạo nên sản phẩm handmade nổi bật. ${closing}`,
-  ];
-
-  return pickRandom(templates);
+  return [
+    `${cleanName} — ${spec.summary}`,
+    `• Chất liệu: ${cleanMaterial} (Tông màu: ${cleanColor}).`,
+    `• Độ hoàn thiện: ${spec.craftsmanship}`,
+    `• Công dụng: ${spec.usage}`,
+    `• Thời gian chuẩn bị: Hàng đặt làm thủ công mới trong 5–6 ngày (hoặc giao ngay nếu có sẵn tại tiệm).`,
+    `• Bảo quản: ${spec.care}`,
+  ].join('\n');
 }

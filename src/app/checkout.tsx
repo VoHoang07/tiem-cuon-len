@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
   TextInput,
+  Animated,
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -157,9 +158,27 @@ export default function CheckoutScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  const [addressMissingError, setAddressMissingError] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const addressShakeAnim = useRef(new Animated.Value(0)).current;
   const [botTrap, setBotTrap] = useState('');
   const formMountedAtRef = useRef<number>(Date.now());
   const lastOrderAtRef = useRef<number>(0);
+
+  const triggerAddressShake = () => {
+    setAddressMissingError(true);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    addressShakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(addressShakeAnim, { toValue: -14, duration: 55, useNativeDriver: true }),
+      Animated.timing(addressShakeAnim, { toValue: 14, duration: 55, useNativeDriver: true }),
+      Animated.timing(addressShakeAnim, { toValue: -12, duration: 55, useNativeDriver: true }),
+      Animated.timing(addressShakeAnim, { toValue: 12, duration: 55, useNativeDriver: true }),
+      Animated.timing(addressShakeAnim, { toValue: -8, duration: 50, useNativeDriver: true }),
+      Animated.timing(addressShakeAnim, { toValue: 8, duration: 50, useNativeDriver: true }),
+      Animated.timing(addressShakeAnim, { toValue: 0, duration: 45, useNativeDriver: true }),
+    ]).start();
+  };
 
   // Reset express fee confirmation if address changes or user leaves express mode
   useEffect(() => {
@@ -279,24 +298,24 @@ export default function CheckoutScreen() {
     if (hasMadeToOrder) {
       if (shippingOption === 'pickup') {
         return {
-          totalDays: '3–4 ngày',
-          breakdown: '3–4 ngày đan thủ công • Tiệm báo bạn ghé lấy ngay khi hoàn thiện',
+          totalDays: '5–6 ngày',
+          breakdown: '5–6 ngày đan thủ công • Tiệm báo bạn ghé lấy ngay khi hoàn thiện',
         };
       }
       if (shippingOption === 'express') {
         return {
-          totalDays: '3–4 ngày',
-          breakdown: '3–4 ngày đan thủ công + Giao hỏa tốc 2h ngay khi hoàn thiện',
+          totalDays: '5–6 ngày',
+          breakdown: '5–6 ngày đan thủ công + Giao hỏa tốc 2h ngay khi hoàn thiện',
         };
       }
       return isHCM
         ? {
-            totalDays: '4–6 ngày',
-            breakdown: '3–4 ngày đan thủ công + 1–2 ngày giao nội thành TP.HCM',
+            totalDays: '6–8 ngày',
+            breakdown: '5–6 ngày đan thủ công + 1–2 ngày giao nội thành TP.HCM',
           }
         : {
-            totalDays: '5–8 ngày',
-            breakdown: '3–4 ngày đan thủ công + 2–4 ngày giao liên tỉnh',
+            totalDays: '7–10 ngày',
+            breakdown: '5–6 ngày đan thủ công + 2–4 ngày giao liên tỉnh',
           };
     }
 
@@ -374,9 +393,18 @@ export default function CheckoutScreen() {
       const defaultAddr = getDefaultAddress();
       setSelectedAddressId(defaultAddr?.id ?? userAddresses[0].id);
     }
+    if (userAddresses.length > 0) {
+      setAddressMissingError(false);
+    }
   }, [userAddresses]);
 
-  const hasAddress = userAddresses.length > 0;
+  const hasAddress = Boolean(
+    selectedAddress &&
+      selectedAddress.fullName?.trim() &&
+      selectedAddress.phone?.trim() &&
+      (shippingOption === 'pickup' ||
+        (selectedAddress.city?.trim() && selectedAddress.detailAddress?.trim()))
+  );
 
   const getOrderStatus = (type: PaymentMethodType) => {
     if (type === 'cod') return 'Đang xử lý' as const;
@@ -384,8 +412,8 @@ export default function CheckoutScreen() {
   };
 
   const handleAskExpressFeeInChat = () => {
-    if (!selectedAddress) {
-      Alert.alert('Thiếu địa chỉ', 'Vui lòng thêm địa chỉ nhận hàng trước khi hỏi giá Ship Hỏa Tốc.');
+    if (!hasAddress || !selectedAddress) {
+      triggerAddressShake();
       return;
     }
     const fullAddr = [
@@ -429,8 +457,8 @@ export default function CheckoutScreen() {
       router.replace('/login');
       return;
     }
-    if (!selectedAddress) {
-      Alert.alert('Thiếu địa chỉ', 'Vui lòng thêm địa chỉ giao hàng trước khi thanh toán.');
+    if (!hasAddress || !selectedAddress) {
+      triggerAddressShake();
       return;
     }
     if (shippingOption === 'express' && !expressFeeConfirmed && !bypassExpressCheck) {
@@ -630,6 +658,7 @@ export default function CheckoutScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -659,28 +688,71 @@ export default function CheckoutScreen() {
           {/* Left Column on Desktop: Address + Shipping + Payment */}
           <View style={[styles.leftCol, isDesktop && styles.leftColDesktop]}>
             {/* Address */}
-            <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+            <Animated.View
+              style={[
+                styles.section,
+                isDesktop && styles.sectionDesktop,
+                { transform: [{ translateX: addressShakeAnim }] },
+              ]}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{CHECKOUT_DELIVERY}</Text>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    addressMissingError && { color: '#DC2626' },
+                  ]}>
+                  {CHECKOUT_DELIVERY}
+                </Text>
                 <TouchableOpacity onPress={() => router.push('/addresses')}>
                   <Text style={styles.changeText}>Thay đổi</Text>
                 </TouchableOpacity>
               </View>
 
+              {addressMissingError && (
+                <View style={styles.addressErrorBanner}>
+                  <Text style={styles.addressErrorBannerText}>
+                    ⚠️ Vui lòng nhập thông tin người nhận & địa chỉ giao hàng trước khi bấm Thanh toán!
+                  </Text>
+                </View>
+              )}
+
               {!hasAddress ? (
-                <View style={styles.noAddressCard}>
-                  <MapPin size={48} color={COLORS.lightText} />
-                  <Text style={styles.noAddressText}>Bạn chưa có địa chỉ giao hàng</Text>
+                <View
+                  style={[
+                    styles.noAddressCard,
+                    addressMissingError && styles.noAddressCardError,
+                  ]}>
+                  <MapPin
+                    size={48}
+                    color={addressMissingError ? '#DC2626' : COLORS.lightText}
+                  />
+                  <Text
+                    style={[
+                      styles.noAddressText,
+                      addressMissingError && { color: '#B91C1C', fontWeight: '700' },
+                    ]}>
+                    {addressMissingError
+                      ? 'Bạn chưa nhập thông tin địa chỉ giao hàng!'
+                      : 'Bạn chưa có địa chỉ giao hàng'}
+                  </Text>
                   <TouchableOpacity
-                    style={styles.addAddressBtn}
+                    style={[
+                      styles.addAddressBtn,
+                      addressMissingError && { backgroundColor: '#DC2626' },
+                    ]}
                     onPress={() => router.push('/addresses/add')}>
-                    <Text style={styles.addAddressBtnText}>Thêm địa chỉ giao hàng</Text>
+                    <Text style={styles.addAddressBtnText}>
+                      + Nhập địa chỉ giao hàng ngay
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 <>
                   <TouchableOpacity
-                    style={[styles.addressCard, isDesktop && styles.addressCardDesktop]}
+                    style={[
+                      styles.addressCard,
+                      isDesktop && styles.addressCardDesktop,
+                      addressMissingError && styles.addressCardError,
+                    ]}
                     onPress={() => router.push('/addresses')}>
                     <View style={styles.addressHeader}>
                       <MapPin size={20} color={COLORS.primary} />
@@ -720,7 +792,10 @@ export default function CheckoutScreen() {
                                 isDesktop && styles.altAddressCardDesktop,
                                 selectedAddressId === addr.id && styles.altAddressCardSelected,
                               ]}
-                              onPress={() => setSelectedAddressId(addr.id)}>
+                              onPress={() => {
+                                setSelectedAddressId(addr.id);
+                                setAddressMissingError(false);
+                              }}>
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.altAddressName}>{addr.fullName}</Text>
                                 <Text style={styles.altAddressDetail} numberOfLines={2}>
@@ -739,7 +814,7 @@ export default function CheckoutScreen() {
                   )}
                 </>
               )}
-            </View>
+            </Animated.View>
 
             {/* Shipping Carrier Selection */}
             <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
@@ -833,8 +908,8 @@ export default function CheckoutScreen() {
                     title: 'Giao tiêu chuẩn',
                     sub: hasMadeToOrder
                       ? isHCM
-                        ? 'Nhận sau 4–6 ngày (gồm đan)'
-                        : 'Nhận sau 5–8 ngày (gồm đan)'
+                        ? 'Nhận sau 6–8 ngày (gồm đan)'
+                        : 'Nhận sau 7–10 ngày (gồm đan)'
                       : isHCM
                         ? 'Nội thành • 1–2 ngày'
                         : 'Toàn quốc • 2–4 ngày',
@@ -859,7 +934,7 @@ export default function CheckoutScreen() {
                     iconBg: '#F5EFE6',
                     title: 'Nhận tại tiệm (Q.8)',
                     sub: hasMadeToOrder
-                      ? 'Đan 3–4 ngày xong ghé lấy'
+                      ? 'Đan 5–6 ngày xong ghé lấy'
                       : 'Ghé lấy ngay trong ngày',
                     priceLabel: 'Miễn phí',
                     isFree: true,
@@ -1010,7 +1085,7 @@ export default function CheckoutScreen() {
                       <View style={styles.summaryMetaInline}>
                         <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
                         <Text style={styles.summaryStockBadge}>
-                          {isItemOrder ? '• 🧶 Hàng đặt (3–4 ngày)' : '• 📦 Có sẵn'}
+                          {isItemOrder ? '• 🧶 Hàng đặt (5–6 ngày)' : '• 📦 Có sẵn'}
                         </Text>
                       </View>
                     </View>
@@ -1043,7 +1118,7 @@ export default function CheckoutScreen() {
                 <Text style={styles.subLabel}>Dự kiến nhận hàng</Text>
                 <Text style={[styles.subValue, { color: '#8B5E3C' }]}>
                   {hasMadeToOrder
-                    ? `${deliveryTimeEstimate.totalDays} (gồm 3–4 ngày đan)`
+                    ? `${deliveryTimeEstimate.totalDays} (gồm 5–6 ngày đan)`
                     : deliveryTimeEstimate.totalDays}
                 </Text>
               </View>
@@ -1067,17 +1142,14 @@ export default function CheckoutScreen() {
                   style={[
                     styles.payBtn,
                     isDesktop && styles.payBtnDesktop,
-                    !hasAddress && styles.payBtnDisabled,
                   ]}
                   onPress={() => handlePayment()}
-                  disabled={!hasAddress}
+                  disabled={isSubmittingOrder}
                   activeOpacity={0.8}>
                   <Text style={styles.payBtnText}>
-                    {hasAddress
-                      ? selectedPayment?.type === 'cod'
-                        ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
-                        : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`
-                      : 'Thêm địa chỉ để thanh toán'}
+                    {selectedPayment?.type === 'cod'
+                      ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
+                      : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1351,6 +1423,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: COLORS.border,
+  },
+  noAddressCardError: {
+    borderColor: '#DC2626',
+    borderWidth: 2,
+    borderStyle: 'solid',
+    backgroundColor: '#FFF5F5',
+  },
+  addressCardError: {
+    borderColor: '#DC2626',
+    borderWidth: 2,
+    backgroundColor: '#FFF5F5',
+  },
+  addressErrorBanner: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 10,
+  },
+  addressErrorBannerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B91C1C',
+    lineHeight: 18,
   },
   noAddressText: { fontSize: 15, fontWeight: '600', color: COLORS.mediumText },
   addAddressBtn: {

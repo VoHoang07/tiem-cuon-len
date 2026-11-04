@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
@@ -24,6 +24,7 @@ import {
   Home,
   Layers,
   AlertTriangle,
+  FileText,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
@@ -32,6 +33,11 @@ import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { Product, Category } from '@/types/product';
+import {
+  AdminProductDraft,
+  loadAdminDrafts,
+  deleteAdminDraft,
+} from '@/utils/productDraftStore';
 
 export default function ManageProductsScreen() {
   const router = useRouter();
@@ -42,6 +48,36 @@ export default function ManageProductsScreen() {
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
+  const [drafts, setDrafts] = useState<AdminProductDraft[]>([]);
+
+  const refreshDrafts = useCallback(async () => {
+    const list = await loadAdminDrafts();
+    setDrafts(list);
+  }, []);
+
+  useEffect(() => {
+    void refreshDrafts();
+  }, [refreshDrafts]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshDrafts();
+    }, [refreshDrafts])
+  );
+
+  const handleDeleteDraft = async (draft: AdminProductDraft) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
+      const ok = window.confirm(
+        `Xoá bản nháp "${draft.name?.trim() || 'Chưa đặt tên'}" khỏi danh sách nháp?`
+      );
+      if (!ok) return;
+      const next = await deleteAdminDraft(draft.id);
+      setDrafts(next);
+      return;
+    }
+    const next = await deleteAdminDraft(draft.id);
+    setDrafts(next);
+  };
 
   const filteredProducts = useMemo(() => {
     let list = [...products];
@@ -224,6 +260,99 @@ export default function ManageProductsScreen() {
         <Text style={styles.addBtnText}>Thêm sản phẩm thủ công mới</Text>
       </TouchableOpacity>
 
+      {/* Admin Saved Drafts Section (Only visible to Admin) */}
+      {drafts.length > 0 && (
+        <View style={[styles.draftsSectionBox, isMobile && styles.draftsSectionBoxMobile]}>
+          <View style={styles.draftsHeaderRow}>
+            <FileText size={16} color="#92400E" />
+            <Text style={styles.draftsSectionTitle}>
+              Bản nháp đang lưu ({drafts.length}) — Chưa đăng lên kệ
+            </Text>
+          </View>
+          <Text style={styles.draftsSectionSub}>
+            Bấm vào bản nháp để mở lại toàn bộ ảnh & thông tin đang nhập dở và đăng tiếp:
+          </Text>
+
+          {drafts.map((d, idx) => {
+            const thumbUri =
+              d.coverImage ||
+              (d.colorOptions?.find((c) => typeof c.image === 'string')?.image as string | undefined) ||
+              d.extraPhotos?.[0] ||
+              null;
+            const numPrice = Number((d.price || '').replace(/[^0-9]/g, ''));
+            const photoCount =
+              (d.coverImage ? 1 : 0) +
+              (d.colorOptions?.filter((c) => Boolean(c.image)).length || 0) +
+              (d.extraPhotos?.length || 0);
+
+            return (
+              <TouchableOpacity
+                key={d.id || idx}
+                style={styles.draftCardItem}
+                onPress={() =>
+                  router.push({
+                    pathname: '/add-product',
+                    params: { draftId: d.id },
+                  })
+                }
+                activeOpacity={0.82}>
+                <View style={styles.draftThumbWrap}>
+                  {thumbUri ? (
+                    <Image
+                      source={{ uri: thumbUri }}
+                      style={styles.productThumb}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.productEmoji}>
+                      {getCategoryEmoji(d.category || 'Crochet')}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName} numberOfLines={1}>
+                    {d.name?.trim() || `Bản nháp #${idx + 1} (Chưa đặt tên)`}
+                  </Text>
+                  <Text style={styles.draftMetaPrice}>
+                    {numPrice > 0 ? formatVND(numPrice) : 'Chưa nhập giá'} • {photoCount} ảnh •{' '}
+                    {d.colorOptions?.length || 1} phân loại
+                  </Text>
+                  <View style={styles.productMeta}>
+                    <View style={styles.draftBadgePill}>
+                      <Text style={styles.draftBadgeText}>📝 Bản nháp Admin</Text>
+                    </View>
+                    <Text style={styles.productCategory}>
+                      {getCategoryEmoji(d.category || 'Crochet')}{' '}
+                      {getCategoryLabel(d.category || 'Crochet')}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.productActions}>
+                  <TouchableOpacity
+                    style={styles.resumeDraftBtn}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/add-product',
+                        params: { draftId: d.id },
+                      })
+                    }>
+                    <Edit3 size={15} color="#FFFDF9" />
+                    <Text style={styles.resumeDraftBtnText}>Đăng tiếp</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => void handleDeleteDraft(d)}>
+                    <Trash2 size={16} color={COLORS.error} />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {/* Search & Category Filter */}
       <View style={[styles.searchBar, isMobile && styles.searchBarMobile]}>
         <Search size={17} color={COLORS.mediumText} />
@@ -404,6 +533,86 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: '#3D2B1F',
+  },
+  draftsSectionBox: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    gap: 8,
+  },
+  draftsSectionBoxMobile: {
+    marginHorizontal: 12,
+    padding: 12,
+  },
+  draftsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  draftsSectionTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  draftsSectionSub: {
+    fontSize: 12,
+    color: '#78350F',
+    marginBottom: 4,
+  },
+  draftCardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    gap: 10,
+  },
+  draftThumbWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  draftMetaPrice: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  draftBadgePill: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  draftBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  resumeDraftBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#92400E',
+    paddingHorizontal: 11,
+    height: 36,
+    borderRadius: 10,
+  },
+  resumeDraftBtnText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#FFFDF9',
   },
   searchBar: {
     flexDirection: 'row',

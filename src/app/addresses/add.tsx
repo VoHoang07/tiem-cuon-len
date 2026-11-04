@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Switch,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,6 +65,23 @@ export default function AddAddressScreen() {
   const [isDefault, setIsDefault] = useState(
     existing?.isDefault ?? userAddresses.length === 0
   );
+  const [showErrorShake, setShowErrorShake] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  const triggerFormShake = (msg: string) => {
+    setShowErrorShake(true);
+    setErrorMessage(msg);
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: -10, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 8, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
 
   const {
     getCurrentLocation,
@@ -100,12 +118,14 @@ export default function AddAddressScreen() {
     });
 
     if (!validation.success || !validation.data) {
-      Alert.alert(
-        'Thông tin không hợp lệ',
-        validation.error || 'Vui lòng điền đầy đủ Họ tên, Số điện thoại, Tỉnh/Thành phố và Địa chỉ cụ thể.'
-      );
+      const msg =
+        validation.error ||
+        'Vui lòng điền đầy đủ Họ tên, Số điện thoại, Tỉnh/Thành phố và Địa chỉ cụ thể.';
+      triggerFormShake(msg);
       return;
     }
+    setShowErrorShake(false);
+    setErrorMessage(null);
 
     const clean = validation.data;
 
@@ -228,8 +248,21 @@ export default function AddAddressScreen() {
           </View>
         ) : null}
 
+        {errorMessage ? (
+          <View style={styles.locationError}>
+            <Text style={styles.locationErrorText}>⚠️ {errorMessage}</Text>
+          </View>
+        ) : null}
+
         {/* Section 1: Recipient Contact Card */}
-        <View style={styles.sectionCard}>
+        <Animated.View
+          style={[
+            styles.sectionCard,
+            showErrorShake &&
+              (fullName.trim().length < 2 || phone.replace(/[^0-9]/g, '').length < 9) &&
+              styles.sectionCardError,
+            { transform: [{ translateX: shakeAnim }] },
+          ]}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionIconBadge}>
               <User size={15} color="#6E4F37" />
@@ -241,12 +274,22 @@ export default function AddAddressScreen() {
             <Text style={styles.fieldLabel}>
               Họ và tên người nhận <Text style={styles.requiredStar}>*</Text>
             </Text>
-            <View style={styles.inputBox}>
-              <User size={17} color="#9C8B7A" />
+            <View
+              style={[
+                styles.inputBox,
+                showErrorShake && fullName.trim().length < 2 && styles.inputBoxError,
+              ]}>
+              <User
+                size={17}
+                color={showErrorShake && fullName.trim().length < 2 ? '#DC2626' : '#9C8B7A'}
+              />
               <TextInput
                 style={styles.input}
                 value={fullName}
-                onChangeText={setFullName}
+                onChangeText={(txt) => {
+                  setFullName(txt);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="VD: Nguyễn Minh Anh"
                 placeholderTextColor="#B5A698"
               />
@@ -257,22 +300,45 @@ export default function AddAddressScreen() {
             <Text style={styles.fieldLabel}>
               Số điện thoại liên hệ <Text style={styles.requiredStar}>*</Text>
             </Text>
-            <View style={styles.inputBox}>
-              <Phone size={17} color="#9C8B7A" />
+            <View
+              style={[
+                styles.inputBox,
+                showErrorShake &&
+                  phone.replace(/[^0-9]/g, '').length < 9 &&
+                  styles.inputBoxError,
+              ]}>
+              <Phone
+                size={17}
+                color={
+                  showErrorShake && phone.replace(/[^0-9]/g, '').length < 9
+                    ? '#DC2626'
+                    : '#9C8B7A'
+                }
+              />
               <TextInput
                 style={styles.input}
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(txt) => {
+                  setPhone(txt);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="VD: 0912 345 678"
                 placeholderTextColor="#B5A698"
                 keyboardType="phone-pad"
               />
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Section 2: Delivery Address Card */}
-        <View style={styles.sectionCard}>
+        <Animated.View
+          style={[
+            styles.sectionCard,
+            showErrorShake &&
+              (city.trim().length < 2 || detailAddress.trim().length < 3) &&
+              styles.sectionCardError,
+            { transform: [{ translateX: shakeAnim }] },
+          ]}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionIconBadge}>
               <MapPin size={15} color="#6E4F37" />
@@ -285,12 +351,22 @@ export default function AddAddressScreen() {
             <Text style={styles.fieldLabel}>
               Tỉnh / Thành phố <Text style={styles.requiredStar}>*</Text>
             </Text>
-            <View style={styles.inputBox}>
-              <Building2 size={17} color="#9C8B7A" />
+            <View
+              style={[
+                styles.inputBox,
+                showErrorShake && city.trim().length < 2 && styles.inputBoxError,
+              ]}>
+              <Building2
+                size={17}
+                color={showErrorShake && city.trim().length < 2 ? '#DC2626' : '#9C8B7A'}
+              />
               <TextInput
                 style={styles.input}
                 value={city}
-                onChangeText={setCity}
+                onChangeText={(txt) => {
+                  setCity(txt);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="Nhập hoặc chọn nhanh Tỉnh / Thành phố"
                 placeholderTextColor="#B5A698"
               />
@@ -305,7 +381,10 @@ export default function AddAddressScreen() {
                       styles.quickChip,
                       active && styles.quickChipActive,
                     ]}
-                    onPress={() => setCity(c)}
+                    onPress={() => {
+                      setCity(c);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
                     activeOpacity={0.75}>
                     <Text
                       style={[
@@ -380,18 +459,30 @@ export default function AddAddressScreen() {
             <Text style={styles.fieldLabel}>
               Số nhà, tên đường, tòa nhà <Text style={styles.requiredStar}>*</Text>
             </Text>
-            <View style={styles.inputBox}>
-              <MapPin size={17} color="#9C8B7A" />
+            <View
+              style={[
+                styles.inputBox,
+                showErrorShake && detailAddress.trim().length < 3 && styles.inputBoxError,
+              ]}>
+              <MapPin
+                size={17}
+                color={
+                  showErrorShake && detailAddress.trim().length < 3 ? '#DC2626' : '#9C8B7A'
+                }
+              />
               <TextInput
                 style={styles.input}
                 value={detailAddress}
-                onChangeText={setDetailAddress}
+                onChangeText={(txt) => {
+                  setDetailAddress(txt);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="VD: 123 Nguyễn Huệ, Lầu 2"
                 placeholderTextColor="#B5A698"
               />
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Section 3: Address Type & Default Toggle */}
         <View style={styles.sectionCard}>
@@ -619,6 +710,10 @@ const styles = StyleSheet.create({
     borderColor: '#EDE4D7',
     ...SHADOWS.small,
   },
+  sectionCardError: {
+    borderColor: '#DC2626',
+    borderWidth: 1.5,
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -660,6 +755,11 @@ const styles = StyleSheet.create({
     height: 46,
     borderWidth: 1,
     borderColor: '#E6DDD0',
+  },
+  inputBoxError: {
+    borderColor: '#DC2626',
+    borderWidth: 1.5,
+    backgroundColor: '#FEF2F2',
   },
   input: {
     flex: 1,

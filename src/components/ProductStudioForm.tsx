@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import {
   Sparkles,
   Check,
   X,
+  FileText,
+  Maximize2,
 } from 'lucide-react-native';
 import {
   Product,
@@ -44,6 +46,16 @@ import {
   generateUuidFilename,
   MAX_PROCESSED_DATA_URI_BYTES,
 } from '@/utils/fileUploadGuard';
+import {
+  AdminProductDraft,
+  loadAdminDrafts,
+  saveAdminDraft,
+  deleteAdminDraft,
+  loadWorkingDraft,
+  saveWorkingDraft,
+  clearWorkingDraft,
+  isDraftMeaningful,
+} from '@/utils/productDraftStore';
 
 const MAX_WIDTH = 1040;
 
@@ -119,7 +131,7 @@ function formatVariantNameFromFilename(fileName: string, fallbackIdx: number): s
   return readable || `Mẫu #${fallbackIdx + 1}`;
 }
 
-function encodeCanvasHd(canvas: HTMLCanvasElement, quality: number = 0.92): string {
+function encodeCanvasHd(canvas: HTMLCanvasElement, quality: number = 0.94): string {
   try {
     const webp = canvas.toDataURL('image/webp', quality);
     if (webp && webp.startsWith('data:image/webp')) {
@@ -132,14 +144,17 @@ function encodeCanvasHd(canvas: HTMLCanvasElement, quality: number = 0.92): stri
 }
 
 /**
- * Optimizes uploaded photos on Web to crisp 1200x1200 HD WebP/JPEG (quality 0.92)
- * so even 13+ photos in a single product stay razor-sharp while keeping payload compact (~50KB/photo)
- * for instant Supabase + storage persistence.
+ * Optimizes any uploaded photo (1:1, 3:4, 4:3, 9:16, 16:9, or small image) on Web
+ * into a razor-sharp 1440x1440 (1:1 Square) Ultra-HD WebP/JPEG (quality 0.94).
+ * - Progressive 2x halving prevents downscaling aliasing ("vỡ hạt").
+ * - Rectangular photos are automatically framed into a 1:1 1440x1440 square
+ *   (either full-fit with soft studio ambient backdrop or 1:1 center-crop).
  */
 async function optimizeHdImageIfWeb(
   dataUri: string,
-  maxSide: number = 1200,
-  quality: number = 0.92
+  maxSide: number = 1440,
+  quality: number = 0.94,
+  frameMode: 'auto' | 'contain_square' | 'cover_square' = 'auto'
 ): Promise<string> {
   if (
     Platform.OS !== 'web' ||
@@ -154,59 +169,25 @@ async function optimizeHdImageIfWeb(
       img.onload = () => {
         const origW = img.width || maxSide;
         const origH = img.height || maxSide;
+        const aspectDiff = Math.abs(origW - origH) / Math.max(origW, origH);
 
-        // Case 1: Small image (< 750px, e.g. 247x225 cropped cards) -> Super-upscale to 1080x1080 1:1 square HD
-        if (origW < 750 && origH < 750) {
-          const scale = Math.min(4, Math.max(2, Math.ceil(1000 / Math.max(origW, origH))));
-          const upW = origW * scale;
-          const upH = origH * scale;
-
-          const tmpCanvas = document.createElement('canvas');
-          tmpCanvas.width = upW;
-          tmpCanvas.height = upH;
-          const tmpCtx = tmpCanvas.getContext('2d');
-          if (!tmpCtx) {
-            resolve(dataUri);
-            return;
-          }
-          tmpCtx.imageSmoothingEnabled = true;
-          tmpCtx.imageSmoothingQuality = 'high';
-          tmpCtx.drawImage(img, 0, 0, upW, upH);
-
-          // Sample corner pixel to pad into a clean 1:1 square so objectFit: cover never crops edges
-          const corner = tmpCtx.getImageData(Math.min(8, upW - 1), Math.min(8, upH - 1), 1, 1).data;
-          const bgCss = `rgb(${corner[0]}, ${corner[1]}, ${corner[2]})`;
-          const side = Math.round(Math.max(upW, upH) * 1.04);
-
-          const sqCanvas = document.createElement('canvas');
-          sqCanvas.width = side;
-          sqCanvas.height = side;
-          const sqCtx = sqCanvas.getContext('2d');
-          if (!sqCtx) {
-            resolve(dataUri);
-            return;
-          }
-          sqCtx.fillStyle = bgCss;
-          sqCtx.fillRect(0, 0, side, side);
-          sqCtx.imageSmoothingEnabled = true;
-          sqCtx.imageSmoothingQuality = 'high';
-          sqCtx.drawImage(tmpCanvas, Math.round((side - upW) / 2), Math.round((side - upH) / 2));
-          resolve(encodeCanvasHd(sqCanvas, quality) || dataUri);
-          return;
-        }
-
-        let targetW = origW;
-        let targetH = origH;
-        if (targetW > maxSide || targetH > maxSide) {
-          if (targetW >= targetH) {
-            targetH = Math.round((targetH * maxSide) / targetW);
-            targetW = maxSide;
+        // Step 1: Bring image to sharp intermediate resolution via progressive 2x scaling
+        let scaledW = origW;
+        let scaledH = origH;
+        if (origW < 960 && origH < 960) {
+          const upScale = Math.min(3, Math.max(1.5, maxSide / Math.max(origW, origH)));
+          scaledW = Math.round(origW * upScale);
+          scaledH = Math.round(origH * upScale);
+        } else if (origW > maxSide || origH > maxSide) {
+          if (origW >= origH) {
+            scaledH = Math.round((origH * maxSide) / origW);
+            scaledW = maxSide;
           } else {
-            targetW = Math.round((targetW * maxSide) / targetH);
-            targetH = maxSide;
+            scaledW = Math.round((origW * maxSide) / origH);
+            scaledH = maxSide;
           }
         }
-        // Progressive 2x halving to prevent bilinear aliasing ("vỡ hạt")
+
         let curW = origW;
         let curH = origH;
         let stepCanvas = document.createElement('canvas');
@@ -217,15 +198,13 @@ async function optimizeHdImageIfWeb(
           resolve(dataUri);
           return;
         }
-        stepCtx.fillStyle = '#FFFDF9';
-        stepCtx.fillRect(0, 0, curW, curH);
         stepCtx.imageSmoothingEnabled = true;
         stepCtx.imageSmoothingQuality = 'high';
         stepCtx.drawImage(img, 0, 0, curW, curH);
 
-        while (curW * 0.5 > targetW && curH * 0.5 > targetH) {
-          const nextW = Math.max(targetW, Math.round(curW * 0.5));
-          const nextH = Math.max(targetH, Math.round(curH * 0.5));
+        while (curW * 0.5 > scaledW && curH * 0.5 > scaledH) {
+          const nextW = Math.max(scaledW, Math.round(curW * 0.5));
+          const nextH = Math.max(scaledH, Math.round(curH * 0.5));
           const nextCanvas = document.createElement('canvas');
           nextCanvas.width = nextW;
           nextCanvas.height = nextH;
@@ -239,20 +218,93 @@ async function optimizeHdImageIfWeb(
           curH = nextH;
         }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
+        const sharpCanvas = document.createElement('canvas');
+        sharpCanvas.width = scaledW;
+        sharpCanvas.height = scaledH;
+        const sharpCtx = sharpCanvas.getContext('2d');
+        if (!sharpCtx) {
           resolve(dataUri);
           return;
         }
-        ctx.fillStyle = '#FFFDF9';
-        ctx.fillRect(0, 0, targetW, targetH);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(stepCanvas, 0, 0, curW, curH, 0, 0, targetW, targetH);
-        const out = encodeCanvasHd(canvas, quality);
+        sharpCtx.imageSmoothingEnabled = true;
+        sharpCtx.imageSmoothingQuality = 'high';
+        try {
+          sharpCtx.filter = 'contrast(1.02) saturate(1.02)';
+        } catch {
+          // ignore if filter unsupported
+        }
+        sharpCtx.drawImage(stepCanvas, 0, 0, curW, curH, 0, 0, scaledW, scaledH);
+        try {
+          sharpCtx.filter = 'none';
+        } catch {
+          // ignore
+        }
+
+        // Step 2: Frame into a standardized 1440x1440 (1:1 Square) Ultra-HD studio canvas
+        const squareSide = maxSide;
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = squareSide;
+        outCanvas.height = squareSide;
+        const outCtx = outCanvas.getContext('2d');
+        if (!outCtx) {
+          resolve(encodeCanvasHd(sharpCanvas, quality) || dataUri);
+          return;
+        }
+        outCtx.imageSmoothingEnabled = true;
+        outCtx.imageSmoothingQuality = 'high';
+
+        const useCover =
+          frameMode === 'cover_square' ||
+          (frameMode === 'auto' && aspectDiff <= 0.08);
+
+        if (useCover) {
+          // Center-crop to fill 1:1 square edge-to-edge
+          const scaleCover = Math.max(squareSide / scaledW, squareSide / scaledH);
+          const drawW = Math.round(scaledW * scaleCover);
+          const drawH = Math.round(scaledH * scaleCover);
+          const offsetX = Math.round((squareSide - drawW) / 2);
+          const offsetY = Math.round((squareSide - drawH) / 2);
+          outCtx.fillStyle = '#FAF6F0';
+          outCtx.fillRect(0, 0, squareSide, squareSide);
+          outCtx.drawImage(sharpCanvas, offsetX, offsetY, drawW, drawH);
+        } else {
+          // Rectangular photo (3:4, 4:3, 9:16, 16:9): Fit 100% of the photo inside 1:1 square
+          // with a soft blurred studio ambient backdrop so nothing is ever cut off!
+          const corner = sharpCtx.getImageData(
+            Math.min(6, scaledW - 1),
+            Math.min(6, scaledH - 1),
+            1,
+            1
+          ).data;
+          outCtx.fillStyle = `rgb(${corner[0]}, ${corner[1]}, ${corner[2]})`;
+          outCtx.fillRect(0, 0, squareSide, squareSide);
+
+          try {
+            const bgScale = Math.max(squareSide / scaledW, squareSide / scaledH) * 1.08;
+            const bgW = Math.round(scaledW * bgScale);
+            const bgH = Math.round(scaledH * bgScale);
+            outCtx.filter = 'blur(32px) brightness(1.02)';
+            outCtx.drawImage(
+              sharpCanvas,
+              Math.round((squareSide - bgW) / 2),
+              Math.round((squareSide - bgH) / 2),
+              bgW,
+              bgH
+            );
+            outCtx.filter = 'none';
+          } catch {
+            // Fallback solid corner color already filled
+          }
+
+          const scaleContain = Math.min(squareSide / scaledW, squareSide / scaledH);
+          const drawW = Math.round(scaledW * scaleContain);
+          const drawH = Math.round(scaledH * scaleContain);
+          const offsetX = Math.round((squareSide - drawW) / 2);
+          const offsetY = Math.round((squareSide - drawH) / 2);
+          outCtx.drawImage(sharpCanvas, offsetX, offsetY, drawW, drawH);
+        }
+
+        const out = encodeCanvasHd(outCanvas, quality);
         resolve(out || dataUri);
       };
       img.onerror = () => resolve(dataUri);
@@ -461,6 +513,7 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
 export interface ProductStudioFormProps {
   mode: 'add' | 'edit';
   initialProduct?: Product;
+  initialDraftId?: string;
   onBack: () => void;
   onSubmitProduct: (product: Product) => Promise<void> | void;
 }
@@ -468,6 +521,7 @@ export interface ProductStudioFormProps {
 export function ProductStudioForm({
   mode,
   initialProduct,
+  initialDraftId,
   onBack,
   onSubmitProduct,
 }: ProductStudioFormProps) {
@@ -549,6 +603,173 @@ export function ProductStudioForm({
       : null;
   });
 
+  /* ---- Admin Draft Persistence (mode === 'add') ---- */
+  const [currentDraftId, setCurrentDraftId] = useState<string>(
+    () => initialDraftId || `draft_${Date.now()}`
+  );
+  const [savedDrafts, setSavedDrafts] = useState<AdminProductDraft[]>([]);
+  const [draftStatusMsg, setDraftStatusMsg] = useState<string | null>(null);
+  const [frameFitMode, setFrameFitMode] = useState<'contain_square' | 'cover_square'>('contain_square');
+  const draftHydratedRef = useRef(false);
+
+  const applyDraftToForm = (d: AdminProductDraft) => {
+    setCurrentDraftId(d.id);
+    setName(d.name ?? '');
+    setPrice(d.price ?? '');
+    setCategory(d.category ?? 'Crochet');
+    setMaterial(d.material ?? 'Len Cotton Milk');
+    setIsMadeToOrder(d.isMadeToOrder !== false);
+    setQuantity(d.quantity ?? '10');
+    setDescription(d.description ?? '');
+    setTags(d.tags ?? '');
+    setCoverImage(d.coverImage ?? null);
+    if (Array.isArray(d.colorOptions) && d.colorOptions.length > 0) {
+      setColorOptions(d.colorOptions);
+    }
+    setExtraPhotos(Array.isArray(d.extraPhotos) ? d.extraPhotos : []);
+    setActiveSlot({ type: 'cover' });
+    setDraftStatusMsg('Đã khôi phục bản nháp để đăng tiếp');
+  };
+
+  useEffect(() => {
+    if (mode !== 'add') return;
+    let mounted = true;
+    (async () => {
+      const list = await loadAdminDrafts();
+      if (!mounted) return;
+      setSavedDrafts(list);
+
+      if (initialDraftId) {
+        const target = list.find((d) => d.id === initialDraftId);
+        if (target) {
+          applyDraftToForm(target);
+          draftHydratedRef.current = true;
+          return;
+        }
+      }
+
+      const working = await loadWorkingDraft();
+      if (!mounted) return;
+      if (working && isDraftMeaningful(working)) {
+        applyDraftToForm(working);
+      } else if (list.length > 0 && isDraftMeaningful(list[0])) {
+        applyDraftToForm(list[0]);
+      }
+      draftHydratedRef.current = true;
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [mode, initialDraftId]);
+
+  const buildCurrentDraftObject = (): AdminProductDraft => ({
+    id: currentDraftId,
+    updatedAt: new Date().toISOString(),
+    name,
+    price,
+    category,
+    material,
+    isMadeToOrder,
+    quantity,
+    description,
+    tags,
+    coverImage,
+    colorOptions,
+    extraPhotos,
+  });
+
+  // Auto-save working draft + admin drafts list whenever Admin edits fields or uploads photos
+  useEffect(() => {
+    if (mode !== 'add' || !draftHydratedRef.current) return;
+    const draftObj = buildCurrentDraftObject();
+    if (!isDraftMeaningful(draftObj)) return;
+
+    const timer = setTimeout(async () => {
+      await saveWorkingDraft(draftObj);
+      const nextList = await saveAdminDraft(draftObj);
+      setSavedDrafts(nextList);
+      setDraftStatusMsg('Đã tự động lưu nháp bên Admin');
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [
+    mode,
+    currentDraftId,
+    name,
+    price,
+    category,
+    material,
+    isMadeToOrder,
+    quantity,
+    description,
+    tags,
+    coverImage,
+    colorOptions,
+    extraPhotos,
+  ]);
+
+  const handleResetBlankDraft = async () => {
+    await clearWorkingDraft();
+    const freshId = `draft_${Date.now()}`;
+    setCurrentDraftId(freshId);
+    setName('');
+    setPrice('');
+    setCategory('Crochet');
+    setMaterial('Len Cotton Milk');
+    setIsMadeToOrder(true);
+    setQuantity('10');
+    setDescription('');
+    setTags('');
+    setCoverImage(null);
+    setColorOptions([
+      { id: 'c_1', name: 'Kem Sữa', hex: '#F5EBE0' },
+      { id: 'c_2', name: 'Hồng Phấn', hex: '#F4ACB7' },
+    ]);
+    setExtraPhotos([]);
+    setActiveSlot({ type: 'cover' });
+    setDraftStatusMsg('Đã mở mẫu mới trắng');
+  };
+
+  const handleDeleteSavedDraft = async (draftIdToRemove: string) => {
+    const nextList = await deleteAdminDraft(draftIdToRemove);
+    setSavedDrafts(nextList);
+    if (draftIdToRemove === currentDraftId) {
+      await handleResetBlankDraft();
+    }
+  };
+
+  const handleSaveDraftOnly = async (exitAfterSave: boolean = true) => {
+    const draftObj = buildCurrentDraftObject();
+    if (!isDraftMeaningful(draftObj)) {
+      if (exitAfterSave) onBack();
+      else Alert.alert('Bản nháp trống', 'Hãy chọn ít nhất 1 ảnh hoặc nhập tên sản phẩm để lưu nháp.');
+      return;
+    }
+    await saveWorkingDraft(draftObj);
+    const nextList = await saveAdminDraft(draftObj);
+    setSavedDrafts(nextList);
+    setDraftStatusMsg('Đã lưu vào Bản nháp Admin');
+    if (exitAfterSave) {
+      onBack();
+    } else {
+      Alert.alert(
+        'Đã lưu nháp bên Admin',
+        'Bản nháp (gồm toàn bộ ảnh và phân loại) đã được lưu trong Kho SP của Admin. Khách hàng sẽ chưa thấy sản phẩm này cho đến khi bạn bấm "Đăng sản phẩm lên kệ".'
+      );
+    }
+  };
+
+  const handleBackPress = async () => {
+    if (mode === 'add') {
+      const draftObj = buildCurrentDraftObject();
+      if (isDraftMeaningful(draftObj)) {
+        await saveWorkingDraft(draftObj);
+        await saveAdminDraft(draftObj);
+      }
+    }
+    onBack();
+  };
+
   // Track whether the admin is currently viewing/editing the Cover photo, a Color slot, or an Extra Angle slot
   const [activeSlot, setActiveSlot] = useState<
     | { type: 'cover' }
@@ -591,6 +812,28 @@ export function ProductStudioForm({
       if (!coverImage) {
         setCoverImage(uri);
       }
+    }
+  };
+
+  const handleToggleFrameFitCurrentPhoto = async () => {
+    const rawCurrent = resolveImgUri(currentDisplayImage);
+    if (!rawCurrent) return;
+    const nextMode = frameFitMode === 'contain_square' ? 'cover_square' : 'contain_square';
+    setFrameFitMode(nextMode);
+    const reframed = await optimizeHdImageIfWeb(rawCurrent, 1440, 0.94, nextMode);
+    if (!reframed) return;
+
+    if (activeSlot.type === 'cover') {
+      setCoverImage(reframed);
+    } else if (activeSlot.type === 'extra') {
+      const next = [...extraPhotos];
+      next[activeSlot.index] = reframed;
+      setExtraPhotos(next);
+    } else {
+      const next = colorOptions.map((c, i) =>
+        i === safeColorIdx ? { ...c, image: reframed } : c
+      );
+      setColorOptions(next);
     }
   };
 
@@ -814,6 +1057,10 @@ export function ProductStudioForm({
       createdAt: initialProduct?.createdAt || new Date().toISOString(),
     };
 
+    if (mode === 'add') {
+      await deleteAdminDraft(currentDraftId);
+      await clearWorkingDraft();
+    }
     await onSubmitProduct(productPayload);
   };
 
@@ -829,29 +1076,113 @@ export function ProductStudioForm({
         keyboardShouldPersistTaps="handled">
         {/* 1. Top Navigation Bar (Synchronized with Product Detail) */}
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+          <TouchableOpacity style={styles.backBtn} onPress={handleBackPress}>
             <ChevronLeft size={18} color="#4A3728" />
             <Text style={styles.backBtnText}>Quay lại</Text>
           </TouchableOpacity>
 
-          <Text style={styles.pageTitle} numberOfLines={1}>
-            {isMobile
-              ? mode === 'add'
-                ? 'Thêm sản phẩm'
-                : 'Sửa sản phẩm'
-              : mode === 'add'
-              ? 'Thêm mẫu sản phẩm mới'
-              : 'Chỉnh sửa sản phẩm'}
-          </Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={styles.pageTitle} numberOfLines={1}>
+              {isMobile
+                ? mode === 'add'
+                  ? 'Thêm sản phẩm'
+                  : 'Sửa sản phẩm'
+                : mode === 'add'
+                ? 'Thêm mẫu sản phẩm mới'
+                : 'Chỉnh sửa sản phẩm'}
+            </Text>
+            {mode === 'add' && draftStatusMsg ? (
+              <Text style={styles.draftAutoStatusText} numberOfLines={1}>
+                ✓ {draftStatusMsg}
+              </Text>
+            ) : null}
+          </View>
 
           <TouchableOpacity
-            style={styles.saveTopBtn}
-            onPress={handleSave}
+            style={[
+              styles.saveTopBtn,
+              mode === 'add' && styles.saveDraftTopBtn,
+            ]}
+            onPress={() => {
+              if (mode === 'add') {
+                void handleSaveDraftOnly(true);
+              } else {
+                void handleSave();
+              }
+            }}
             activeOpacity={0.85}>
-            <Check size={16} color="#FFFDF9" />
-            <Text style={styles.saveTopBtnText}>Lưu</Text>
+            <FileText size={15} color="#FFFDF9" />
+            <Text style={styles.saveTopBtnText}>
+              {mode === 'add' ? 'Lưu nháp' : 'Lưu cập nhật'}
+            </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Saved Drafts Quick-Resume Bar (Only in Add mode when Admin has saved drafts) */}
+        {mode === 'add' && (savedDrafts.length > 0 || isDraftMeaningful(buildCurrentDraftObject())) && (
+          <View style={styles.draftBannerCard}>
+            <View style={styles.draftBannerHeader}>
+              <View style={styles.draftBannerTitleRow}>
+                <FileText size={15} color="#92400E" />
+                <Text style={styles.draftBannerTitle}>
+                  Bản nháp bên Admin ({savedDrafts.length || 1} bản đang lưu — Khách chưa thấy)
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.newBlankDraftBtn}
+                onPress={handleResetBlankDraft}
+                activeOpacity={0.8}>
+                <Plus size={13} color="#4A3728" />
+                <Text style={styles.newBlankDraftBtnText}>Tạo mẫu mới trắng</Text>
+              </TouchableOpacity>
+            </View>
+
+            {savedDrafts.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.draftChipsRow}>
+                {savedDrafts.map((d, idx) => {
+                  const isCurrent = d.id === currentDraftId;
+                  const photoCount =
+                    (d.coverImage ? 1 : 0) +
+                    (d.colorOptions?.filter((c) => Boolean(c.image)).length || 0) +
+                    (d.extraPhotos?.length || 0);
+                  return (
+                    <View
+                      key={d.id || idx}
+                      style={[
+                        styles.draftChip,
+                        isCurrent && styles.draftChipActive,
+                      ]}>
+                      <TouchableOpacity
+                        style={styles.draftChipMainTap}
+                        onPress={() => applyDraftToForm(d)}
+                        activeOpacity={0.8}>
+                        <Text
+                          style={[
+                            styles.draftChipName,
+                            isCurrent && styles.draftChipNameActive,
+                          ]}
+                          numberOfLines={1}>
+                          {d.name?.trim() || `Bản nháp #${idx + 1} (Chưa đặt tên)`}
+                        </Text>
+                        <Text style={styles.draftChipMeta}>
+                          {photoCount} ảnh • {d.colorOptions?.length || 1} phân loại
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.draftChipDeleteBtn}
+                        onPress={() => handleDeleteSavedDraft(d.id)}>
+                        <X size={12} color="#B91C1C" />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        )}
 
         {/* 2. Synchronized 2-Column Boutique Card (Matches product/[id].tsx 1:1) */}
         <View
@@ -955,7 +1286,27 @@ export function ProductStudioForm({
                   <Camera size={14} color="#3D2B1F" />
                   <Text style={styles.photoOverlayBtnText}>Chụp ảnh</Text>
                 </TouchableOpacity>
+                {currentDisplayImage ? (
+                  <TouchableOpacity
+                    style={styles.photoOverlayBtn}
+                    onPress={handleToggleFrameFitCurrentPhoto}
+                    activeOpacity={0.85}>
+                    <Maximize2 size={13} color="#3D2B1F" />
+                    <Text style={styles.photoOverlayBtnText}>
+                      {frameFitMode === 'contain_square'
+                        ? 'Đầy khung 1:1'
+                        : 'Giữ trọn ảnh'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
+            </View>
+
+            {/* Frame Aspect Ratio & Ultra-HD Hint Badge */}
+            <View style={styles.frameSpecHintBox}>
+              <Text style={styles.frameSpecHintText}>
+                📐 Khung ảnh chuẩn đẹp nhất: <Text style={{ fontWeight: '800', color: '#3D2B1F' }}>Vuông 1:1 (1440×1440 px)</Text> — Hệ thống tự động nâng nét Ultra-HD & căn vừa đẹp mọi ảnh chụp dọc 3:4, ngang 4:3 hoặc 9:16.
+              </Text>
             </View>
 
             {/* Thumbnail Strip: 1. Cover Photo + 2. Color Thumbnails + 3. Extra Angle Thumbnails + Add Button */}
@@ -1236,7 +1587,7 @@ export function ProductStudioForm({
                       styles.stockModeText,
                       isMadeToOrder && styles.stockModeTextActive,
                     ]}>
-                    🧶 Sản phẩm Order (Đặt làm 3–4 ngày)
+                    🧶 Sản phẩm Order (Đặt làm 5–6 ngày)
                   </Text>
                 </TouchableOpacity>
 
@@ -1475,16 +1826,29 @@ export function ProductStudioForm({
               )}
             </View>
 
-            {/* Primary Save Button */}
-            <TouchableOpacity
-              style={styles.submitPrimaryBtn}
-              onPress={handleSave}
-              activeOpacity={0.85}>
-              <Check size={18} color="#FFFDF9" />
-              <Text style={styles.submitPrimaryBtnText}>
-                {mode === 'add' ? 'Đăng sản phẩm lên kệ' : 'Lưu cập nhật sản phẩm'}
-              </Text>
-            </TouchableOpacity>
+            {/* Primary Publish & Draft Buttons */}
+            <View style={styles.bottomActionsRow}>
+              {mode === 'add' && (
+                <TouchableOpacity
+                  style={styles.saveDraftBottomBtn}
+                  onPress={() => void handleSaveDraftOnly(true)}
+                  activeOpacity={0.85}>
+                  <FileText size={16} color="#4A3728" />
+                  <Text style={styles.saveDraftBottomBtnText}>
+                    Lưu nháp (Chưa đăng)
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.submitPrimaryBtn, { flex: 1 }]}
+                onPress={handleSave}
+                activeOpacity={0.85}>
+                <Check size={18} color="#FFFDF9" />
+                <Text style={styles.submitPrimaryBtnText}>
+                  {mode === 'add' ? 'Đăng sản phẩm lên kệ' : 'Lưu cập nhật sản phẩm'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -1552,10 +1916,121 @@ const styles = StyleSheet.create({
     backgroundColor: '#5C4033',
     flexShrink: 0,
   },
+  saveDraftTopBtn: {
+    backgroundColor: '#92400E',
+  },
   saveTopBtnText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#FFFDF9',
+  },
+  draftAutoStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginTop: 1,
+  },
+  draftBannerCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    padding: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  draftBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  draftBannerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  draftBannerTitle: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  newBlankDraftBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  newBlankDraftBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#78350F',
+  },
+  draftChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 2,
+  },
+  draftChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
+    paddingLeft: 10,
+    paddingRight: 6,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  draftChipActive: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#D97706',
+    borderWidth: 1.5,
+  },
+  draftChipMainTap: {
+    maxWidth: 190,
+  },
+  draftChipName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  draftChipNameActive: {
+    color: '#92400E',
+  },
+  draftChipMeta: {
+    fontSize: 10.5,
+    color: '#78716C',
+    marginTop: 1,
+  },
+  draftChipDeleteBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  frameSpecHintBox: {
+    marginTop: 8,
+    backgroundColor: '#FAF6F0',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: '#E6DDD0',
+  },
+  frameSpecHintText: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#6E5A4B',
   },
 
   /* 2-Column Boutique Card (Same as product/[id].tsx) */
@@ -2111,6 +2586,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  bottomActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 6,
+  },
+  saveDraftBottomBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F2ECE1',
+    borderWidth: 1.5,
+    borderColor: '#C4AA90',
+    height: 46,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  saveDraftBottomBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#4A3728',
+  },
   submitPrimaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2118,8 +2617,8 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#5C4033',
     height: 46,
+    paddingHorizontal: 18,
     borderRadius: 999,
-    marginTop: 6,
   },
   submitPrimaryBtnText: {
     fontSize: 14.5,

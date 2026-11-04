@@ -198,7 +198,7 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
                 <View style={styles.highlightChip}>
                   <Clock size={13} color="#3D2B1F" />
                   <Text style={styles.highlightChipText}>
-                    Hoàn thiện tỉ mỉ 3–4 ngày
+                    Hoàn thiện tỉ mỉ 5–6 ngày
                   </Text>
                 </View>
               </>

@@ -1,14 +1,14 @@
 import { recordSecurityAudit } from './securityGuard';
 
 /**
- * Maximum allowed raw file upload size: 8 MB
+ * Maximum allowed raw file upload size: 12 MB
  */
-export const MAX_UPLOAD_FILE_BYTES = 8 * 1024 * 1024;
+export const MAX_UPLOAD_FILE_BYTES = 12 * 1024 * 1024;
 
 /**
- * Maximum allowed processed/compressed Data URI size: 1.5 MB
+ * Maximum allowed processed/compressed Data URI size: 2.5 MB
  */
-export const MAX_PROCESSED_DATA_URI_BYTES = Math.floor(1.5 * 1024 * 1024);
+export const MAX_PROCESSED_DATA_URI_BYTES = Math.floor(2.5 * 1024 * 1024);
 
 export type AllowedImageMime =
   | 'image/jpeg'

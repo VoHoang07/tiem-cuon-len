@@ -70,7 +70,7 @@ const CUSTOMER_FAQ: FaqItem[] = [
   {
     category: 'order',
     q: 'Sản phẩm "Hàng Order (Đặt đan theo mẫu)" mất bao lâu để hoàn thiện?',
-    a: 'Các mẫu có sẵn sẽ được đóng gói gửi đi trong ngày. Với các mẫu "Đặt đan thủ công theo mẫu", nghệ nhân của tiệm sẽ móc mới tỉ mỉ trong khoảng 3–4 ngày trước khi bàn giao cho đơn vị vận chuyển.',
+    a: 'Các mẫu có sẵn sẽ được đóng gói gửi đi trong ngày. Với các mẫu "Đặt đan thủ công theo mẫu", nghệ nhân của tiệm sẽ móc mới tỉ mỉ trong khoảng 5–6 ngày trước khi bàn giao cho đơn vị vận chuyển.',
   },
   {
     category: 'payment',
@@ -195,7 +195,7 @@ export default function HelpScreen() {
           steps: [
             'Tải ảnh đại diện sắc nét (hỗ trợ tỷ lệ vuông 1:1 chuẩn Studio).',
             'Thêm các phân loại Màu sắc (kèm ảnh riêng cho từng màu) và Phụ kiện (tự cộng giá chênh lệch).',
-            'Chọn trạng thái "Có sẵn theo số lượng" hoặc "Hàng Order (Đặt đan theo mẫu 3–4 ngày)".',
+            'Chọn trạng thái "Có sẵn theo số lượng" hoặc "Hàng Order (Đặt đan theo mẫu 5–6 ngày)".',
           ],
           actionLabel: 'Mở Studio Thêm SP',
           onAction: () => router.push('/add-product'),
@@ -241,7 +241,7 @@ export default function HelpScreen() {
           'Tuỳ chọn màu sắc, phối phụ kiện xinh xắn và đặt làm theo yêu cầu.',
         steps: [
           'Chọn sản phẩm yêu thích → Chạm vào từng phân loại Màu sắc và Phụ kiện để xem ảnh thực tế & giá tương ứng.',
-          'Với sản phẩm "Đặt đan theo mẫu", tiệm sẽ móc mới thủ công trong 3–4 ngày và tặng kèm hộp quà.',
+          'Với sản phẩm "Đặt đan theo mẫu", tiệm sẽ móc mới thủ công trong 5–6 ngày và tặng kèm hộp quà.',
           'Nếu muốn phối màu riêng hoặc ghi thiệp viết tay, bấm nút Chat trên trang sản phẩm để nhắn trực tiếp cho tiệm.',
         ],
         actionLabel: 'Khám phá Sản phẩm',

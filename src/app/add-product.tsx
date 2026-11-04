@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
@@ -11,6 +11,7 @@ import { ProductStudioForm } from '@/components/ProductStudioForm';
 
 export default function AddProductScreen() {
   const router = useRouter();
+  const { draftId } = useLocalSearchParams<{ draftId?: string }>();
   const { addProduct } = useShop();
   const { role } = useAuth();
 
@@ -32,9 +33,9 @@ export default function AddProductScreen() {
   return (
     <ProductStudioForm
       mode="add"
+      initialDraftId={draftId}
       onBack={() => {
-        if (router.canGoBack()) router.back();
-        else router.replace('/manage-products');
+        router.replace('/manage-products');
       }}
       onSubmitProduct={handleSubmit}
     />
