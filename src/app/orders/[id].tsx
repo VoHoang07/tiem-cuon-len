@@ -88,7 +88,13 @@ export default function OrderDetailScreen() {
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
 
-  const order = orders.find((o) => o.id === id);
+  const isAdmin = role === 'admin';
+  const rawOrder = orders.find((o) => o.id === id);
+  // Anti-IDOR ownership verification: only the order owner or Admin can access this order
+  const order =
+    rawOrder && (isAdmin || (user && rawOrder.userId === user.id))
+      ? rawOrder
+      : undefined;
 
   const [selectedCarrier, setSelectedCarrier] = useState<string>(
     order?.shippingAddress?.shippingCarrier || 'Viettel Post'
@@ -126,13 +132,14 @@ export default function OrderDetailScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.notFound}>
-          <Text style={styles.notFoundText}>Không tìm thấy đơn hàng</Text>
+          <Text style={styles.notFoundText}>
+            Không tìm thấy đơn hàng hoặc bạn không có quyền truy cập (Anti-IDOR).
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const isAdmin = role === 'admin';
   const nextStatus = ORDER_STATUS_NEXT[order.status];
   const stepIndex = getTimelineStepIndex(order.status);
   const codAmount = getCodCollectAmount(order);

@@ -68,43 +68,20 @@ Vào **Security** → **WAF** → tab **Custom rules** → nhấn **Create rule*
 ---
 
 ### Quy tắc 2: Chặn Ngay Lập Tức Các Công Cụ Dò Quét Lỗ Hổng & Truy Cập File Nhạy Cảm
-- **Rule name**: `Block-Vulnerability-Scanners-And-Sensitive-Files`
-- **Nhấn `Edit expression`** và dán:
+- **Rule name**: `Block-Scanners-And-Exploit-Tools`
+- **Nhấn `Edit expression`** và dán (tương thích 100% gói Free):
 ```txt
-(http.request.uri.path contains "/.env") or
-(http.request.uri.path contains "/.git") or
-(http.request.uri.path contains "/wp-admin") or
-(http.request.uri.path contains "/wp-login") or
-(http.request.uri.path contains "/phpmyadmin") or
-(http.request.uri.path contains "/xmlrpc.php") or
-(http.request.uri.path ends_with ".php") or
-(http.request.uri.path ends_with ".sql") or
-(http.request.uri.path ends_with ".bak") or
-(http.user_agent eq "") or
-(lower(http.user_agent) contains "sqlmap") or
-(lower(http.user_agent) contains "nikto") or
-(lower(http.user_agent) contains "nmap") or
-(lower(http.user_agent) contains "masscan") or
-(lower(http.user_agent) contains "nuclei") or
-(lower(http.user_agent) contains "dirbuster") or
-(lower(http.user_agent) contains "gobuster")
+(http.request.uri.path contains "/.env") or (http.request.uri.path contains "/.git") or (http.request.uri.path contains "/wp-admin") or (http.request.uri.path contains "/wp-login") or (http.request.uri.path contains "/phpmyadmin") or (http.request.uri.path contains ".php") or (http.request.uri.path contains ".sql") or (http.request.uri.path contains ".bak") or (http.user_agent eq "") or (http.user_agent contains "sqlmap") or (http.user_agent contains "nuclei") or (http.user_agent contains "nmap") or (http.user_agent contains "nikto") or (http.user_agent contains "masscan")
 ```
 - **Action**: **`Block`**
 
 ---
 
-### Quy tắc 3: Bật Thử Thách (Managed Challenge) Với Truy Cập Đáng Ngờ Vào Trang Đăng Nhập / Thanh Toán / API
-- **Rule name**: `Challenge-Suspicious-Auth-Checkout-And-Foreign-Traffic`
+### Quy tắc 3: Bật Thử Thách (Managed Challenge) Với Truy Cập Nước Ngoài Vào Trang Đăng Nhập / Thanh Toán / API
+- **Rule name**: `Challenge-Suspicious-Auth-And-Checkout`
 - **Nhấn `Edit expression`** và dán:
 ```txt
-(
-  http.request.uri.path in {"/login" "/register" "/checkout" "/api/security-audit"} and
-  not cf.client.bot and
-  (
-    ip.geoip.country ne "VN" or
-    cf.threat_score gt 10
-  )
-)
+(http.request.uri.path in {"/login" "/register" "/checkout" "/api/security-audit"}) and (not cf.client.bot) and (ip.src.country ne "VN")
 ```
 - **Action**: **`Managed Challenge`** *(Khách hàng ở nước ngoài hoặc dùng VPN chỉ cần vượt qua xác thực tự động 1 giây của Cloudflare, còn script tấn công tự động sẽ bị chặn đứng)*.
 
@@ -118,10 +95,7 @@ Vào **Security** → **WAF** → tab **Rate limiting rules** → nhấn **Creat
 - **Rule name**: `Rate-Limit-Auth-Checkout-And-API`
 - **If incoming requests match** (nhấn `Edit expression`):
 ```txt
-(http.request.uri.path contains "/login") or
-(http.request.uri.path contains "/register") or
-(http.request.uri.path contains "/checkout") or
-(http.request.uri.path contains "/api/security-audit")
+(http.request.uri.path in {"/login" "/register" "/checkout" "/api/security-audit"})
 ```
 - **With the same**: `IP`
 - **Requests**: **`20` requests**

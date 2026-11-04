@@ -1,17 +1,16 @@
-const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  'https://ljcweaeirwttqoygeoxd.supabase.co';
-const SUPABASE_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dlYWVpcnd0dHFveWdlb3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MzA0MjUsImV4cCI6MjA5NTIwNjQyNX0.fa1AsIt3qcv24GvUz6Jzup7G_BUwvB4OKPzhQYYvOes';
+const {
+  SUPABASE_URL,
+  SUPABASE_KEY,
+  sanitizeTextServer,
+  stripUnknownFieldsServer,
+  applySecureCookiesAndHeaders,
+} = require('./_securityCore');
 
 const SEPAY_LOG_PARTITION = '__TCL_SEPAY_LOG_V1__';
 const HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Apikey');
+  applySecureCookiesAndHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -59,12 +58,27 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const body =
+    const rawBody =
       typeof req.body === 'string'
         ? JSON.parse(req.body || '{}')
         : req.body || {};
 
-    const transferType = String(body.transferType || 'in').toLowerCase();
+    // Anti-Mass-Assignment: strip undeclared webhook properties
+    const body = stripUnknownFieldsServer(rawBody, [
+      'id',
+      'gateway',
+      'transactionDate',
+      'accountNumber',
+      'transferType',
+      'transferAmount',
+      'amount',
+      'code',
+      'content',
+      'description',
+      'referenceCode',
+    ]);
+
+    const transferType = sanitizeTextServer(body.transferType || 'in', 10).toLowerCase();
     if (transferType !== 'in') {
       return res.status(200).json({
         success: true,
@@ -74,13 +88,16 @@ module.exports = async function handler(req, res) {
     }
 
     const transferAmount = Number(body.transferAmount || body.amount || 0);
-    const code = String(body.code || '').slice(0, 200);
-    const content = String(body.content || '').slice(0, 300);
-    const description = String(body.description || '').slice(0, 300);
-    const gateway = String(body.gateway || 'Ngân hàng').slice(0, 80);
+    const code = sanitizeTextServer(body.code || '', 200);
+    const content = sanitizeTextServer(body.content || '', 300);
+    const description = sanitizeTextServer(body.description || '', 300);
+    const gateway = sanitizeTextServer(body.gateway || 'Ngân hàng', 80);
     const accountNumber = String(body.accountNumber || '').replace(/[^0-9]/g, '').slice(0, 30);
-    const referenceCode = String(body.referenceCode || '').slice(0, 100);
-    const transactionDate = String(body.transactionDate || new Date().toISOString()).slice(0, 60);
+    const referenceCode = sanitizeTextServer(body.referenceCode || '', 100);
+    const transactionDate = sanitizeTextServer(
+      body.transactionDate || new Date().toISOString(),
+      60
+    );
 
     // Optional webhook secret check if configured in Vercel environment
     const webhookSecret = process.env.SEPAY_WEBHOOK_SECRET;

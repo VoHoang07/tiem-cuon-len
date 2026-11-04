@@ -279,11 +279,16 @@ export default function PaymentScreen() {
   const router = useRouter();
   const { orders, updateOrderStatus, refetchOrders } = useOrders();
   const { enabledMethods } = usePaymentMethods();
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const { clearCart } = useShop();
   const isAdmin = role === 'admin';
 
-  const order = orders.find((o) => o.id === paramOrderId);
+  const rawOrder = orders.find((o) => o.id === paramOrderId);
+  // Anti-IDOR ownership verification: only the order owner or Admin can access the payment page
+  const order =
+    rawOrder && (isAdmin || (user && rawOrder.userId === user.id))
+      ? rawOrder
+      : undefined;
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);

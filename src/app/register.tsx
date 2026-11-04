@@ -37,6 +37,7 @@ import {
   isCurrentIpBlocked,
   recordSecurityAudit,
 } from '@/utils/securityGuard';
+import { validateRegisterSchema } from '@/utils/schemaValidator';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -218,29 +219,24 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (!name.trim()) {
-      setError('Vui lòng nhập họ tên.');
-      triggerShake();
-      return;
-    }
-    if (!email.trim()) {
-      setError('Vui lòng nhập email.');
-      triggerShake();
-      return;
-    }
-    if (password.length < 6) {
-      setError('Mật khẩu phải có ít nhất 6 ký tự.');
-      triggerShake();
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Mật khẩu xác nhận không khớp.');
+    const schemaCheck = validateRegisterSchema({
+      name,
+      email,
+      password,
+      confirmPassword,
+    });
+    if (!schemaCheck.success || !schemaCheck.data) {
+      setError(schemaCheck.error || 'Thông tin đăng ký không hợp lệ.');
       triggerShake();
       return;
     }
 
     setSubmitting(true);
-    const result = await register(name.trim(), email.trim(), password);
+    const result = await register(
+      schemaCheck.data.name,
+      schemaCheck.data.email,
+      schemaCheck.data.password
+    );
     setSubmitting(false);
 
     if (result.success) {

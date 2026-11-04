@@ -1,20 +1,15 @@
-const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  'https://ljcweaeirwttqoygeoxd.supabase.co';
-const SUPABASE_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dlYWVpcnd0dHFveWdlb3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MzA0MjUsImV4cCI6MjA5NTIwNjQyNX0.fa1AsIt3qcv24GvUz6Jzup7G_BUwvB4OKPzhQYYvOes';
+const {
+  SUPABASE_URL,
+  SUPABASE_KEY,
+  sanitizeTextServer,
+  stripUnknownFieldsServer,
+  applySecureCookiesAndHeaders,
+  verifyCsrfRequest,
+} = require('./_securityCore');
 
 const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
 const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
 const HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
-
-const ALLOWED_ORIGINS = new Set([
-  'https://www.tiemcuonlen.shop',
-  'https://tiemcuonlen.shop',
-  'http://localhost:8081',
-  'http://localhost:19006',
-]);
 
 // Sliding-window rate limit memory bucket per serverless instance
 const ipRateWindows = new Map();
@@ -82,23 +77,18 @@ function checkServerRateLimit(ip) {
 
 module.exports = async function handler(req, res) {
   const telemetry = extractClientTelemetry(req);
-  const reqOrigin = telemetry.origin;
-
-  if (reqOrigin && ALLOWED_ORIGINS.has(reqOrigin)) {
-    res.setHeader('Access-Control-Allow-Origin', reqOrigin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://www.tiemcuonlen.shop');
-  }
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, Apikey, X-Requested-With'
-  );
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  applySecureCookiesAndHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+
+  const csrf = verifyCsrfRequest(req);
+  if (!csrf.valid) {
+    return res.status(403).json({
+      success: false,
+      error: 'CSRF verification failed: ' + csrf.reason,
+    });
   }
 
   const rateStatus = checkServerRateLimit(telemetry.ip);
@@ -166,10 +156,29 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const body =
+    const rawBody =
       typeof req.body === 'string'
         ? JSON.parse(req.body || '{}')
         : req.body || {};
+
+    // Anti-Mass-Assignment: strip unknown fields
+    const body = stripUnknownFieldsServer(rawBody, [
+      'eventType',
+      'severity',
+      'path',
+      'method',
+      'userEmail',
+      'actorUserId',
+      'ip',
+      'location',
+      'asn',
+      'userAgent',
+      'screenSize',
+      'language',
+      'referer',
+      'details',
+      'hiddenTrap',
+    ]);
 
     // Check if client filled a hidden bot-trap field
     if (body.hiddenTrap && String(body.hiddenTrap).trim().length > 0) {
@@ -177,11 +186,11 @@ module.exports = async function handler(req, res) {
       body.severity = 'CRITICAL';
     }
 
-    const eventType = String(body.eventType || 'PAGE_VISIT').slice(0, 60);
-    const severity = String(body.severity || 'INFO').slice(0, 20);
-    const path = String(body.path || '/').slice(0, 200);
-    const method = String(body.method || 'CLIENT').slice(0, 30);
-    const userEmail = String(body.userEmail || 'Khách (Guest)').slice(0, 120);
+    const eventType = sanitizeTextServer(body.eventType || 'PAGE_VISIT', 60);
+    const severity = sanitizeTextServer(body.severity || 'INFO', 20);
+    const path = sanitizeTextServer(body.path || '/', 200);
+    const method = sanitizeTextServer(body.method || 'CLIENT', 30);
+    const userEmail = sanitizeTextServer(body.userEmail || 'Khách (Guest)', 120);
     const clientIp =
       telemetry.ip !== 'unknown'
         ? telemetry.ip

@@ -27,6 +27,7 @@ import { useAddresses } from '@/store/AddressContext';
 import { useAuth } from '@/store/AuthContext';
 import { useAutoLocation } from '@/hooks/useAutoLocation';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import { validateAddressSchema } from '@/utils/schemaValidator';
 
 const QUICK_CITIES = [
   'TP. Hồ Chí Minh',
@@ -88,41 +89,52 @@ export default function AddAddressScreen() {
   const suggestedDistricts = QUICK_DISTRICTS_BY_CITY[city.trim()] ?? [];
 
   const handleSave = () => {
-    if (
-      !fullName.trim() ||
-      !phone.trim() ||
-      !city.trim() ||
-      !detailAddress.trim()
-    ) {
+    const validation = validateAddressSchema({
+      fullName,
+      phone,
+      city,
+      district,
+      ward,
+      detailAddress,
+      isDefault,
+    });
+
+    if (!validation.success || !validation.data) {
       Alert.alert(
-        'Thiếu thông tin',
-        'Vui lòng điền đầy đủ Họ tên, Số điện thoại, Tỉnh/Thành phố và Địa chỉ cụ thể.'
+        'Thông tin không hợp lệ',
+        validation.error || 'Vui lòng điền đầy đủ Họ tên, Số điện thoại, Tỉnh/Thành phố và Địa chỉ cụ thể.'
       );
       return;
     }
 
+    const clean = validation.data;
+
     if (existing) {
+      if (existing.userId !== (user?.id ?? '')) {
+        Alert.alert('Từ chối truy cập', 'Bạn không có quyền chỉnh sửa địa chỉ này.');
+        return;
+      }
       updateAddress(existing.id, {
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        city: city.trim(),
-        district: district.trim(),
-        ward: ward.trim(),
-        detailAddress: detailAddress.trim(),
-        isDefault,
+        fullName: clean.fullName,
+        phone: clean.phone,
+        city: clean.city,
+        district: clean.district,
+        ward: clean.ward,
+        detailAddress: clean.detailAddress,
+        isDefault: clean.isDefault,
       });
       if (router.canGoBack()) router.back();
       else router.replace('/addresses');
     } else {
       const added = addAddress({
         userId: user?.id ?? '',
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        city: city.trim(),
-        district: district.trim(),
-        ward: ward.trim(),
-        detailAddress: detailAddress.trim(),
-        isDefault,
+        fullName: clean.fullName,
+        phone: clean.phone,
+        city: clean.city,
+        district: clean.district,
+        ward: clean.ward,
+        detailAddress: clean.detailAddress,
+        isDefault: clean.isDefault,
       });
       if (!added) {
         Alert.alert('Địa chỉ trùng', 'Địa chỉ này đã tồn tại trong sổ địa chỉ.');

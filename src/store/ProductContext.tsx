@@ -11,6 +11,11 @@ import { Product, Review } from '@/types/product';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 import { useAuth } from '@/store/AuthContext';
+import {
+  sanitizeText,
+  sanitizeMultilineText,
+  validateReviewSchema,
+} from '@/utils/schemaValidator';
 
 const PAGE_SIZE = 50;
 const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v12';
@@ -916,16 +921,15 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   }, [role]);
 
   const addReview = useCallback((productId: string, review: Review) => {
-    const baseId = String(productId || '').split('__')[0];
-    const safeRating = Math.max(1, Math.min(5, Number(review.rating) || 5));
-    const safeComment = String(review.comment || '').replace(/[<>]/g, '').trim().slice(0, 500);
-    const safeUserName = String(review.userName || 'Khách hàng').replace(/[<>]/g, '').trim().slice(0, 80);
-    if (!safeComment || !baseId) return;
+    const baseId = sanitizeText(String(productId || '').split('__')[0], 80);
+    const validated = validateReviewSchema(review);
+    if (!validated.success || !validated.data || !baseId) return;
     const sanitizedReview: Review = {
-      ...review,
-      userName: safeUserName,
-      rating: safeRating,
-      comment: safeComment,
+      id: sanitizeText(review.id || `rev_${Date.now()}`, 60),
+      userName: validated.data.userName,
+      rating: validated.data.rating,
+      comment: validated.data.comment,
+      date: sanitizeText(review.date || new Date().toLocaleDateString('vi-VN'), 30),
     };
     setProducts((prev) => {
       const next = prev.map((p) => {
@@ -942,15 +946,14 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addShopReview = useCallback((review: Review) => {
-    const safeRating = Math.max(1, Math.min(5, Number(review.rating) || 5));
-    const safeComment = String(review.comment || '').replace(/[<>]/g, '').trim().slice(0, 500);
-    const safeUserName = String(review.userName || 'Khách hàng').replace(/[<>]/g, '').trim().slice(0, 80);
-    if (!safeComment) return;
+    const validated = validateReviewSchema(review);
+    if (!validated.success || !validated.data) return;
     const sanitized: Review = {
-      ...review,
-      userName: safeUserName,
-      rating: safeRating,
-      comment: safeComment,
+      id: sanitizeText(review.id || `shop_rev_${Date.now()}`, 60),
+      userName: validated.data.userName,
+      rating: validated.data.rating,
+      comment: validated.data.comment,
+      date: sanitizeText(review.date || new Date().toLocaleDateString('vi-VN'), 30),
     };
     setShopReviews((prev) => {
       const next = [sanitized, ...prev].slice(0, 50);

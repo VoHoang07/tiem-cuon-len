@@ -43,6 +43,7 @@ import {
   isCurrentIpBlocked,
   recordSecurityAudit,
 } from '@/utils/securityGuard';
+import { validateLoginSchema } from '@/utils/schemaValidator';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -259,13 +260,14 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!email.trim() || !password.trim()) {
-      setError('Vui lòng nhập đầy đủ email và mật khẩu.');
+    const schemaCheck = validateLoginSchema({ email, password });
+    if (!schemaCheck.success || !schemaCheck.data) {
+      setError(schemaCheck.error || 'Vui lòng nhập đầy đủ email và mật khẩu.');
       triggerShake();
       return;
     }
     setSubmitting(true);
-    const result = await login(email.trim(), password);
+    const result = await login(schemaCheck.data.email, schemaCheck.data.password);
     setSubmitting(false);
     if (result.success) {
       recordSecurityAudit({

@@ -11,6 +11,43 @@ import {
 import { Order, OrderStatus } from '@/types/order';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
+import {
+  sanitizeText,
+  validateOrderShippingUpdateSchema,
+} from '@/utils/schemaValidator';
+
+async function callOrdersGuardApi(body: Record<string, unknown>): Promise<{
+  ok: boolean;
+  order?: Order;
+}> {
+  if (typeof window === 'undefined') return { ok: false };
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return { ok: false };
+
+    const res = await fetch('/api/orders-guard', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false };
+    const data = await res.json();
+    if (data && data.success) {
+      return { ok: true, order: data.order as Order | undefined };
+    }
+  } catch {
+    // fallback to direct Supabase call
+  }
+  return { ok: false };
+}
 
 const ORDERS_CACHE_KEY_PREFIX = 'tcl_orders_cache_v2';
 
@@ -172,6 +209,19 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       saveCachedOrders(next, user?.id);
       return next;
     });
+
+    // 1. Primary: Server-side Order Guard API (recalculates authoritative prices & enforces Anti-IDOR)
+    const guardResult = await callOrdersGuardApi({ action: 'create', order });
+    if (guardResult.ok && guardResult.order) {
+      setOrders((prev) => {
+        const next = prev.map((o) => (o.id === order.id ? guardResult.order! : o));
+        saveCachedOrders(next, user?.id);
+        return next;
+      });
+      return;
+    }
+
+    // 2. Fallback: Direct Supabase upsert (when running local Expo dev server without /api)
     try {
       const { error } = await supabase.from('orders').upsert(order, { onConflict: 'id' });
       if (error && supabaseUrl && supabaseAnonKey) {
@@ -207,12 +257,23 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
+    const validated = validateOrderShippingUpdateSchema({ orderId, status });
+    if (!validated.success || !validated.data) return;
+
     setOrders((prev) => {
       const next = prev.map((o) => (o.id === orderId ? { ...o, status } : o));
       saveCachedOrders(next, user?.id);
       return next;
     });
     if (role !== 'admin') return;
+
+    const guardResult = await callOrdersGuardApi({
+      action: 'update_status',
+      orderId: validated.data.orderId,
+      status: validated.data.status,
+    });
+    if (guardResult.ok) return;
+
     try {
       const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
       if (error && supabaseUrl && supabaseAnonKey) {
@@ -242,6 +303,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       }
     ) => {
       if (role !== 'admin') return;
+      const validated = validateOrderShippingUpdateSchema({
+        orderId,
+        status: payload.status,
+        shippingCarrier: payload.shippingCarrier,
+        trackingCode: payload.trackingCode,
+      });
+      if (!validated.success || !validated.data) return;
+
       let updatedAddress: Order['shippingAddress'] | null = null;
       let updatedStatus: OrderStatus | undefined = payload.status;
 
@@ -251,15 +320,15 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           const nextAddr: Order['shippingAddress'] = {
             ...o.shippingAddress,
             shippingCarrier:
-              payload.shippingCarrier !== undefined
-                ? payload.shippingCarrier.trim()
+              validated.data?.shippingCarrier !== undefined
+                ? validated.data.shippingCarrier
                 : o.shippingAddress?.shippingCarrier,
             trackingCode:
-              payload.trackingCode !== undefined
-                ? payload.trackingCode.trim()
+              validated.data?.trackingCode !== undefined
+                ? validated.data.trackingCode
                 : o.shippingAddress?.trackingCode,
             shippedAt:
-              payload.trackingCode || payload.status === 'Đang giao'
+              validated.data?.trackingCode || payload.status === 'Đang giao'
                 ? o.shippingAddress?.shippedAt || new Date().toISOString()
                 : o.shippingAddress?.shippedAt,
           };
@@ -277,6 +346,16 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       });
 
       if (!updatedAddress) return;
+
+      const guardResult = await callOrdersGuardApi({
+        action: 'update_shipping',
+        orderId: validated.data.orderId,
+        status: updatedStatus,
+        shippingCarrier: validated.data.shippingCarrier,
+        trackingCode: validated.data.trackingCode,
+      });
+      if (guardResult.ok) return;
+
       try {
         const updateRow: Record<string, unknown> = {
           shippingAddress: updatedAddress,
@@ -303,15 +382,30 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const deleteOrder = useCallback(async (orderId: string) => {
     if (!user?.id) return;
-    deletedOrderIdsRef.current.add(orderId);
+    const cleanId = sanitizeText(orderId, 80);
+    if (!cleanId) return;
+
+    // Anti-IDOR check in client store before deleting
+    const target = orders.find((o) => o.id === cleanId);
+    if (target && role !== 'admin' && target.userId !== user.id) {
+      return;
+    }
+
+    deletedOrderIdsRef.current.add(cleanId);
     setOrders((prev) => {
-      const next = prev.filter((o) => o.id !== orderId);
+      const next = prev.filter((o) => o.id !== cleanId);
       saveCachedOrders(next, user?.id);
       return next;
     });
 
+    const guardResult = await callOrdersGuardApi({
+      action: 'delete',
+      orderId: cleanId,
+    });
+    if (guardResult.ok) return;
+
     try {
-      const query = supabase.from('orders').delete().eq('id', orderId);
+      const query = supabase.from('orders').delete().eq('id', cleanId);
       if (role !== 'admin') {
         await query.eq('userId', user.id);
       } else {
@@ -320,7 +414,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     } catch {
       // keep local deletion
     }
-  }, [user?.id, role]);
+  }, [user?.id, role, orders]);
 
   const contextValue = useMemo(
     () => ({
