@@ -571,14 +571,35 @@ function toDbProduct(product: Product) {
   };
 }
 
+async function getSupabaseAuthBearer(): Promise<string> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return session.access_token;
+    }
+  } catch {
+    // ignore
+  }
+  return supabaseAnonKey;
+}
+
 async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
+    if (!error) return true;
+  } catch {
+    // fall through to REST call
+  }
   if (supabaseUrl && supabaseAnonKey) {
     try {
+      const bearer = await getSupabaseAuthBearer();
       const res = await fetch(`${supabaseUrl}/rest/v1/products?on_conflict=id`, {
         method: 'POST',
         headers: {
           apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
+          Authorization: `Bearer ${bearer}`,
           'Content-Type': 'application/json',
           Prefer: 'resolution=merge-duplicates',
         },
@@ -586,39 +607,35 @@ async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>
       });
       if (res.ok) return true;
     } catch {
-      // fall through to supabase client
+      // ignore
     }
   }
-  try {
-    const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
-    return !error;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 async function deleteProductFromSupabase(id: string): Promise<void> {
+  try {
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (!error) return;
+  } catch {
+    // fall through
+  }
   if (supabaseUrl && supabaseAnonKey) {
     try {
-      const res = await fetch(
+      const bearer = await getSupabaseAuthBearer();
+      await fetch(
         `${supabaseUrl}/rest/v1/products?id=eq.${encodeURIComponent(id)}`,
         {
           method: 'DELETE',
           headers: {
             apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
+            Authorization: `Bearer ${bearer}`,
           },
         }
       );
-      if (res.ok) return;
     } catch {
-      // fall through
+      // ignore
     }
-  }
-  try {
-    await supabase.from('products').delete().eq('id', id);
-  } catch {
-    // ignore
   }
 }
 
@@ -746,13 +763,15 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const fetchProducts = useCallback(async (pageNum: number = 0): Promise<Product[] | null> => {
     const from = pageNum * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
+    const PRODUCT_COLUMNS =
+      'id,name,description,price,image,category,material,color,quantity,rating,reviews,tags,createdAt';
 
     // Fast public REST fetch with 15s timeout & cache: 'no-store' so mobile networks & Safari never serve stale products
     if (supabaseUrl && supabaseAnonKey) {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       const timer = controller ? setTimeout(() => controller.abort(), 15000) : null;
       try {
-        const endpoint = `${supabaseUrl}/rest/v1/products?select=*&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}&_t=${Date.now()}`;
+        const endpoint = `${supabaseUrl}/rest/v1/products?select=${PRODUCT_COLUMNS}&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}&_t=${Date.now()}`;
         const res = await fetch(endpoint, {
           cache: 'no-store',
           headers: {
@@ -778,7 +797,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(PRODUCT_COLUMNS)
         .order('createdAt', { ascending: false })
         .range(from, to);
 
@@ -833,7 +852,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     };
 
     syncProducts();
-    const timer = setInterval(syncProducts, 10000);
+    const timer = setInterval(syncProducts, 30000);
     const handleFocus = () => {
       syncProducts();
     };

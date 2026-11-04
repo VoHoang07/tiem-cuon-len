@@ -6,6 +6,8 @@ const SUPABASE_URL =
 const SUPABASE_KEY =
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dlYWVpcnd0dHFveWdlb3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MzA0MjUsImV4cCI6MjA5NTIwNjQyNX0.fa1AsIt3qcv24GvUz6Jzup7G_BUwvB4OKPzhQYYvOes';
+const SUPABASE_SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY;
 
 const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
 const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
@@ -109,6 +111,17 @@ const STATIC_CATALOG_PRICES = {
 
 let cachedBlockedIps = new Set();
 let cachedBlockedIpsAt = 0;
+
+function syncBlockedIpInMemoryCache(ip, mode = 'add') {
+  const cleanIp = String(ip || '').trim();
+  if (!cleanIp || cleanIp.includes('/') || cleanIp.includes('*')) return;
+  if (mode === 'remove') {
+    cachedBlockedIps.delete(cleanIp);
+  } else {
+    cachedBlockedIps.add(cleanIp);
+  }
+  cachedBlockedIpsAt = Date.now();
+}
 
 /**
  * Extracts client IP & geo telemetry from trusted Cloudflare / Vercel edge headers first
@@ -300,7 +313,7 @@ async function isIpBlockedOnServer(ip) {
       {
         headers: {
           apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
         },
       }
     );
@@ -545,20 +558,23 @@ function withGlobalErrorHandler(routeName, handlerFn) {
     }
 
     try {
-      // Check server-side IP blocklist before executing business logic
-      const telemetry = extractClientTelemetry(req);
-      const blocked = await isIpBlockedOnServer(telemetry.ip);
-      if (blocked) {
-        await logServerAuditEvent(req, {
-          eventType: 'BLOCKED_IP_ATTEMPT',
-          severity: 'CRITICAL',
-          path: routeName,
-          details: { blockedIp: telemetry.ip, reason: 'Blocked at API gateway' },
-        });
-        return res.status(403).json({
-          success: false,
-          error: 'Truy cập bị từ chối: Địa chỉ IP của bạn đã bị khóa bởi hệ thống bảo mật.',
-        });
+      // Exempt SePay Webhook endpoint from IP blocklist so legitimate bank transfer webhooks are never blocked
+      const isWebhookRoute = routeName === '/api/sepay-webhook';
+      if (!isWebhookRoute) {
+        const telemetry = extractClientTelemetry(req);
+        const blocked = await isIpBlockedOnServer(telemetry.ip);
+        if (blocked) {
+          await logServerAuditEvent(req, {
+            eventType: 'BLOCKED_IP_ATTEMPT',
+            severity: 'CRITICAL',
+            path: routeName,
+            details: { blockedIp: telemetry.ip, reason: 'Blocked at API gateway' },
+          });
+          return res.status(403).json({
+            success: false,
+            error: 'Truy cập bị từ chối: Địa chỉ IP của bạn đã bị khóa bởi hệ thống bảo mật.',
+          });
+        }
       }
 
       return await handlerFn(req, res);
@@ -663,6 +679,7 @@ async function sendOrderNotificationServer(order) {
 module.exports = {
   SUPABASE_URL,
   SUPABASE_KEY,
+  SUPABASE_SERVICE_KEY,
   AUDIT_LOG_PARTITION,
   BLOCKLIST_PARTITION,
   HOLDER_USER_ID,
@@ -674,6 +691,7 @@ module.exports = {
   applySecureCookiesAndHeaders,
   verifyCsrfRequest,
   isIpBlockedOnServer,
+  syncBlockedIpInMemoryCache,
   verifySupabaseUser,
   resolveAuthoritativeProductPrices,
   resolveAuthoritativeShippingConfig,

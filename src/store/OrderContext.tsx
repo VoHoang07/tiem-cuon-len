@@ -123,7 +123,13 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     if (!user && role !== 'admin') return;
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     try {
-      const query = supabase.from('orders').select('*').order('createdAt', { ascending: false });
+      const ORDER_COLUMNS =
+        'id,userId,items,total,status,paymentMethod,shippingAddress,createdAt';
+      const query = supabase
+        .from('orders')
+        .select(ORDER_COLUMNS)
+        .order('createdAt', { ascending: false })
+        .limit(100);
 
       if (role === 'admin') {
         const { data, error } = await query;

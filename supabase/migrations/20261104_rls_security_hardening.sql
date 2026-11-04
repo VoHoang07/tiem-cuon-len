@@ -57,17 +57,35 @@ CREATE POLICY "tcl_products_select_public"
   TO anon, authenticated
   USING (true);
 
-CREATE POLICY "tcl_products_write_admin"
+CREATE POLICY "tcl_products_insert_admin"
   ON public.products
-  FOR ALL
-  TO anon, authenticated
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    public.is_shop_admin()
+    AND price > 0
+    AND length(trim(name)) > 0
+  );
+
+CREATE POLICY "tcl_products_update_auth"
+  ON public.products
+  FOR UPDATE
+  TO authenticated
   USING (
     public.is_shop_admin()
-    OR id IS NOT NULL
+    OR auth.uid() IS NOT NULL
   )
   WITH CHECK (
     price > 0
     AND length(trim(name)) > 0
+  );
+
+CREATE POLICY "tcl_products_delete_admin"
+  ON public.products
+  FOR DELETE
+  TO authenticated
+  USING (
+    public.is_shop_admin()
   );
 
 -- -----------------------------------------------------------------------------
@@ -262,5 +280,32 @@ CREATE POLICY "tcl_payment_methods_admin_write"
   TO authenticated
   USING (public.is_shop_admin())
   WITH CHECK (public.is_shop_admin());
+
+-- -----------------------------------------------------------------------------
+-- 9. DATABASE INDEXES (Tối ưu tốc độ SePay Webhook, Đơn hàng, Sản phẩm & SIEM)
+-- -----------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_orders_status_created
+  ON public.orders (status, "createdAt" DESC);
+
+CREATE INDEX IF NOT EXISTS idx_orders_userid_created
+  ON public.orders ("userId", "createdAt" DESC);
+
+CREATE INDEX IF NOT EXISTS idx_products_category_created
+  ON public.products (category, "createdAt" DESC);
+
+CREATE INDEX IF NOT EXISTS idx_products_created_desc
+  ON public.products ("createdAt" DESC);
+
+CREATE INDEX IF NOT EXISTS idx_addresses_fullname_district
+  ON public.addresses ("fullName", district DESC);
+
+CREATE INDEX IF NOT EXISTS idx_addresses_userid
+  ON public.addresses ("userId");
+
+CREATE INDEX IF NOT EXISTS idx_cart_items_userid
+  ON public.cart_items ("userId");
+
+CREATE INDEX IF NOT EXISTS idx_favorites_userid
+  ON public.favorites ("userId");
 
 COMMIT;

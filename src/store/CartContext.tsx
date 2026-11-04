@@ -201,12 +201,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
           ...new Set(cartRows.map((r) => getBaseProductId(r.productId))),
         ];
 
-        const { data: products } = await supabase
-          .from('products')
-          .select('*')
-          .in('id', baseProductIds);
+        const missingIds = baseProductIds.filter(
+          (id) => !catalogProducts.some((m) => m.id === id)
+        );
+        let remoteProducts: Product[] = [];
+        if (missingIds.length > 0) {
+          const { data: products } = await supabase
+            .from('products')
+            .select(
+              'id,name,description,price,image,category,material,color,quantity,rating,tags,createdAt'
+            )
+            .in('id', missingIds);
+          remoteProducts = (products as Product[]) ?? [];
+        }
 
-        const productMap = new Map((products ?? []).map((p) => [p.id, p]));
+        const productMap = new Map(remoteProducts.map((p) => [p.id, p]));
 
         baseItems = cartRows
           .map((ci) => {

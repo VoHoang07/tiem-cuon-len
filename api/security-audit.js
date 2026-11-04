@@ -11,6 +11,8 @@ const {
   verifySupabaseUser,
   withGlobalErrorHandler,
   signBlockedIpRecord,
+  verifyBlockedIpRecord,
+  syncBlockedIpInMemoryCache,
 } = require('./_securityCore');
 
 // Sliding-window rate limit memory bucket per serverless instance
@@ -100,6 +102,23 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
     const rawLogs = logsRes.ok ? await logsRes.json() : [];
     const rawBlocks = blockRes.ok ? await blockRes.json() : [];
 
+    if (Array.isArray(rawBlocks)) {
+      for (const b of rawBlocks) {
+        if (!b || !b.detailAddress) continue;
+        try {
+          const parsed =
+            typeof b.detailAddress === 'string'
+              ? JSON.parse(b.detailAddress)
+              : b.detailAddress;
+          if (verifyBlockedIpRecord(parsed)) {
+            syncBlockedIpInMemoryCache(parsed.ip, 'add');
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     return res.status(200).json({
       success: true,
       telemetry,
@@ -176,6 +195,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         },
         body: JSON.stringify(row),
       });
+      syncBlockedIpInMemoryCache(targetIp, 'add');
       return res.status(200).json({ success: true, blocked: entry });
     }
 
@@ -192,6 +212,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           },
         }
       );
+      syncBlockedIpInMemoryCache(targetIp, 'remove');
       return res.status(200).json({ success: true, unblockedIp: targetIp });
     }
 

@@ -36,7 +36,7 @@
   - Kiểm tra chữ ký/API key của SePay (`SEPAY_WEBHOOK_SECRET`), chỉ nhận giao dịch `transferType === 'in'` vào đúng số tài khoản ngân hàng hợp lệ (`ALLOWED_ACCOUNTS`), đối chiếu số tiền chuyển khoản `transferAmount >= Number(matchedOrder.total)` và đảm bảo tính **Idempotency** (chống cộng tiền/cập nhật trạng thái hoặc bắn Email 2 lần khi SePay gọi lại webhook cho đơn đã `processing`/`completed`).
 - **Bảo mật & Middleware:** `api/_securityCore.js`, `api/security-audit.js`, `vercel.json`, `src/utils/securityGuard.ts`, `src/utils/schemaValidator.ts`, `src/utils/fileUploadGuard.ts`, `src/components/HiddenBotField.tsx`, `scripts/security-check.js`
   - Không được làm gãy luồng chặn bot (Honeypot + Rate Limiter), không tháo bỏ `withGlobalErrorHandler` trên bất kỳ API route nào, và tuyệt đối không lộ biến môi trường nhạy cảm (`SUPABASE_SERVICE_ROLE_KEY`, `SEPAY_WEBHOOK_SECRET`, `EMAILJS_PRIVATE_KEY`, `SECURITY_HMAC_SECRET`, `__TCL_SECURITY_AUDIT_LOG_V1__`, `__TCL_SECURITY_BLOCKLIST_V1__`) ra phía Client (`src/`).
-- **Database & RLS:** `supabase/migrations/20261104_rls_security_hardening.sql`, `supabase/migrations/payment_methods.sql`, `src/services/supabase.ts`
+- **Database & RLS:** `supabase/migrations/20261104_rls_security_hardening.sql`, `supabase/migrations/20261105_indexes_and_rls_fix.sql`, `supabase/migrations/payment_methods.sql`, `src/services/supabase.ts`
   - Không xóa cột, không tắt RLS (`ALTER TABLE ... DISABLE ROW LEVEL SECURITY` bị nghiêm cấm). Mọi thay đổi cấu trúc DB hoặc Policy bắt buộc tạo file migration SQL mới trong `supabase/migrations/`.
 
 ---

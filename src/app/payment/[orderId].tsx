@@ -32,7 +32,7 @@ import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { useAuth } from '@/store/AuthContext';
 import { useShop } from '@/store/ShopContext';
-import { supabaseUrl, supabaseAnonKey } from '@/services/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { type PaymentMethod } from '@/types/payment-method';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
@@ -295,6 +295,11 @@ export default function PaymentScreen() {
   const [autoVerifiedBySepay, setAutoVerifiedBySepay] = useState(false);
   const [checkingNow, setCheckingNow] = useState(false);
   const [simulatingSepay, setSimulatingSepay] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(15 * 60);
+
+  const formattedCountdown = `${String(
+    Math.floor(remainingSeconds / 60)
+  ).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`;
 
   // Bank Selector Modal state
   const [showBankModal, setShowBankModal] = useState(false);
@@ -400,8 +405,52 @@ export default function PaymentScreen() {
 
     checkOrderPaymentStatus();
     const timer = setInterval(checkOrderPaymentStatus, 2500);
-    return () => clearInterval(timer);
-  }, [order, confirmed, checkOrderPaymentStatus]);
+
+    // Supabase Realtime subscription (<300ms instant confirmation when SePay updates order status)
+    let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      realtimeChannel = supabase
+        .channel(`order-payment-${order.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'orders',
+            filter: `id=eq.${order.id}`,
+          },
+          (payload: any) => {
+            const newStatus = payload?.new?.status;
+            if (newStatus && newStatus !== 'pending_payment') {
+              updateOrderStatus(order.id, newStatus);
+              if (newStatus === 'Đang xử lý' || newStatus === 'Hoàn thành') {
+                setAutoVerifiedBySepay(true);
+              }
+              setConfirmed(true);
+            }
+          }
+        )
+        .subscribe();
+    } catch {
+      // fallback to 2.5s polling if WebSocket unavailable
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel).catch(() => {});
+      }
+    };
+  }, [order, confirmed, checkOrderPaymentStatus, updateOrderStatus]);
+
+  // 15:00 Hold Countdown Timer for QR code session
+  useEffect(() => {
+    if (!order || confirmed) return;
+    const tick = setInterval(() => {
+      setRemainingSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [order, confirmed]);
 
   // Only send email notification & clear cart AFTER payment is confirmed
   useEffect(() => {
@@ -697,12 +746,46 @@ export default function PaymentScreen() {
 
         {/* Single Compact Card: QR + Transfer Info + 1 Transfer Button */}
         <View style={styles.mainCard}>
-          {/* Live auto-verify status pill */}
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text style={styles.livePillText}>
-              Tự động xác nhận sau 3–5 giây khi chuyển khoản
-            </Text>
+          {/* Live auto-verify status pill + 15:00 Countdown */}
+          <View style={styles.topStatusRow}>
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Text style={styles.livePillText}>
+                Realtime SePay • Tự động xác nhận tức thì
+              </Text>
+            </View>
+            {remainingSeconds > 0 ? (
+              <View
+                style={[
+                  styles.countdownPill,
+                  remainingSeconds <= 120 && styles.countdownPillUrgent,
+                ]}>
+                <Clock
+                  size={12}
+                  color={remainingSeconds <= 120 ? '#B91C1C' : '#5C4332'}
+                />
+                <Text
+                  style={[
+                    styles.countdownText,
+                    remainingSeconds <= 120 && styles.countdownTextUrgent,
+                  ]}>
+                  Giữ mã QR: {formattedCountdown}
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.renewTimerBtn}
+                onPress={() => {
+                  setRemainingSeconds(15 * 60);
+                  handleManualCheckNow();
+                }}
+                activeOpacity={0.8}>
+                <RefreshCw size={12} color="#B45309" />
+                <Text style={styles.renewTimerBtnText}>
+                  Hết giờ chờ • Bấm gia hạn 15:00
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* 1. QR Code */}
@@ -715,6 +798,45 @@ export default function PaymentScreen() {
               />
             </View>
           ) : null}
+
+          {/* Quick 1-Tap Copy Bar under QR */}
+          <View style={styles.quickCopyRow}>
+            <TouchableOpacity
+              style={[
+                styles.quickCopyChip,
+                copiedKey === 'stk' && styles.quickCopyChipActive,
+              ]}
+              onPress={() => handleCopyText(accountNo, 'stk')}
+              activeOpacity={0.8}>
+              {copiedKey === 'stk' ? (
+                <CheckCheck size={13} color={COLORS.success} />
+              ) : (
+                <Copy size={13} color="#3D2B1F" />
+              )}
+              <Text style={styles.quickCopyChipText}>
+                {copiedKey === 'stk' ? 'Đã chép STK' : 'Sao chép STK'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.quickCopyChip,
+                copiedKey === 'content' && styles.quickCopyChipActive,
+              ]}
+              onPress={() => handleCopyText(transferContent, 'content')}
+              activeOpacity={0.8}>
+              {copiedKey === 'content' ? (
+                <CheckCheck size={13} color={COLORS.success} />
+              ) : (
+                <Copy size={13} color="#3D2B1F" />
+              )}
+              <Text style={styles.quickCopyChipText}>
+                {copiedKey === 'content'
+                  ? 'Đã chép nội dung'
+                  : 'Sao chép nội dung CK'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* 2. Compact Transfer Info */}
           <View style={styles.infoBox}>
@@ -1028,6 +1150,12 @@ const styles = StyleSheet.create({
     borderColor: '#DFCBB5',
     ...SHADOWS.medium,
   },
+  topStatusRow: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1038,7 +1166,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#BFE3C8',
-    marginBottom: 12,
   },
   liveDot: {
     width: 8,
@@ -1051,6 +1178,45 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1E5622',
   },
+  countdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FAF5EE',
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+  },
+  countdownPillUrgent: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
+  countdownText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#5C4332',
+  },
+  countdownTextUrgent: {
+    color: '#B91C1C',
+  },
+  renewTimerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  renewTimerBtnText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#B45309',
+  },
 
   /* QR Image */
   qrBox: {
@@ -1059,11 +1225,43 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#EFE6DC',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   qrImage: {
     width: 225,
     height: 274,
+  },
+
+  /* Quick 1-Tap Copy Bar */
+  quickCopyRow: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickCopyChip: {
+    flex: 1,
+    minWidth: 135,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F5ECE1',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#DFCBB5',
+  },
+  quickCopyChipActive: {
+    backgroundColor: '#EBF7EE',
+    borderColor: '#BFE3C8',
+  },
+  quickCopyChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#3D2B1F',
   },
 
   /* Compact Transfer Info Box */

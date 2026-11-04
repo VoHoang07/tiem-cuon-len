@@ -1,6 +1,7 @@
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
+  SUPABASE_SERVICE_KEY,
   HOLDER_USER_ID,
   sanitizeTextServer,
   stripUnknownFieldsServer,
@@ -53,15 +54,17 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
       ? JSON.parse(req.body || '{}')
       : req.body || {};
 
-  // Anti-Mass-Assignment: strip undeclared webhook properties
+  // Anti-Mass-Assignment: strip undeclared webhook properties while preserving all standard SePay fields
   const body = stripUnknownFieldsServer(rawBody, [
     'id',
     'gateway',
     'transactionDate',
     'accountNumber',
+    'subAccount',
     'transferType',
     'transferAmount',
     'amount',
+    'accumulated',
     'code',
     'content',
     'description',
@@ -122,22 +125,9 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
   const rawText = `${code} ${content} ${description}`.toUpperCase();
   const compactText = rawText.replace(/[^A-Z0-9]/g, '');
 
-  // 1. Fetch recent orders from Supabase
-  const ordersRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/orders?select=*&order=createdAt.desc&limit=100`,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-      },
-    }
-  );
-
-  const orders = ordersRes.ok ? await ordersRes.json() : [];
-  let matchedOrder = null;
-
-  if (Array.isArray(orders)) {
-    for (const order of orders) {
+  const matchOrderFromList = (list) => {
+    if (!Array.isArray(list)) return null;
+    for (const order of list) {
       if (!order || !order.id) continue;
       const orderIdUpper = String(order.id).toUpperCase();
       const orderIdCompact = orderIdUpper.replace(/[^A-Z0-9]/g, '');
@@ -149,10 +139,39 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
         (shortDigits.length >= 8 && rawText.includes(shortDigits));
 
       if (isMatched) {
-        matchedOrder = order;
-        break;
+        return order;
       }
     }
+    return null;
+  };
+
+  // 1. Fast indexed lookup: query pending_payment orders first (uses idx_orders_status_created)
+  const pendingOrdersRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/orders?status=eq.pending_payment&select=id,userId,total,status,paymentMethod,shippingAddress,items,createdAt&order=createdAt.desc&limit=50`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      },
+    }
+  );
+
+  const pendingOrders = pendingOrdersRes.ok ? await pendingOrdersRes.json() : [];
+  let matchedOrder = matchOrderFromList(pendingOrders);
+
+  // Fallback for idempotent webhook retries (order already transitioned out of pending_payment)
+  if (!matchedOrder) {
+    const recentOrdersRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/orders?select=id,userId,total,status,createdAt&order=createdAt.desc&limit=40`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        },
+      }
+    );
+    const recentOrders = recentOrdersRes.ok ? await recentOrdersRes.json() : [];
+    matchedOrder = matchOrderFromList(recentOrders);
   }
 
   let orderUpdated = false;
