@@ -56,6 +56,8 @@ import {
   recordSecurityAudit,
 } from '@/utils/securityGuard';
 
+const CHECKOUT_SESSION_KEY = '__tcl_checkout_session_v1';
+
 const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: string }> = {
   bank_transfer: { icon: <Building2 size={24} color="#765341" />, color: '#765341' },
   momo: { icon: <Smartphone size={24} color="#A50064" />, color: '#A50064' },
@@ -150,20 +152,76 @@ export default function CheckoutScreen() {
     return checkoutItems.reduce((sum, ci) => sum + ci.product.price * ci.quantity, 0);
   }, [checkoutItems]);
 
+  const initialSessionDraft = useMemo(() => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const raw = window.sessionStorage.getItem(CHECKOUT_SESSION_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return {
+            shippingOption:
+              parsed?.shippingOption === 'express' ||
+              parsed?.shippingOption === 'pickup' ||
+              parsed?.shippingOption === 'standard'
+                ? (parsed.shippingOption as 'standard' | 'express' | 'pickup')
+                : 'standard',
+            selectedAddressId:
+              typeof parsed?.selectedAddressId === 'string'
+                ? parsed.selectedAddressId
+                : '',
+            selectedPaymentId:
+              typeof parsed?.selectedPaymentId === 'string'
+                ? parsed.selectedPaymentId
+                : '',
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      shippingOption: 'standard' as const,
+      selectedAddressId: '',
+      selectedPaymentId: '',
+    };
+  }, []);
+
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
-  const [shippingOption, setShippingOption] = useState<'standard' | 'express' | 'pickup'>('standard');
+  const [shippingOption, setShippingOption] = useState<'standard' | 'express' | 'pickup'>(
+    initialSessionDraft.shippingOption
+  );
   const [hasAskedExpressChat, setHasAskedExpressChat] = useState(false);
   const [expressFeeConfirmed, setExpressFeeConfirmed] = useState(false);
   const [showExpressCard, setShowExpressCard] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  const [selectedAddressId, setSelectedAddressId] = useState<string>(
+    initialSessionDraft.selectedAddressId
+  );
   const [addressMissingError, setAddressMissingError] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const addressShakeAnim = useRef(new Animated.Value(0)).current;
   const [botTrap, setBotTrap] = useState('');
   const formMountedAtRef = useRef<number>(Date.now());
   const lastOrderAtRef = useRef<number>(0);
+
+  // Persist checkout choices to sessionStorage so accidental F5 reload keeps user selections
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem(
+          CHECKOUT_SESSION_KEY,
+          JSON.stringify({
+            shippingOption,
+            selectedAddressId,
+            selectedPaymentId: selectedPayment?.id || initialSessionDraft.selectedPaymentId || '',
+          })
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }, [shippingOption, selectedAddressId, selectedPayment?.id, initialSessionDraft.selectedPaymentId]);
 
   const triggerAddressShake = () => {
     setAddressMissingError(true);
@@ -204,12 +262,23 @@ export default function CheckoutScreen() {
     return null;
   }, [myMessages]);
 
-  // Set default payment method when data loads
+  // Set saved or default payment method when data loads
   useEffect(() => {
-    if (defaultMethod && !selectedPayment) {
-      setSelectedPayment(defaultMethod);
+    if (!selectedPayment) {
+      if (initialSessionDraft.selectedPaymentId && enabledMethods.length > 0) {
+        const savedPm = enabledMethods.find(
+          (m) => m.id === initialSessionDraft.selectedPaymentId
+        );
+        if (savedPm) {
+          setSelectedPayment(savedPm);
+          return;
+        }
+      }
+      if (defaultMethod) {
+        setSelectedPayment(defaultMethod);
+      }
     }
-  }, [defaultMethod]);
+  }, [defaultMethod, enabledMethods, initialSessionDraft.selectedPaymentId, selectedPayment]);
 
   const selectedAddress =
     userAddresses.find((a) => a.id === selectedAddressId) ??
@@ -579,6 +648,14 @@ export default function CheckoutScreen() {
     };
 
     await addOrder(order);
+
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem(CHECKOUT_SESSION_KEY);
+      }
+    } catch {
+      // ignore
+    }
 
     recordSecurityAudit({
       eventType: 'CHECKOUT_ORDER_CREATED',

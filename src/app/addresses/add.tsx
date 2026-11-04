@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -46,6 +46,8 @@ const QUICK_DISTRICTS_BY_CITY: Record<string, string[]> = {
   'Đà Nẵng': ['Hải Châu', 'Thanh Khê', 'Sơn Trà', 'Ngũ Hành Sơn', 'Liên Chiểu'],
 };
 
+const ADDRESS_DRAFT_SESSION_KEY = '__tcl_add_address_draft_v1';
+
 export default function AddAddressScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -55,16 +57,61 @@ export default function AddAddressScreen() {
 
   const existing = id ? userAddresses.find((a) => a.id === id) : undefined;
 
-  const [fullName, setFullName] = useState(existing?.fullName ?? user?.name ?? '');
-  const [phone, setPhone] = useState(existing?.phone ?? '');
-  const [city, setCity] = useState(existing?.city ?? '');
-  const [district, setDistrict] = useState(existing?.district ?? '');
-  const [ward, setWard] = useState(existing?.ward ?? '');
-  const [detailAddress, setDetailAddress] = useState(existing?.detailAddress ?? '');
-  const [addressTag, setAddressTag] = useState<'home' | 'office'>('home');
-  const [isDefault, setIsDefault] = useState(
-    existing?.isDefault ?? userAddresses.length === 0
+  const savedDraft = useMemo(() => {
+    if (existing) return null;
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const raw = window.sessionStorage.getItem(ADDRESS_DRAFT_SESSION_KEY);
+        if (raw) return JSON.parse(raw);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [existing]);
+
+  const [fullName, setFullName] = useState(
+    existing?.fullName ?? savedDraft?.fullName ?? user?.name ?? ''
   );
+  const [phone, setPhone] = useState(existing?.phone ?? savedDraft?.phone ?? '');
+  const [city, setCity] = useState(existing?.city ?? savedDraft?.city ?? '');
+  const [district, setDistrict] = useState(
+    existing?.district ?? savedDraft?.district ?? ''
+  );
+  const [ward, setWard] = useState(existing?.ward ?? savedDraft?.ward ?? '');
+  const [detailAddress, setDetailAddress] = useState(
+    existing?.detailAddress ?? savedDraft?.detailAddress ?? ''
+  );
+  const [addressTag, setAddressTag] = useState<'home' | 'office'>(
+    savedDraft?.addressTag === 'office' ? 'office' : 'home'
+  );
+  const [isDefault, setIsDefault] = useState(
+    existing?.isDefault ?? savedDraft?.isDefault ?? userAddresses.length === 0
+  );
+
+  // Persist draft address inputs to sessionStorage while typing
+  useEffect(() => {
+    if (existing) return;
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem(
+          ADDRESS_DRAFT_SESSION_KEY,
+          JSON.stringify({
+            fullName,
+            phone,
+            city,
+            district,
+            ward,
+            detailAddress,
+            addressTag,
+            isDefault,
+          })
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }, [existing, fullName, phone, city, district, ward, detailAddress, addressTag, isDefault]);
   const [showErrorShake, setShowErrorShake] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -159,6 +206,13 @@ export default function AddAddressScreen() {
       if (!added) {
         Alert.alert('Địa chỉ trùng', 'Địa chỉ này đã tồn tại trong sổ địa chỉ.');
         return;
+      }
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.removeItem(ADDRESS_DRAFT_SESSION_KEY);
+        }
+      } catch {
+        // ignore
       }
       if (router.canGoBack()) router.back();
       else router.replace('/addresses');
