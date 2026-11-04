@@ -85,7 +85,7 @@ const CUSTOMER_FAQ: FaqItem[] = [
   {
     category: 'shipping',
     q: 'Phí vận chuyển và điều kiện Miễn phí vận chuyển (Freeship)?',
-    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn (22.000₫ nội thành TP.HCM, 30.000₫ liên tỉnh — Miễn phí cho đơn từ 299.000₫); (2) Giao Hỏa Tốc 2h (Grab/Ahamove — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
+    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn 15.000₫ (Miễn phí cho đơn từ 299.000₫); (2) Giao Hỏa Tốc 2h (Grab/Ahamove khoảng 45.000₫ – 65.000₫ — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
   },
   {
     category: 'shipping',

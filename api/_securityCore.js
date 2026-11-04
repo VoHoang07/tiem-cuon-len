@@ -432,13 +432,13 @@ async function resolveAuthoritativeProductPrices(baseIds) {
  */
 async function resolveAuthoritativeShippingConfig() {
   const defaults = {
-    hcmFee: 20000,
-    provincialFee: 30000,
-    freeshipThreshold: 150000,
+    hcmFee: 15000,
+    provincialFee: 15000,
+    freeshipThreshold: 299000,
   };
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/addresses?fullName=eq.${SHOP_CONFIG_PARTITION}&select=detailAddress&limit=1`,
+      `${SUPABASE_URL}/rest/v1/addresses?id=eq.tcl_shipping_config_v2&select=detailAddress&limit=1`,
       {
         headers: {
           apikey: SUPABASE_KEY,

@@ -305,46 +305,10 @@ export default function CheckoutScreen() {
   // Estimate Grab/Ahamove 2h fee from Shop (Quận 8, TP.HCM) to customer's District
   const expressEstimate = useMemo(() => {
     const distRaw = (selectedAddress?.district || '').trim();
-    const d = distRaw.toLowerCase();
-    if (!d) {
+    if (!distRaw) {
       return {
-        range: '~20k – 45k',
+        range: '~45k – 65k',
         sub: 'Grab / Ahamove • Tiệm báo giá trước khi gọi xe',
-      };
-    }
-    const isNear =
-      d.includes('quận 8') ||
-      d.includes('bình đông') ||
-      d.includes('chánh hưng') ||
-      d.includes('phú định') ||
-      d.includes('rạch ông') ||
-      d.includes('hưng phú') ||
-      d.includes('xóm củi') ||
-      d.includes('quận 5') ||
-      d.includes('quận 6') ||
-      d.includes('quận 7') ||
-      d.includes('quận 4') ||
-      d.includes('quận 10') ||
-      d.includes('quận 11') ||
-      (d.includes('quận 1') && !d.includes('quận 12')) ||
-      d.includes('bình chánh');
-    if (isNear) {
-      return {
-        range: '~18k – 30k',
-        sub: `Tới ${distRaw} • Tiệm báo giá trước khi gọi xe`,
-      };
-    }
-    const isMid =
-      d.includes('quận 3') ||
-      d.includes('phú nhuận') ||
-      d.includes('bình thạnh') ||
-      d.includes('tân bình') ||
-      d.includes('tân phú') ||
-      d.includes('nhà bè');
-    if (isMid) {
-      return {
-        range: '~30k – 45k',
-        sub: `Tới ${distRaw} • Tiệm báo giá trước khi gọi xe`,
       };
     }
     return {

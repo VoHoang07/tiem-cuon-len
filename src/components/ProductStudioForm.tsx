@@ -151,7 +151,7 @@ function formatVariantNameFromFilename(fileName: string, fallbackIdx: number): s
 function isPlaceholderOrPresetColorName(val: string): boolean {
   const trimmed = (val || '').trim();
   if (!trimmed) return true;
-  if (/^(mẫu|ảnh|phân loại|màu)(\s*mẫu)?\s*#?\d*$/i.test(trimmed)) return true;
+  if (/^(chưa chọn màu|mẫu|ảnh|phân loại|màu)(\s*mẫu)?\s*#?\d*$/i.test(trimmed)) return true;
   return COLOR_SWATCHES.some(
     (sw) => sw.name.toLowerCase() === trimmed.toLowerCase()
   );
@@ -820,11 +820,27 @@ export function ProductStudioForm({
 
   /* ---- Handlers for Photo Selection ---- */
   const handlePickCurrentSlotPhoto = async (useCamera: boolean = false) => {
+    // If no photos uploaded yet and Admin taps the empty frame from gallery, allow uploading 1 or multiple product photos at once
+    if (!useCamera && activeSlot.type === 'cover' && !coverImage && colorOptions.length === 0) {
+      await handleBatchAddColorPhotos();
+      return;
+    }
+
     const uri = await pickHdImage(useCamera);
     if (!uri) return;
 
     if (activeSlot.type === 'cover') {
       setCoverImage(uri);
+      if (colorOptions.length === 0) {
+        const firstPhotoItem: ProductColorOption = {
+          id: `c_${Date.now()}_1`,
+          name: 'Chưa chọn màu',
+          hex: '',
+          image: uri,
+        };
+        setColorOptions([firstPhotoItem]);
+        setActiveSlot({ type: 'color', index: 0 });
+      }
     } else if (activeSlot.type === 'extra') {
       const next = [...extraPhotos];
       next[activeSlot.index] = uri;
@@ -883,12 +899,12 @@ export function ProductStudioForm({
     const firstNewIdx = baseList.length;
     const newItems: ProductColorOption[] = picked.map((item, i) => {
       const idx = baseList.length + i;
-      const defaultSwatch = COLOR_SWATCHES[idx % COLOR_SWATCHES.length];
-      const hintName = item.labelHint || `Mẫu #${idx + 1}`;
+      const hasCustomFileHint =
+        item.labelHint && !/^Mẫu #\d+$/i.test(item.labelHint.trim());
       return {
         id: `c_${Date.now()}_${idx + 1}`,
-        name: hintName,
-        hex: defaultSwatch.hex,
+        name: hasCustomFileHint ? item.labelHint! : 'Chưa chọn màu',
+        hex: '',
         image: item.uri,
       };
     });
@@ -909,11 +925,10 @@ export function ProductStudioForm({
       colorOptions.every((c) => !c.image && (c.name === 'Kem Sữa' || c.name === 'Hồng Phấn'));
     const baseList = hasOnlyEmptyDefaults ? [] : [...colorOptions];
     const idx = baseList.length;
-    const defaultSwatch = COLOR_SWATCHES[idx % COLOR_SWATCHES.length];
     const newColor: ProductColorOption = {
       id: `c_${Date.now()}_${idx + 1}`,
-      name: `Mẫu #${idx + 1}`,
-      hex: defaultSwatch.hex,
+      name: 'Chưa chọn màu',
+      hex: '',
       image: uri,
     };
     const next = [...baseList, newColor];
@@ -929,8 +944,8 @@ export function ProductStudioForm({
     if (!baseImg) return;
     const newColor: ProductColorOption = {
       id: `c_${Date.now()}_1`,
-      name: 'Mẫu #1',
-      hex: COLOR_SWATCHES[0].hex,
+      name: 'Chưa chọn màu',
+      hex: '',
       image: baseImg,
     };
     setColorOptions([newColor]);
@@ -966,10 +981,26 @@ export function ProductStudioForm({
   const handleSelectSwatchFromPalette = (sw: { name: string; hex: string }) => {
     if (!activeColor) return;
     const shouldAutoFillName = isPlaceholderOrPresetColorName(activeColor.name);
-    handleUpdateActiveColor({
-      hex: sw.hex,
-      ...(shouldAutoFillName ? { name: sw.name } : {}),
+    const next = colorOptions.map((c, i) => {
+      if (i !== safeColorIdx) return c;
+      return {
+        ...c,
+        hex: sw.hex,
+        ...(shouldAutoFillName ? { name: sw.name } : {}),
+      };
     });
+    setColorOptions(next);
+
+    // Automatically advance to the next uploaded photo that still needs a color assigned
+    const nextUnassignedIdx = next.findIndex(
+      (c, i) =>
+        i > safeColorIdx &&
+        Boolean(c.image) &&
+        (!c.hex || c.name.trim().toLowerCase() === 'chưa chọn màu')
+    );
+    if (nextUnassignedIdx !== -1) {
+      setActiveSlot({ type: 'color', index: nextUnassignedIdx });
+    }
   };
 
   /* ---- Auto Generate Description ---- */
@@ -980,11 +1011,16 @@ export function ProductStudioForm({
     }
     const inferred =
       category === 'Crochet' && name.trim() ? inferCategory(name) : category;
+    const resolvedColorName =
+      activeColor?.name &&
+      activeColor.name.trim().toLowerCase() !== 'chưa chọn màu'
+        ? activeColor.name
+        : 'Kem Sữa';
     const desc = generateProductDescription({
       name: name.trim(),
       category: inferred,
       material: material.trim() || 'Len Cotton Milk',
-      color: activeColor?.name || 'Kem Sữa',
+      color: resolvedColorName,
       tags: tags
         .split(',')
         .map((t) => t.trim())
@@ -1007,12 +1043,22 @@ export function ProductStudioForm({
     }
 
     const cleanColors = colorOptions
-      .filter((c) => c.name.trim().length > 0)
-      .map((c, idx) => ({
-        ...c,
-        id: c.id || `c_${idx + 1}`,
-        name: c.name.trim(),
-      }));
+      .filter((c) => Boolean(c.image) || c.name.trim().length > 0)
+      .map((c, idx) => {
+        const rawName = c.name.trim();
+        const isUnset =
+          !rawName || rawName.toLowerCase() === 'chưa chọn màu';
+        return {
+          ...c,
+          id: c.id || `c_${idx + 1}`,
+          name: isUnset
+            ? colorOptions.length === 1
+              ? 'Kem Sữa'
+              : `Mẫu #${idx + 1}`
+            : rawName,
+          hex: c.hex && c.hex.trim().length > 0 ? c.hex : '#F5EBE0',
+        };
+      });
 
     const firstAvailableImg =
       coverImage ||
@@ -1251,14 +1297,10 @@ export function ProductStudioForm({
                   activeOpacity={0.8}>
                   <ImageIcon size={44} color="#7A5230" />
                   <Text style={styles.emptyImageTitle}>
-                    {activeSlot.type === 'cover'
-                      ? 'Bấm để chọn Ảnh Trang Bìa (Đầu tiên)'
-                      : 'Bấm để tải ảnh sắc nét (HD)'}
+                    Bấm để gửi ảnh sản phẩm lên (1 hoặc nhiều ảnh)
                   </Text>
                   <Text style={styles.emptyImageSub}>
-                    {activeSlot.type === 'cover'
-                      ? '🌟 Ảnh bìa hiển thị ngoài trang chủ & đầu trang sản phẩm'
-                      : `Đang chọn phân loại: ${activeColor?.name || 'Màu #1'}`}
+                    📸 Tải toàn bộ ảnh sản phẩm lên trước → Chọn màu cho từng ảnh ở bước sau
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1701,82 +1743,31 @@ export function ProductStudioForm({
 
             <View style={styles.divider} />
 
-            {/* COLOR OPTIONS (Photo-first workflow: Add photo -> Pick color for that photo) */}
+            {/* COLOR OPTIONS (Photo-first workflow: Upload product photos first -> Pick color for each photo afterwards) */}
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>
-                Phân loại Ảnh & Màu sắc ({colorOptions.length} ảnh mẫu — Bước 1: Thêm ảnh • Bước 2: Chọn màu cho ảnh đó)
+                Ảnh sản phẩm & Chọn màu từng ảnh ({colorOptions.length} ảnh đã tải lên)
               </Text>
 
-              <View style={styles.pillWrap}>
-                {colorOptions.map((c, idx) => {
-                  const selected =
-                    activeSlot.type === 'color' && safeColorIdx === idx;
-                  const pillThumb = resolveImgUri(c.image);
-                  return (
-                    <TouchableOpacity
-                      key={c.id || idx}
-                      style={[
-                        styles.optionPill,
-                        selected && styles.optionPillSelected,
-                      ]}
-                      onPress={() => setActiveSlot({ type: 'color', index: idx })}
-                      activeOpacity={0.8}>
-                      {pillThumb ? (
-                        Platform.OS === 'web' ? (
-                          React.createElement('img', {
-                            src: pillThumb,
-                            alt: c.name || `Mẫu #${idx + 1}`,
-                            decoding: 'async',
-                            style: {
-                              width: 24,
-                              height: 24,
-                              borderRadius: 6,
-                              objectFit: 'cover',
-                              display: 'block',
-                              border: '1px solid rgba(61,43,31,0.18)',
-                            },
-                          })
-                        ) : (
-                          <Image
-                            source={{ uri: pillThumb }}
-                            style={styles.optionPillThumb}
-                            resizeMode="cover"
-                          />
-                        )
-                      ) : (
-                        <View style={styles.optionPillThumbEmpty}>
-                          <ImageIcon size={12} color="#8C7A6B" />
-                        </View>
-                      )}
-                      <View
-                        style={[
-                          styles.colorDot,
-                          { backgroundColor: c.hex || '#F5EBE0' },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.optionPillText,
-                          selected && styles.optionPillTextSelected,
-                        ]}
-                        numberOfLines={1}>
-                        {c.name || `Mẫu #${idx + 1}`}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-
+              {/* STEP 1: Upload Product Photos First */}
+              <View style={[styles.pillWrap, { marginBottom: 8 }]}>
                 <TouchableOpacity
                   style={[
                     styles.addOptionPill,
-                    { backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderStyle: 'solid' },
+                    {
+                      backgroundColor: '#FEF3C7',
+                      borderColor: '#F59E0B',
+                      borderStyle: 'solid',
+                      paddingVertical: 9,
+                      paddingHorizontal: 14,
+                    },
                   ]}
                   onPress={handleBatchAddColorPhotos}
                   activeOpacity={0.8}>
-                  <Plus size={14} color="#92400E" />
-                  <ImageIcon size={13} color="#92400E" />
-                  <Text style={[styles.addOptionPillText, { color: '#92400E' }]}>
-                    Thêm ảnh phân loại (1 hoặc nhiều ảnh)
+                  <Plus size={15} color="#92400E" />
+                  <ImageIcon size={14} color="#92400E" />
+                  <Text style={[styles.addOptionPillText, { color: '#92400E', fontWeight: '800' }]}>
+                    Bước 1: Gửi ảnh sản phẩm lên (Chọn 1 hoặc nhiều ảnh)
                   </Text>
                 </TouchableOpacity>
 
@@ -1785,7 +1776,7 @@ export function ProductStudioForm({
                   onPress={handleCaptureNewColorPhoto}
                   activeOpacity={0.8}>
                   <Camera size={13} color="#4A3728" />
-                  <Text style={styles.addOptionPillText}>Chụp ảnh mẫu</Text>
+                  <Text style={styles.addOptionPillText}>Chụp ảnh sản phẩm</Text>
                 </TouchableOpacity>
 
                 {colorOptions.length === 0 && (coverImage || initialProduct?.image) ? (
@@ -1795,11 +1786,98 @@ export function ProductStudioForm({
                     activeOpacity={0.8}>
                     <Sparkles size={13} color="#4A3728" />
                     <Text style={styles.addOptionPillText}>
-                      Dùng ảnh bìa để chọn màu
+                      Chọn màu cho ảnh bìa hiện tại
                     </Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
+
+              {/* STEP 2: List of uploaded photos to pick a color for each */}
+              {colorOptions.length > 0 && (
+                <View style={styles.pillWrap}>
+                  {colorOptions.map((c, idx) => {
+                    const selected =
+                      activeSlot.type === 'color' && safeColorIdx === idx;
+                    const pillThumb = resolveImgUri(c.image);
+                    const isUnassigned =
+                      !c.hex ||
+                      !c.name.trim() ||
+                      c.name.trim().toLowerCase() === 'chưa chọn màu';
+                    return (
+                      <TouchableOpacity
+                        key={c.id || idx}
+                        style={[
+                          styles.optionPill,
+                          selected && styles.optionPillSelected,
+                          isUnassigned &&
+                            !selected && {
+                              borderColor: '#F59E0B',
+                              backgroundColor: '#FFFBEB',
+                            },
+                        ]}
+                        onPress={() => setActiveSlot({ type: 'color', index: idx })}
+                        activeOpacity={0.8}>
+                        {pillThumb ? (
+                          Platform.OS === 'web' ? (
+                            React.createElement('img', {
+                              src: pillThumb,
+                              alt: c.name || `Ảnh #${idx + 1}`,
+                              decoding: 'async',
+                              style: {
+                                width: 26,
+                                height: 26,
+                                borderRadius: 6,
+                                objectFit: 'cover',
+                                display: 'block',
+                                border: '1px solid rgba(61,43,31,0.18)',
+                              },
+                            })
+                          ) : (
+                            <Image
+                              source={{ uri: pillThumb }}
+                              style={styles.optionPillThumb}
+                              resizeMode="cover"
+                            />
+                          )
+                        ) : (
+                          <View style={styles.optionPillThumbEmpty}>
+                            <ImageIcon size={12} color="#8C7A6B" />
+                          </View>
+                        )}
+                        <View
+                          style={[
+                            styles.colorDot,
+                            {
+                              backgroundColor: isUnassigned
+                                ? 'transparent'
+                                : c.hex || '#F5EBE0',
+                              borderStyle: isUnassigned ? 'dashed' : 'solid',
+                              borderColor: isUnassigned
+                                ? '#D97706'
+                                : 'rgba(61,43,31,0.28)',
+                            },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.optionPillText,
+                            selected && styles.optionPillTextSelected,
+                            isUnassigned &&
+                              !selected && {
+                                color: '#B45309',
+                                fontWeight: '700',
+                              },
+                          ]}
+                          numberOfLines={1}>
+                          {`Ảnh #${idx + 1}: ${
+                            isUnassigned ? 'Chưa chọn màu' : c.name
+                          }`}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
 
               {colorOptions.length === 0 ? (
                 <TouchableOpacity
@@ -1809,10 +1887,10 @@ export function ProductStudioForm({
                   <ImageIcon size={22} color="#92400E" />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.emptyVariantPromptTitle}>
-                      Bước 1: Bấm vào đây để thêm ảnh phân loại trước
+                      Bước 1: Bấm vào đây để gửi ảnh sản phẩm lên trước
                     </Text>
                     <Text style={styles.emptyVariantPromptSub}>
-                      Sau khi tải ảnh lên, bạn chỉ cần chạm vào bảng màu bên dưới để gán màu cho bức ảnh đó (đặt tên tự do, không bị bắt buộc theo tên màu).
+                      Bạn có thể chọn 1 hoặc nhiều ảnh sản phẩm cùng lúc. Sau khi ảnh tải lên xong, chỉ cần chạm vào bảng màu bên dưới để chọn màu cho từng ảnh.
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -1860,45 +1938,75 @@ export function ProductStudioForm({
                       )}
                       <View style={styles.activeColorPhotoIndexBadge}>
                         <Text style={styles.activeColorPhotoIndexText}>
-                          Ảnh #{safeColorIdx + 1}
+                          Ảnh #{safeColorIdx + 1}/{colorOptions.length}
                         </Text>
                       </View>
                     </TouchableOpacity>
 
-                    {/* Right side: Step label + Name input + Change/Delete photo */}
+                    {/* Right side: Step label + Prev/Next photo + Name input + Change/Delete photo */}
                     <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <View style={styles.activeColorStepMetaRow}>
                         <Text style={styles.activeColorStepLabel}>
-                          {activeColor.image
-                            ? `Đang chọn màu & đặt tên cho Ảnh #${safeColorIdx + 1}`
-                            : `Bước 1: Hãy chọn ảnh cho Mẫu #${safeColorIdx + 1} trước`}
+                          {!activeColor.hex ||
+                          activeColor.name.trim().toLowerCase() === 'chưa chọn màu'
+                            ? `Bước 2: Chọn màu bên dưới cho Ảnh #${safeColorIdx + 1}`
+                            : `Ảnh #${safeColorIdx + 1} — Đã chọn màu: ${activeColor.name}`}
                         </Text>
-                        {(() => {
-                          const matchedSw = COLOR_SWATCHES.find(
-                            (sw) =>
-                              sw.hex.toLowerCase() ===
-                              (activeColor.hex || '').toLowerCase()
-                          );
-                          if (
-                            matchedSw &&
-                            activeColor.name.trim().toLowerCase() !==
-                              matchedSw.name.toLowerCase()
-                          ) {
-                            return (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {activeColor.image && coverImage !== activeColor.image ? (
+                            <TouchableOpacity
+                              style={styles.useSwatchNameMiniBtn}
+                              onPress={() => setCoverImage(String(activeColor.image))}
+                              activeOpacity={0.8}>
+                              <Text style={styles.useSwatchNameMiniBtnText}>
+                                ★ Đặt làm ảnh bìa
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          {colorOptions.length > 1 && (
+                            <>
                               <TouchableOpacity
-                                style={styles.useSwatchNameMiniBtn}
+                                style={[
+                                  styles.useSwatchNameMiniBtn,
+                                  safeColorIdx === 0 && { opacity: 0.45 },
+                                ]}
+                                disabled={safeColorIdx === 0}
                                 onPress={() =>
-                                  handleUpdateActiveColor({ name: matchedSw.name })
+                                  setActiveSlot({
+                                    type: 'color',
+                                    index: Math.max(0, safeColorIdx - 1),
+                                  })
                                 }
                                 activeOpacity={0.8}>
                                 <Text style={styles.useSwatchNameMiniBtnText}>
-                                  Đặt tên: &quot;{matchedSw.name}&quot;
+                                  ← Ảnh trước
                                 </Text>
                               </TouchableOpacity>
-                            );
-                          }
-                          return null;
-                        })()}
+                              <TouchableOpacity
+                                style={[
+                                  styles.useSwatchNameMiniBtn,
+                                  safeColorIdx >= colorOptions.length - 1 && {
+                                    opacity: 0.45,
+                                  },
+                                ]}
+                                disabled={safeColorIdx >= colorOptions.length - 1}
+                                onPress={() =>
+                                  setActiveSlot({
+                                    type: 'color',
+                                    index: Math.min(
+                                      colorOptions.length - 1,
+                                      safeColorIdx + 1
+                                    ),
+                                  })
+                                }
+                                activeOpacity={0.8}>
+                                <Text style={styles.useSwatchNameMiniBtnText}>
+                                  Ảnh tiếp →
+                                </Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
                       </View>
 
                       <View style={styles.activeColorInputRow}>
@@ -1910,11 +2018,15 @@ export function ProductStudioForm({
                         />
                         <TextInput
                           style={styles.activeColorNameInput}
-                          value={activeColor.name}
+                          value={
+                            activeColor.name.trim().toLowerCase() === 'chưa chọn màu'
+                              ? ''
+                              : activeColor.name
+                          }
                           onChangeText={(txt) =>
                             handleUpdateActiveColor({ name: txt })
                           }
-                          placeholder="Đặt tên tự do cho ảnh này (VD: Ốc quế Khoai Môn...)"
+                          placeholder="Chạm màu bên dưới hoặc tự gõ tên màu cho ảnh này..."
                           placeholderTextColor={COLORS.lightText}
                         />
                         <TouchableOpacity

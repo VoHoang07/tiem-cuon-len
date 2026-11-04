@@ -12,8 +12,8 @@ import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 
 const PAYMENT_CACHE_KEY = 'tcl_payment_methods_v3';
-const SHIPPING_CONFIG_CACHE_KEY = 'tcl_shipping_config_v1';
-const SHIPPING_CONFIG_ROW_ID = 'tcl_shipping_config_v1';
+const SHIPPING_CONFIG_CACHE_KEY = 'tcl_shipping_config_v2';
+const SHIPPING_CONFIG_ROW_ID = 'tcl_shipping_config_v2';
 const SHIPPING_CONFIG_PARTITION = '__TCL_SHIPPING_CONFIG_V1__';
 const SHIPPING_HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
 
@@ -25,8 +25,8 @@ export interface ShippingConfig {
 }
 
 export const DEFAULT_SHIPPING_CONFIG: ShippingConfig = {
-  hcmFee: 22000,
-  provincialFee: 30000,
+  hcmFee: 15000,
+  provincialFee: 15000,
   freeshipEnabled: true,
   freeshipThreshold: 299000,
 };
