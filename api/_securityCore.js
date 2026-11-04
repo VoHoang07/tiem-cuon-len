@@ -27,6 +27,35 @@ const SERVER_EMAILJS_PUBLIC_KEY =
   'kT2DQJicRXPdQjvb3';
 const SERVER_OWNER_NOTIFY_EMAIL =
   process.env.OWNER_NOTIFY_EMAIL || 'khanhly30072007@gmail.com';
+const BLOCKLIST_HMAC_SECRET =
+  process.env.TCL_BLOCKLIST_HMAC_SECRET ||
+  process.env.SEPAY_WEBHOOK_SECRET ||
+  'tcl_srv_hmac_guard_9f4b2c8e1d7a6053_v1';
+
+function signBlockedIpRecord(ip, createdAt) {
+  return crypto
+    .createHmac('sha256', BLOCKLIST_HMAC_SECRET)
+    .update(`${String(ip).trim()}|${String(createdAt).trim()}`)
+    .digest('hex');
+}
+
+function verifyBlockedIpRecord(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  const ip = String(entry.ip || '').trim();
+  const createdAt = String(entry.createdAt || '').trim();
+  const sig = String(entry.sig || '').trim();
+  if (!ip || !createdAt || !sig) return false;
+  // Reject CIDR ranges or wildcard patterns to prevent blocking an entire regional subnet
+  if (ip.includes('/') || ip.includes('*') || ip === '0.0.0.0' || ip === '::') {
+    return false;
+  }
+  const expected = signBlockedIpRecord(ip, createdAt);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
 const ADMIN_EMAILS = new Set([
   'vohoang1327@gmail.com',
@@ -82,16 +111,22 @@ let cachedBlockedIps = new Set();
 let cachedBlockedIpsAt = 0;
 
 /**
- * Extracts client IP & geo telemetry from Cloudflare / Vercel headers
+ * Extracts client IP & geo telemetry from trusted Cloudflare / Vercel edge headers first
+ * to prevent X-Forwarded-For IP spoofing attacks against regional users.
  */
 function extractClientTelemetry(req) {
   const headers = (req && req.headers) || {};
-  const rawForwarded = String(headers['x-forwarded-for'] || '');
-  const firstForwardedIp = rawForwarded.split(',')[0].trim();
+  const vercelForwarded = String(headers['x-vercel-forwarded-for'] || '')
+    .split(',')[0]
+    .trim();
+  const rawForwarded = String(headers['x-forwarded-for'] || '')
+    .split(',')[0]
+    .trim();
   const ip =
     String(headers['cf-connecting-ip'] || '').trim() ||
+    vercelForwarded ||
     String(headers['x-real-ip'] || '').trim() ||
-    firstForwardedIp ||
+    rawForwarded ||
     'unknown';
 
   const country = String(
@@ -249,7 +284,9 @@ function verifyCsrfRequest(req, options = { allowWebhook: false }) {
 }
 
 /**
- * Checks if an IP address is on the server-side blocklist (`__TCL_SECURITY_BLOCKLIST_V1__`)
+ * Checks if an IP address is on the server-side blocklist (`__TCL_SECURITY_BLOCKLIST_V1__`).
+ * Only honors records signed with the Server HMAC key (`verifyBlockedIpRecord`) so even if
+ * someone reverse-engineers client keys, they cannot inject fake regional IPs into the blocklist.
  */
 async function isIpBlockedOnServer(ip) {
   if (!ip || ip === 'unknown' || ip === '127.0.0.1') return false;
@@ -272,7 +309,18 @@ async function isIpBlockedOnServer(ip) {
       const nextSet = new Set();
       if (Array.isArray(rows)) {
         for (const r of rows) {
-          if (r && r.phone) nextSet.add(String(r.phone).trim());
+          if (!r || !r.detailAddress) continue;
+          try {
+            const parsed =
+              typeof r.detailAddress === 'string'
+                ? JSON.parse(r.detailAddress)
+                : r.detailAddress;
+            if (verifyBlockedIpRecord(parsed)) {
+              nextSet.add(String(parsed.ip).trim());
+            }
+          } catch {
+            // ignore malformed row
+          }
         }
       }
       cachedBlockedIps = nextSet;
@@ -632,4 +680,6 @@ module.exports = {
   logServerAuditEvent,
   withGlobalErrorHandler,
   sendOrderNotificationServer,
+  signBlockedIpRecord,
+  verifyBlockedIpRecord,
 };

@@ -10,6 +10,7 @@ const {
   verifyCsrfRequest,
   verifySupabaseUser,
   withGlobalErrorHandler,
+  signBlockedIpRecord,
 } = require('./_securityCore');
 
 // Sliding-window rate limit memory bucket per serverless instance
@@ -129,12 +130,20 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
     }
 
     if (action === 'block_ip') {
-      const targetIp = sanitizeTextServer(rawBody.ip, 45).replace(/[^0-9a-fA-F.:]/g, '');
+      const rawIpStr = String(rawBody.ip || '').trim();
+      // Reject CIDR ranges (/8, /16, /24) or wildcards (*) so a regional subnet can never be blocked
+      if (rawIpStr.includes('/') || rawIpStr.includes('*')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Không cho phép chặn theo dải mạng (CIDR/Wildcard) để tránh chặn nhầm khách hàng cùng vùng.',
+        });
+      }
+      const targetIp = sanitizeTextServer(rawIpStr, 45).replace(/[^0-9a-fA-F.:]/g, '');
       const reason = sanitizeTextServer(
         rawBody.reason || 'Chặn thủ công bởi Quản trị viên',
         160
       );
-      if (!targetIp) {
+      if (!targetIp || targetIp === '0.0.0.0' || targetIp === '127.0.0.1' || targetIp === '::1') {
         return res.status(400).json({ success: false, error: 'Địa chỉ IP không hợp lệ.' });
       }
       const nowIso = new Date().toISOString();
@@ -144,6 +153,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         reason,
         blockedBy: authUser.email,
         createdAt: nowIso,
+        sig: signBlockedIpRecord(targetIp, nowIso),
       };
       const row = {
         id: entry.id,

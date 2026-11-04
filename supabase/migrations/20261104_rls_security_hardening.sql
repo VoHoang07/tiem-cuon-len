@@ -193,7 +193,10 @@ CREATE POLICY "tcl_addresses_select"
   USING (
     public.is_shop_admin()
     OR "userId"::text = coalesce(auth.uid()::text, '')
-    OR "fullName" LIKE '__TCL_%'
+    OR (
+      "fullName" LIKE '__TCL_%'
+      AND "fullName" NOT IN ('__TCL_SECURITY_AUDIT_LOG_V1__', '__TCL_SECURITY_BLOCKLIST_V1__')
+    )
   );
 
 CREATE POLICY "tcl_addresses_insert"
@@ -203,7 +206,9 @@ CREATE POLICY "tcl_addresses_insert"
   WITH CHECK (
     public.is_shop_admin()
     OR "userId"::text = coalesce(auth.uid()::text, '')
-    OR "fullName" LIKE '__TCL_%'
+    OR (
+      "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__', '__TCL_SEPAY_LOG_V1__', '__TCL_SECURITY_AUDIT_LOG_V1__')
+    )
   );
 
 CREATE POLICY "tcl_addresses_update"
@@ -213,12 +218,12 @@ CREATE POLICY "tcl_addresses_update"
   USING (
     public.is_shop_admin()
     OR "userId"::text = coalesce(auth.uid()::text, '')
-    OR "fullName" LIKE '__TCL_%'
+    OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__')
   )
   WITH CHECK (
     public.is_shop_admin()
     OR "userId"::text = coalesce(auth.uid()::text, '')
-    OR "fullName" LIKE '__TCL_%'
+    OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__')
   );
 
 CREATE POLICY "tcl_addresses_delete"
@@ -228,7 +233,6 @@ CREATE POLICY "tcl_addresses_delete"
   USING (
     public.is_shop_admin()
     OR "userId"::text = coalesce(auth.uid()::text, '')
-    OR "fullName" LIKE '__TCL_%'
   );
 
 -- -----------------------------------------------------------------------------
