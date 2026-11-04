@@ -30,6 +30,13 @@ import {
 import { useAuth } from '@/store/AuthContext';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { BrandLogo } from '@/components/BrandLogo';
+import { HiddenBotField } from '@/components/HiddenBotField';
+import {
+  checkRateLimit,
+  validateHiddenBotField,
+  isCurrentIpBlocked,
+  recordSecurityAudit,
+} from '@/utils/securityGuard';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -40,6 +47,8 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [botTrap, setBotTrap] = useState('');
+  const formMountedAtRef = useRef<number>(Date.now());
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<
     'name' | 'email' | 'password' | 'confirm' | null
@@ -164,6 +173,51 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     setError('');
 
+    const botCheck = validateHiddenBotField(botTrap, formMountedAtRef.current, 600);
+    if (!botCheck.valid) {
+      recordSecurityAudit({
+        eventType: 'BOT_TRAP_TRIGGERED',
+        severity: 'CRITICAL',
+        path: '/register',
+        method: 'POST_REGISTER_TRAP',
+        userEmail: email.trim() || 'Bot',
+        details: { reason: botCheck.reason },
+      });
+      setError('Phát hiện truy cập tự động bất thường. Yêu cầu đã bị từ chối.');
+      triggerShake();
+      return;
+    }
+
+    const ipStatus = await isCurrentIpBlocked();
+    if (ipStatus.blocked) {
+      recordSecurityAudit({
+        eventType: 'BLOCKED_IP_ATTEMPT',
+        severity: 'CRITICAL',
+        path: '/register',
+        method: 'POST_REGISTER_BLOCKED_IP',
+        userEmail: email.trim() || 'Blocked IP',
+        details: { ip: ipStatus.ip, reason: ipStatus.reason },
+      });
+      setError(`Địa chỉ IP (${ipStatus.ip}) đã bị chặn truy cập do vi phạm chính sách bảo mật.`);
+      triggerShake();
+      return;
+    }
+
+    const rate = checkRateLimit('auth_register', 4, 60_000, 90_000);
+    if (!rate.allowed) {
+      recordSecurityAudit({
+        eventType: 'RATE_LIMIT_TRIGGERED',
+        severity: 'WARNING',
+        path: '/register',
+        method: 'POST_REGISTER_RATELIMIT',
+        userEmail: email.trim() || 'Unknown',
+        details: { retryAfterSec: rate.retryAfterSec },
+      });
+      setError(`Bạn thao tác quá nhanh. Vui lòng thử lại sau ${rate.retryAfterSec} giây.`);
+      triggerShake();
+      return;
+    }
+
     if (!name.trim()) {
       setError('Vui lòng nhập họ tên.');
       triggerShake();
@@ -190,8 +244,24 @@ export default function RegisterScreen() {
     setSubmitting(false);
 
     if (result.success) {
+      recordSecurityAudit({
+        eventType: 'AUTH_REGISTER_SUCCESS',
+        severity: 'INFO',
+        path: '/register',
+        method: 'SUPABASE_AUTH_REGISTER',
+        userEmail: email.trim(),
+        details: { name: name.trim() },
+      });
       router.replace((redirect || '/') as Href);
     } else {
+      recordSecurityAudit({
+        eventType: 'AUTH_REGISTER_FAILED',
+        severity: 'WARNING',
+        path: '/register',
+        method: 'SUPABASE_AUTH_REGISTER',
+        userEmail: email.trim(),
+        details: { error: result.error || 'Register failed' },
+      });
       setError(result.error ?? 'Đăng ký thất bại.');
       triggerShake();
     }
@@ -285,6 +355,7 @@ export default function RegisterScreen() {
               </View>
 
               <View style={styles.formSection}>
+                <HiddenBotField value={botTrap} onChangeText={setBotTrap} />
                 {/* Name */}
                 <View style={styles.fieldGroup}>
                   <Text style={styles.fieldLabel}>Họ tên</Text>

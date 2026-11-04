@@ -275,9 +275,14 @@ export default function ProfileScreen() {
                 onPress={() => router.push('/orders')}
               />
               <MenuItem icon={CreditCard} label="Cấu hình phương thức thanh toán" onPress={() => router.push('/payment-methods')} />
+              <MenuItem
+                icon={Shield}
+                label="Trung tâm Bảo mật & Nhật ký IP (WAF / Audit Log)"
+                badge="Trực tuyến"
+                onPress={() => router.push('/privacy')}
+              />
               <MenuItem icon={Settings} label={PROF_SETTINGS} onPress={() => router.push('/settings')} />
               <MenuItem icon={HelpCircle} label={PROF_HELP} onPress={() => router.push('/help')} />
-              <MenuItem icon={Shield} label={PROF_PRIVACY} onPress={() => router.push('/privacy')} />
             </View>
 
             {/* Logout */}

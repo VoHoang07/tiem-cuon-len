@@ -47,6 +47,13 @@ import {
   CHECKOUT_SUCCESS_TITLE,
   CHECKOUT_SUCCESS_TEXT,
 } from '@/constants/strings';
+import { HiddenBotField } from '@/components/HiddenBotField';
+import {
+  checkRateLimit,
+  validateHiddenBotField,
+  isCurrentIpBlocked,
+  recordSecurityAudit,
+} from '@/utils/securityGuard';
 
 const TYPE_ICONS: Record<PaymentMethodType, { icon: React.ReactNode; color: string }> = {
   bank_transfer: { icon: <Building2 size={24} color="#765341" />, color: '#765341' },
@@ -150,6 +157,8 @@ export default function CheckoutScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  const [botTrap, setBotTrap] = useState('');
+  const formMountedAtRef = useRef<number>(Date.now());
   const lastOrderAtRef = useRef<number>(0);
 
   // Reset express fee confirmation if address changes or user leaves express mode
@@ -428,6 +437,58 @@ export default function CheckoutScreen() {
       setShowExpressCard(true);
       return;
     }
+
+    const botCheck = validateHiddenBotField(botTrap, formMountedAtRef.current, 600);
+    if (!botCheck.valid) {
+      recordSecurityAudit({
+        eventType: 'BOT_TRAP_TRIGGERED',
+        severity: 'CRITICAL',
+        path: '/checkout',
+        method: 'POST_CHECKOUT_TRAP',
+        userEmail: user?.email,
+        userId: user?.id,
+        details: { reason: botCheck.reason },
+      });
+      Alert.alert('Bảo mật', 'Phát hiện thao tác tự động bất thường. Yêu cầu đã bị từ chối.');
+      return;
+    }
+
+    const ipStatus = await isCurrentIpBlocked();
+    if (ipStatus.blocked) {
+      recordSecurityAudit({
+        eventType: 'BLOCKED_IP_ATTEMPT',
+        severity: 'CRITICAL',
+        path: '/checkout',
+        method: 'POST_CHECKOUT_BLOCKED_IP',
+        userEmail: user?.email,
+        userId: user?.id,
+        details: { ip: ipStatus.ip, reason: ipStatus.reason },
+      });
+      Alert.alert(
+        'Từ chối truy cập',
+        `Địa chỉ IP (${ipStatus.ip}) đã bị chặn đặt hàng do vi phạm chính sách bảo mật.`
+      );
+      return;
+    }
+
+    const rate = checkRateLimit('checkout_order', 3, 60_000, 60_000);
+    if (!rate.allowed) {
+      recordSecurityAudit({
+        eventType: 'RATE_LIMIT_TRIGGERED',
+        severity: 'WARNING',
+        path: '/checkout',
+        method: 'POST_CHECKOUT_RATELIMIT',
+        userEmail: user?.email,
+        userId: user?.id,
+        details: { retryAfterSec: rate.retryAfterSec },
+      });
+      Alert.alert(
+        'Thao tác quá nhanh',
+        `Vui lòng đợi ${rate.retryAfterSec} giây trước khi tạo đơn hàng tiếp theo.`
+      );
+      return;
+    }
+
     if (Date.now() - lastOrderAtRef.current < 15000) {
       Alert.alert('Thao tác quá nhanh', 'Vui lòng đợi 15 giây trước khi tạo đơn hàng tiếp theo.');
       return;
@@ -490,6 +551,22 @@ export default function CheckoutScreen() {
     };
 
     await addOrder(order);
+
+    recordSecurityAudit({
+      eventType: 'CHECKOUT_ORDER_CREATED',
+      severity: 'INFO',
+      path: '/checkout',
+      method: selectedPayment.type.toUpperCase(),
+      userEmail: user?.email,
+      userId: user?.id,
+      details: {
+        orderId,
+        total: checkoutTotal,
+        itemCount: checkoutItems.length,
+        shippingMethod: shippingMethodLabel,
+        paymentMethod: selectedPayment.title,
+      },
+    });
 
     if (selectedPayment.type === 'cod') {
       // COD order is finalized immediately -> notify shop owner & clear cart
@@ -899,6 +976,7 @@ export default function CheckoutScreen() {
 
           {/* Right Column on Desktop: Order Summary + Pay Button Card */}
           <View style={[styles.rightCol, isDesktop && styles.rightColDesktop]}>
+            <HiddenBotField value={botTrap} onChangeText={setBotTrap} />
             <View style={[styles.section, isDesktop && styles.summaryCardDesktop]}>
               <Text style={styles.sectionTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
               {checkoutItems.map((item) => {

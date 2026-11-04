@@ -36,6 +36,13 @@ import {
   LOGIN_BUTTON,
 } from '@/constants/strings';
 import { BrandLogo } from '@/components/BrandLogo';
+import { HiddenBotField } from '@/components/HiddenBotField';
+import {
+  checkRateLimit,
+  validateHiddenBotField,
+  isCurrentIpBlocked,
+  recordSecurityAudit,
+} from '@/utils/securityGuard';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -44,6 +51,8 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [botTrap, setBotTrap] = useState('');
+  const formMountedAtRef = useRef<number>(Date.now());
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
   const [error, setError] = useState('');
@@ -204,6 +213,52 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setError('');
+
+    const botCheck = validateHiddenBotField(botTrap, formMountedAtRef.current, 500);
+    if (!botCheck.valid) {
+      recordSecurityAudit({
+        eventType: 'BOT_TRAP_TRIGGERED',
+        severity: 'CRITICAL',
+        path: '/login',
+        method: 'POST_LOGIN_TRAP',
+        userEmail: email.trim() || 'Bot',
+        details: { reason: botCheck.reason },
+      });
+      setError('Phát hiện truy cập tự động bất thường. Yêu cầu đã bị từ chối.');
+      triggerShake();
+      return;
+    }
+
+    const ipStatus = await isCurrentIpBlocked();
+    if (ipStatus.blocked) {
+      recordSecurityAudit({
+        eventType: 'BLOCKED_IP_ATTEMPT',
+        severity: 'CRITICAL',
+        path: '/login',
+        method: 'POST_LOGIN_BLOCKED_IP',
+        userEmail: email.trim() || 'Blocked IP',
+        details: { ip: ipStatus.ip, reason: ipStatus.reason },
+      });
+      setError(`Địa chỉ IP (${ipStatus.ip}) đã bị chặn truy cập do vi phạm chính sách bảo mật.`);
+      triggerShake();
+      return;
+    }
+
+    const rate = checkRateLimit('auth_login', 6, 60_000, 60_000);
+    if (!rate.allowed) {
+      recordSecurityAudit({
+        eventType: 'RATE_LIMIT_TRIGGERED',
+        severity: 'WARNING',
+        path: '/login',
+        method: 'POST_LOGIN_RATELIMIT',
+        userEmail: email.trim() || 'Unknown',
+        details: { retryAfterSec: rate.retryAfterSec },
+      });
+      setError(`Bạn thao tác quá nhanh. Vui lòng thử lại sau ${rate.retryAfterSec} giây.`);
+      triggerShake();
+      return;
+    }
+
     if (!email.trim() || !password.trim()) {
       setError('Vui lòng nhập đầy đủ email và mật khẩu.');
       triggerShake();
@@ -213,8 +268,24 @@ export default function LoginScreen() {
     const result = await login(email.trim(), password);
     setSubmitting(false);
     if (result.success) {
+      recordSecurityAudit({
+        eventType: 'AUTH_LOGIN_SUCCESS',
+        severity: 'INFO',
+        path: '/login',
+        method: 'SUPABASE_AUTH_LOGIN',
+        userEmail: email.trim(),
+        details: { redirect: redirect || '/' },
+      });
       router.replace((redirect || '/') as Href);
     } else {
+      recordSecurityAudit({
+        eventType: 'AUTH_LOGIN_FAILED',
+        severity: 'WARNING',
+        path: '/login',
+        method: 'SUPABASE_AUTH_LOGIN',
+        userEmail: email.trim(),
+        details: { error: result.error || 'Invalid credentials', remainingAttempts: rate.remaining },
+      });
       setError(result.error ?? 'Đăng nhập thất bại.');
       triggerShake();
     }
@@ -328,6 +399,7 @@ export default function LoginScreen() {
 
               {/* Form */}
               <View style={styles.formSection}>
+                <HiddenBotField value={botTrap} onChangeText={setBotTrap} />
                 {/* Email */}
                 <Animated.View
                   style={[
