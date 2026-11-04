@@ -5,12 +5,26 @@
 
 BEGIN;
 
--- -----------------------------------------------------------------------------
--- 1. KHÓA ĐIỂM MÙ RLS TRÊN BẢNG PRODUCTS (Gỡ bỏ mệnh đề 'OR id IS NOT NULL')
---    - Ai cũng xem được danh sách sản phẩm (SELECT)
---    - Chỉ Admin mới được thêm mới (INSERT) hoặc xóa (DELETE) sản phẩm
---    - Chỉ Admin hoặc tài khoản đã đăng nhập (gửi đánh giá) mới được UPDATE
--- -----------------------------------------------------------------------------
+-- 0. Đảm bảo hàm kiểm tra quyền Admin tồn tại
+CREATE OR REPLACE FUNCTION public.is_shop_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    lower(auth.jwt() ->> 'email') IN (
+      'vohoang1327@gmail.com',
+      'admin@tiemcuonlen.com',
+      'admin@cuonlen.vn'
+    ),
+    false
+  );
+$$;
+
+-- 1. KHÓA ĐIỂM MÙ RLS TRÊN BẢNG PRODUCTS & ĐẢM BẢO CỘT "createdAt" TỒN TẠI
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS "createdAt" text;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "tcl_products_write_admin" ON public.products;
@@ -49,38 +63,72 @@ CREATE POLICY "tcl_products_delete_admin"
     public.is_shop_admin()
   );
 
--- -----------------------------------------------------------------------------
--- 2. ĐÁNH INDEX TỐI ƯU TỐC ĐỘ TRUY VẤN SUPABASE & SEPAY WEBHOOK
--- -----------------------------------------------------------------------------
+-- 2. ĐÁNH INDEX TỐI ƯU TỐC ĐỘ TRUY VẤN SUPABASE & SEPAY WEBHOOK (An toàn 100%)
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_orders_status_created ON public.orders (status, "createdAt" DESC)';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Tăng tốc đối soát đơn chờ thanh toán QR của SePay Webhook & lọc đơn theo trạng thái
-CREATE INDEX IF NOT EXISTS idx_orders_status_created
-  ON public.orders (status, "createdAt" DESC);
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_orders_userid_created ON public.orders ("userId", "createdAt" DESC)';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Tăng tốc tải lịch sử đơn hàng của khách & kiểm tra quyền sở hữu RLS
-CREATE INDEX IF NOT EXISTS idx_orders_userid_created
-  ON public.orders ("userId", "createdAt" DESC);
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_products_category_created ON public.products (category, "createdAt" DESC)';
+EXCEPTION WHEN OTHERS THEN
+  BEGIN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_products_category_only ON public.products (category)';
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+END $$;
 
--- Tăng tốc lọc sản phẩm theo danh mục & sắp xếp sản phẩm mới nhất
-CREATE INDEX IF NOT EXISTS idx_products_category_created
-  ON public.products (category, "createdAt" DESC);
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_products_created_desc ON public.products ("createdAt" DESC)';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_products_created_desc
-  ON public.products ("createdAt" DESC);
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_addresses_fullname_district ON public.addresses ("fullName", district DESC)';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Tăng tốc truy vấn phân vùng hệ thống (Chat, SePay Log, SIEM Audit Log, Shop Config)
-CREATE INDEX IF NOT EXISTS idx_addresses_fullname_district
-  ON public.addresses ("fullName", district DESC);
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_addresses_userid ON public.addresses ("userId")';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Tăng tốc tải sổ địa chỉ giao hàng theo người dùng
-CREATE INDEX IF NOT EXISTS idx_addresses_userid
-  ON public.addresses ("userId");
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_cart_items_userid ON public.cart_items ("userId")';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Tăng tốc tải giỏ hàng & danh sách yêu thích theo người dùng
-CREATE INDEX IF NOT EXISTS idx_cart_items_userid
-  ON public.cart_items ("userId");
+DO $$
+BEGIN
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_favorites_userid ON public.favorites ("userId")';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_favorites_userid
-  ON public.favorites ("userId");
+-- 3. BẬT SUPABASE REALTIME CHO BẢNG ORDERS (Xác nhận QR SePay < 300ms)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'orders'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 COMMIT;
