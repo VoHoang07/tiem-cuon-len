@@ -1,61 +1,60 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { CATEGORIES, COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import {
-  View,
-  Text,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Alert,
-  Platform,
-  useWindowDimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import {
-  ChevronLeft,
-  Camera,
-  Image as ImageIcon,
-  Plus,
-  Trash2,
-  Sparkles,
-  Check,
-  X,
-  FileText,
-  Maximize2,
-} from 'lucide-react-native';
-import {
-  Product,
-  Category,
-  ProductColorOption,
-  ProductAccessoryOption,
-  ProductGalleryItem,
+    Category,
+    Product,
+    ProductAccessoryOption,
+    ProductColorOption,
+    ProductGalleryItem,
 } from '@/types/product';
-import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
 import {
-  generateProductDescription,
-  inferCategory,
-  inferColorHex,
-} from '@/utils/generateProductDescription';
-import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
-import { formatVND } from '@/utils/formatCurrency';
-import {
-  validateWebFileUpload,
-  validateBase64ImageUpload,
-  generateUuidFilename,
-  MAX_PROCESSED_DATA_URI_BYTES,
+    generateUuidFilename,
+    MAX_PROCESSED_DATA_URI_BYTES,
+    validateBase64ImageUpload,
+    validateWebFileUpload,
 } from '@/utils/fileUploadGuard';
 import {
-  AdminProductDraft,
-  loadAdminDrafts,
-  saveAdminDraft,
-  deleteAdminDraft,
-  loadWorkingDraft,
-  saveWorkingDraft,
-  clearWorkingDraft,
-  isDraftMeaningful,
+    generateProductDescription,
+    inferCategory,
+    inferColorHex,
+} from '@/utils/generateProductDescription';
+import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
+import {
+    AdminProductDraft,
+    clearWorkingDraft,
+    deleteAdminDraft,
+    isDraftMeaningful,
+    loadAdminDrafts,
+    loadWorkingDraft,
+    saveAdminDraft,
+    saveWorkingDraft,
 } from '@/utils/productDraftStore';
+import * as ImagePicker from 'expo-image-picker';
+import {
+    Camera,
+    Check,
+    ChevronLeft,
+    FileText,
+    Image as ImageIcon,
+    Maximize2,
+    Plus,
+    Sparkles,
+    Trash2,
+    X,
+} from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Alert,
+    Image,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const MAX_WIDTH = 1040;
 
@@ -118,17 +117,44 @@ const ZODIAC_FILENAME_MAP: Record<string, string> = {
   song_ngu: 'Song Ngư ♓',
 };
 
+function isGenericCameraFilename(raw: string): boolean {
+  const s = raw.trim().toLowerCase();
+  if (!s) return true;
+  if (/^(img|dsc|pxl| pic|image|photo|screenshot|screen[\s_-]*shot|untitled|whatsapp|att|cam|cap|download|file|mẫu|mau)[\s_-]*\d*/i.test(s)) {
+    return true;
+  }
+  if (/^z\d{8,}/i.test(s)) return true;
+  if (/^[0-9a-f]{8,}(-[0-9a-f]{4,})+/i.test(s)) return true;
+  if (/^[\d\s_.-]+$/.test(s)) return true;
+  return false;
+}
+
 function formatVariantNameFromFilename(fileName: string, fallbackIdx: number): string {
   const base = fileName
     .replace(/\.[^.]+$/, '')
-    .replace(/^\d+[\s_-]*/, '')
     .trim();
-  const norm = base.toLowerCase().replace(/[\s-]+/g, '_');
+  if (isGenericCameraFilename(base)) {
+    return `Mẫu #${fallbackIdx + 1}`;
+  }
+  const stripped = base.replace(/^\d+[\s_-]*/, '').trim();
+  if (!stripped || isGenericCameraFilename(stripped)) {
+    return `Mẫu #${fallbackIdx + 1}`;
+  }
+  const norm = stripped.toLowerCase().replace(/[\s-]+/g, '_');
   if (ZODIAC_FILENAME_MAP[norm]) {
     return ZODIAC_FILENAME_MAP[norm];
   }
-  const readable = base.replace(/[_-]+/g, ' ').trim();
+  const readable = stripped.replace(/[_-]+/g, ' ').trim();
   return readable || `Mẫu #${fallbackIdx + 1}`;
+}
+
+function isPlaceholderOrPresetColorName(val: string): boolean {
+  const trimmed = (val || '').trim();
+  if (!trimmed) return true;
+  if (/^(mẫu|ảnh|phân loại|màu)(\s*mẫu)?\s*#?\d*$/i.test(trimmed)) return true;
+  return COLOR_SWATCHES.some(
+    (sw) => sw.name.toLowerCase() === trimmed.toLowerCase()
+  );
 }
 
 function encodeCanvasHd(canvas: HTMLCanvasElement, quality: number = 0.94): string {
@@ -579,13 +605,8 @@ export function ProductStudioForm({
         },
       ];
     }
-    return [
-      { id: 'c_1', name: 'Kem Sữa', hex: '#F5EBE0' },
-      { id: 'c_2', name: 'Hồng Phấn', hex: '#F4ACB7' },
-    ];
+    return [];
   });
-
-  const [paletteClickMode, setPaletteClickMode] = useState<'update' | 'add'>('update');
 
   const [extraPhotos, setExtraPhotos] = useState<string[]>(() => {
     if (!initialProduct?.gallery) return [];
@@ -624,7 +645,14 @@ export function ProductStudioForm({
     setTags(d.tags ?? '');
     setCoverImage(d.coverImage ?? null);
     if (Array.isArray(d.colorOptions) && d.colorOptions.length > 0) {
-      setColorOptions(d.colorOptions);
+      const isLegacyEmptyDefaults =
+        d.colorOptions.length <= 2 &&
+        d.colorOptions.every(
+          (c) => !c.image && (c.name === 'Kem Sữa' || c.name === 'Hồng Phấn')
+        );
+      setColorOptions(isLegacyEmptyDefaults ? [] : d.colorOptions);
+    } else {
+      setColorOptions([]);
     }
     setExtraPhotos(Array.isArray(d.extraPhotos) ? d.extraPhotos : []);
     setActiveSlot({ type: 'cover' });
@@ -721,10 +749,7 @@ export function ProductStudioForm({
     setDescription('');
     setTags('');
     setCoverImage(null);
-    setColorOptions([
-      { id: 'c_1', name: 'Kem Sữa', hex: '#F5EBE0' },
-      { id: 'c_2', name: 'Hồng Phấn', hex: '#F4ACB7' },
-    ]);
+    setColorOptions([]);
     setExtraPhotos([]);
     setActiveSlot({ type: 'cover' });
     setDraftStatusMsg('Đã mở mẫu mới trắng');
@@ -855,15 +880,15 @@ export function ProductStudioForm({
       colorOptions.every((c) => !c.image && (c.name === 'Kem Sữa' || c.name === 'Hồng Phấn'));
 
     const baseList = hasOnlyEmptyDefaults ? [] : [...colorOptions];
+    const firstNewIdx = baseList.length;
     const newItems: ProductColorOption[] = picked.map((item, i) => {
       const idx = baseList.length + i;
-      const inferredName = item.labelHint
-        ? item.labelHint
-        : COLOR_SWATCHES[idx % COLOR_SWATCHES.length].name;
+      const defaultSwatch = COLOR_SWATCHES[idx % COLOR_SWATCHES.length];
+      const hintName = item.labelHint || `Mẫu #${idx + 1}`;
       return {
         id: `c_${Date.now()}_${idx + 1}`,
-        name: inferredName,
-        hex: inferColorHex(inferredName, idx),
+        name: hintName,
+        hex: defaultSwatch.hex,
         image: item.uri,
       };
     });
@@ -873,7 +898,43 @@ export function ProductStudioForm({
     if (!coverImage && newItems[0]?.image) {
       setCoverImage(newItems[0].image);
     }
+    setActiveSlot({ type: 'color', index: firstNewIdx });
+  };
+
+  const handleCaptureNewColorPhoto = async () => {
+    const uri = await pickHdImage(true);
+    if (!uri) return;
+    const hasOnlyEmptyDefaults =
+      colorOptions.length <= 2 &&
+      colorOptions.every((c) => !c.image && (c.name === 'Kem Sữa' || c.name === 'Hồng Phấn'));
+    const baseList = hasOnlyEmptyDefaults ? [] : [...colorOptions];
+    const idx = baseList.length;
+    const defaultSwatch = COLOR_SWATCHES[idx % COLOR_SWATCHES.length];
+    const newColor: ProductColorOption = {
+      id: `c_${Date.now()}_${idx + 1}`,
+      name: `Mẫu #${idx + 1}`,
+      hex: defaultSwatch.hex,
+      image: uri,
+    };
+    const next = [...baseList, newColor];
+    setColorOptions(next);
+    if (!coverImage) {
+      setCoverImage(uri);
+    }
     setActiveSlot({ type: 'color', index: next.length - 1 });
+  };
+
+  const handleUseCoverAsFirstVariant = () => {
+    const baseImg = coverImage || initialProduct?.image;
+    if (!baseImg) return;
+    const newColor: ProductColorOption = {
+      id: `c_${Date.now()}_1`,
+      name: 'Mẫu #1',
+      hex: COLOR_SWATCHES[0].hex,
+      image: baseImg,
+    };
+    setColorOptions([newColor]);
+    setActiveSlot({ type: 'color', index: 0 });
   };
 
   const handleRemoveExtraPhoto = (idx: number) => {
@@ -882,67 +943,32 @@ export function ProductStudioForm({
     setActiveSlot({ type: 'cover' });
   };
 
-  /* ---- Handlers for Color Options ---- */
-  const handleAddColorOption = () => {
-    const nextIdx = colorOptions.length;
-    const preset =
-      COLOR_SWATCHES.find(
-        (sw) =>
-          !colorOptions.some(
-            (c) => c.name.trim().toLowerCase() === sw.name.toLowerCase()
-          )
-      ) || COLOR_SWATCHES[nextIdx % COLOR_SWATCHES.length];
-
-    const newColor: ProductColorOption = {
-      id: `c_${Date.now()}_${nextIdx + 1}`,
-      name: preset.name,
-      hex: preset.hex,
-      image: undefined,
-    };
-    const next = [...colorOptions, newColor];
-    setColorOptions(next);
-    setActiveSlot({ type: 'color', index: next.length - 1 });
-  };
-
+  /* ---- Handlers for Color Options (Photo-First, Independent Color Selection) ---- */
   const handleUpdateActiveColor = (patch: Partial<ProductColorOption>) => {
     const next = colorOptions.map((c, i) => {
       if (i !== safeColorIdx) return c;
-      const updated = { ...c, ...patch };
-      if (patch.name !== undefined && !patch.hex) {
-        updated.hex = inferColorHex(patch.name, i);
-      }
-      return updated;
+      // Do NOT auto-overwrite hex based on name — color is chosen explicitly for the photo
+      return { ...c, ...patch };
     });
     setColorOptions(next);
   };
 
   const handleRemoveColorOption = (idx: number) => {
-    if (colorOptions.length <= 1) {
-      Alert.alert('Cần ít nhất 1 màu', 'Sản phẩm cần có tối thiểu 1 phân loại màu.');
-      return;
-    }
     const next = colorOptions.filter((_, i) => i !== idx);
     setColorOptions(next);
-    setActiveSlot({ type: 'color', index: Math.max(0, idx - 1) });
+    if (next.length === 0) {
+      setActiveSlot({ type: 'cover' });
+    } else {
+      setActiveSlot({ type: 'color', index: Math.max(0, idx - 1) });
+    }
   };
 
   const handleSelectSwatchFromPalette = (sw: { name: string; hex: string }) => {
-    if (paletteClickMode === 'add') {
-      const nextIdx = colorOptions.length;
-      const newColor: ProductColorOption = {
-        id: `c_${Date.now()}_${nextIdx + 1}`,
-        name: sw.name,
-        hex: sw.hex,
-        image: undefined,
-      };
-      const next = [...colorOptions, newColor];
-      setColorOptions(next);
-      setActiveSlot({ type: 'color', index: next.length - 1 });
-      return;
-    }
+    if (!activeColor) return;
+    const shouldAutoFillName = isPlaceholderOrPresetColorName(activeColor.name);
     handleUpdateActiveColor({
       hex: sw.hex,
-      name: sw.name,
+      ...(shouldAutoFillName ? { name: sw.name } : {}),
     });
   };
 
@@ -1430,8 +1456,13 @@ export function ProductStudioForm({
                           <ImageIcon size={16} color="#8C7A6B" />
                         </View>
                       )}
-                    </View>
-                    <View style={styles.thumbLabelRow}>
+                      <TouchableOpacity
+                        style={styles.thumbDeleteMini}
+                        onPress={() => handleRemoveColorOption(idx)}>
+                        <X size={10} color="#FFF" />
+                      </TouchableOpacity>
+                      </View>
+                      <View style={styles.thumbLabelRow}>
                       <View
                         style={[
                           styles.miniDot,
@@ -1439,12 +1470,33 @@ export function ProductStudioForm({
                         ]}
                       />
                       <Text style={styles.thumbLabelText} numberOfLines={1}>
-                        {c.name || `Màu ${idx + 1}`}
+                        {c.name || `Mẫu ${idx + 1}`}
                       </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+                      </View>
+                      </TouchableOpacity>
+                      );
+                      })}
+
+                      <TouchableOpacity
+                      style={styles.thumbItemWrap}
+                      onPress={handleBatchAddColorPhotos}
+                      activeOpacity={0.8}>
+                      <View
+                      style={[
+                      styles.addThumbBox,
+                      { borderColor: '#D97706', backgroundColor: '#FFFBEB' },
+                      ]}>
+                      <Plus size={18} color="#B45309" />
+                      </View>
+                      <Text
+                      style={[
+                      styles.thumbLabelText,
+                      { color: '#92400E', fontWeight: '700' },
+                      ]}
+                      numberOfLines={1}>
+                      + Ảnh màu
+                      </Text>
+                      </TouchableOpacity>
 
               {extraPhotos.map((uri, idx) => {
                 const isSelected =
@@ -1649,16 +1701,17 @@ export function ProductStudioForm({
 
             <View style={styles.divider} />
 
-            {/* COLOR OPTIONS (Matches product/[id].tsx pill selector) */}
+            {/* COLOR OPTIONS (Photo-first workflow: Add photo -> Pick color for that photo) */}
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>
-                Màu sắc ({colorOptions.length} lựa chọn — chạm vào màu để đổi tên & ảnh bên trái)
+                Phân loại Ảnh & Màu sắc ({colorOptions.length} ảnh mẫu — Bước 1: Thêm ảnh • Bước 2: Chọn màu cho ảnh đó)
               </Text>
 
               <View style={styles.pillWrap}>
                 {colorOptions.map((c, idx) => {
                   const selected =
                     activeSlot.type === 'color' && safeColorIdx === idx;
+                  const pillThumb = resolveImgUri(c.image);
                   return (
                     <TouchableOpacity
                       key={c.id || idx}
@@ -1668,6 +1721,33 @@ export function ProductStudioForm({
                       ]}
                       onPress={() => setActiveSlot({ type: 'color', index: idx })}
                       activeOpacity={0.8}>
+                      {pillThumb ? (
+                        Platform.OS === 'web' ? (
+                          React.createElement('img', {
+                            src: pillThumb,
+                            alt: c.name || `Mẫu #${idx + 1}`,
+                            decoding: 'async',
+                            style: {
+                              width: 24,
+                              height: 24,
+                              borderRadius: 6,
+                              objectFit: 'cover',
+                              display: 'block',
+                              border: '1px solid rgba(61,43,31,0.18)',
+                            },
+                          })
+                        ) : (
+                          <Image
+                            source={{ uri: pillThumb }}
+                            style={styles.optionPillThumb}
+                            resizeMode="cover"
+                          />
+                        )
+                      ) : (
+                        <View style={styles.optionPillThumbEmpty}>
+                          <ImageIcon size={12} color="#8C7A6B" />
+                        </View>
+                      )}
                       <View
                         style={[
                           styles.colorDot,
@@ -1678,124 +1758,237 @@ export function ProductStudioForm({
                         style={[
                           styles.optionPillText,
                           selected && styles.optionPillTextSelected,
-                        ]}>
-                        {c.name || `Màu #${idx + 1}`}
+                        ]}
+                        numberOfLines={1}>
+                        {c.name || `Mẫu #${idx + 1}`}
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
 
                 <TouchableOpacity
-                  style={styles.addOptionPill}
-                  onPress={handleAddColorOption}
-                  activeOpacity={0.8}>
-                  <Plus size={14} color="#4A3728" />
-                  <Text style={styles.addOptionPillText}>Thêm màu / mẫu</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
                   style={[
                     styles.addOptionPill,
-                    { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
+                    { backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderStyle: 'solid' },
                   ]}
                   onPress={handleBatchAddColorPhotos}
                   activeOpacity={0.8}>
+                  <Plus size={14} color="#92400E" />
                   <ImageIcon size={13} color="#92400E" />
                   <Text style={[styles.addOptionPillText, { color: '#92400E' }]}>
-                    Chọn nhiều ảnh phân loại cùng lúc
+                    Thêm ảnh phân loại (1 hoặc nhiều ảnh)
                   </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.addOptionPill}
+                  onPress={handleCaptureNewColorPhoto}
+                  activeOpacity={0.8}>
+                  <Camera size={13} color="#4A3728" />
+                  <Text style={styles.addOptionPillText}>Chụp ảnh mẫu</Text>
+                </TouchableOpacity>
+
+                {colorOptions.length === 0 && (coverImage || initialProduct?.image) ? (
+                  <TouchableOpacity
+                    style={styles.addOptionPill}
+                    onPress={handleUseCoverAsFirstVariant}
+                    activeOpacity={0.8}>
+                    <Sparkles size={13} color="#4A3728" />
+                    <Text style={styles.addOptionPillText}>
+                      Dùng ảnh bìa để chọn màu
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
-              {/* Inline editor for the currently selected color */}
+              {colorOptions.length === 0 ? (
+                <TouchableOpacity
+                  style={styles.emptyVariantPromptBox}
+                  onPress={handleBatchAddColorPhotos}
+                  activeOpacity={0.82}>
+                  <ImageIcon size={22} color="#92400E" />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.emptyVariantPromptTitle}>
+                      Bước 1: Bấm vào đây để thêm ảnh phân loại trước
+                    </Text>
+                    <Text style={styles.emptyVariantPromptSub}>
+                      Sau khi tải ảnh lên, bạn chỉ cần chạm vào bảng màu bên dưới để gán màu cho bức ảnh đó (đặt tên tự do, không bị bắt buộc theo tên màu).
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
+
+              {/* Inline editor for the currently selected photo variant */}
               {activeColor && (
                 <View style={styles.activeColorEditorBox}>
-                  <View style={styles.activeColorInputRow}>
-                    <View
-                      style={[
-                        styles.colorDotLarge,
-                        { backgroundColor: activeColor.hex || '#F5EBE0' },
-                      ]}
-                    />
-                    <TextInput
-                      style={styles.activeColorNameInput}
-                      value={activeColor.name}
-                      onChangeText={(txt) =>
-                        handleUpdateActiveColor({ name: txt })
-                      }
-                      placeholder="Tên màu (VD: Kem Sữa, Hồng Phấn...)"
-                      placeholderTextColor={COLORS.lightText}
-                    />
+                  <View style={styles.activeColorTopRow}>
+                    {/* Selected Photo Mini Card */}
                     <TouchableOpacity
-                      style={styles.pickColorImgBtn}
+                      style={styles.activeColorPhotoPreviewBox}
                       onPress={() => {
                         setActiveSlot({ type: 'color', index: safeColorIdx });
                         handlePickCurrentSlotPhoto(false);
-                      }}>
-                      <ImageIcon size={13} color="#4A3728" />
-                      <Text style={styles.pickColorImgBtnText}>
-                        {activeColor.image ? 'Đổi ảnh' : 'Chọn ảnh'}
-                      </Text>
+                      }}
+                      activeOpacity={0.85}>
+                      {resolveImgUri(activeColor.image) ? (
+                        Platform.OS === 'web' ? (
+                          React.createElement('img', {
+                            src: resolveImgUri(activeColor.image)!,
+                            alt: activeColor.name || 'Ảnh mẫu',
+                            decoding: 'async',
+                            style: {
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                            },
+                          })
+                        ) : (
+                          <Image
+                            source={{ uri: resolveImgUri(activeColor.image)! }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode="cover"
+                          />
+                        )
+                      ) : (
+                        <View style={styles.activeColorPhotoEmpty}>
+                          <ImageIcon size={18} color="#92400E" />
+                          <Text style={styles.activeColorPhotoEmptyText}>
+                            + Chọn ảnh
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.activeColorPhotoIndexBadge}>
+                        <Text style={styles.activeColorPhotoIndexText}>
+                          Ảnh #{safeColorIdx + 1}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
-                    {colorOptions.length > 1 && (
-                      <TouchableOpacity
-                        style={styles.deleteMiniBtn}
-                        onPress={() => handleRemoveColorOption(safeColorIdx)}>
-                        <Trash2 size={14} color={COLORS.error} />
-                      </TouchableOpacity>
-                    )}
+
+                    {/* Right side: Step label + Name input + Change/Delete photo */}
+                    <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <View style={styles.activeColorStepMetaRow}>
+                        <Text style={styles.activeColorStepLabel}>
+                          {activeColor.image
+                            ? `Đang chọn màu & đặt tên cho Ảnh #${safeColorIdx + 1}`
+                            : `Bước 1: Hãy chọn ảnh cho Mẫu #${safeColorIdx + 1} trước`}
+                        </Text>
+                        {(() => {
+                          const matchedSw = COLOR_SWATCHES.find(
+                            (sw) =>
+                              sw.hex.toLowerCase() ===
+                              (activeColor.hex || '').toLowerCase()
+                          );
+                          if (
+                            matchedSw &&
+                            activeColor.name.trim().toLowerCase() !==
+                              matchedSw.name.toLowerCase()
+                          ) {
+                            return (
+                              <TouchableOpacity
+                                style={styles.useSwatchNameMiniBtn}
+                                onPress={() =>
+                                  handleUpdateActiveColor({ name: matchedSw.name })
+                                }
+                                activeOpacity={0.8}>
+                                <Text style={styles.useSwatchNameMiniBtnText}>
+                                  Đặt tên: &quot;{matchedSw.name}&quot;
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </View>
+
+                      <View style={styles.activeColorInputRow}>
+                        <View
+                          style={[
+                            styles.colorDotLarge,
+                            { backgroundColor: activeColor.hex || '#F5EBE0' },
+                          ]}
+                        />
+                        <TextInput
+                          style={styles.activeColorNameInput}
+                          value={activeColor.name}
+                          onChangeText={(txt) =>
+                            handleUpdateActiveColor({ name: txt })
+                          }
+                          placeholder="Đặt tên tự do cho ảnh này (VD: Ốc quế Khoai Môn...)"
+                          placeholderTextColor={COLORS.lightText}
+                        />
+                        <TouchableOpacity
+                          style={styles.pickColorImgBtn}
+                          onPress={() => {
+                            setActiveSlot({ type: 'color', index: safeColorIdx });
+                            handlePickCurrentSlotPhoto(false);
+                          }}>
+                          <ImageIcon size={13} color="#4A3728" />
+                          <Text style={styles.pickColorImgBtnText}>
+                            {activeColor.image ? 'Đổi ảnh' : 'Chọn ảnh'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteMiniBtn}
+                          onPress={() => handleRemoveColorOption(safeColorIdx)}>
+                          <Trash2 size={14} color={COLORS.error} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
 
                   <View style={styles.paletteHeaderRow}>
                     <Text style={styles.paletteSubLabel}>
-                      Bảng {COLOR_SWATCHES.length} màu len thủ công:
+                      Bước 2 — Chọn màu đại diện cho ảnh này ({COLOR_SWATCHES.length} màu len hoặc tự chọn mã màu):
                     </Text>
-                    <View style={styles.paletteModeSwitch}>
-                      <TouchableOpacity
-                        style={[
-                          styles.paletteModeBtn,
-                          paletteClickMode === 'update' &&
-                            styles.paletteModeBtnActive,
-                        ]}
-                        onPress={() => setPaletteClickMode('update')}
-                        activeOpacity={0.8}>
-                        <Text
-                          style={[
-                            styles.paletteModeBtnText,
-                            paletteClickMode === 'update' &&
-                              styles.paletteModeBtnTextActive,
-                          ]}>
-                          Đổi màu đang chọn
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.paletteModeBtn,
-                          paletteClickMode === 'add' &&
-                            styles.paletteModeBtnActive,
-                        ]}
-                        onPress={() => setPaletteClickMode('add')}
-                        activeOpacity={0.8}>
-                        <Text
-                          style={[
-                            styles.paletteModeBtnText,
-                            paletteClickMode === 'add' &&
-                              styles.paletteModeBtnTextActive,
-                          ]}>
-                          + Chạm để thêm màu mới
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                    {Platform.OS === 'web' &&
+                      React.createElement(
+                        'label',
+                        {
+                          style: {
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            backgroundColor: '#EFE6DA',
+                            padding: '4px 10px',
+                            borderRadius: 999,
+                            border: '1px solid #DBCAB8',
+                            cursor: 'pointer',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            color: '#4A3728',
+                          },
+                        },
+                        React.createElement('input', {
+                          type: 'color',
+                          value:
+                            /^#[0-9a-fA-F]{6}$/.test(activeColor.hex || '')
+                              ? activeColor.hex
+                              : '#F5EBE0',
+                          onChange: (e: any) => {
+                            const nextHex = e?.target?.value;
+                            if (nextHex) {
+                              handleUpdateActiveColor({ hex: nextHex });
+                            }
+                          },
+                          style: {
+                            width: 18,
+                            height: 18,
+                            border: 'none',
+                            padding: 0,
+                            background: 'transparent',
+                            cursor: 'pointer',
+                          },
+                        }),
+                        '🎨 Tự chọn màu bất kỳ'
+                      )}
                   </View>
 
                   <View style={styles.swatchesGridWrap}>
                     {COLOR_SWATCHES.map((sw) => {
                       const isCurrent =
-                        paletteClickMode === 'update' &&
                         (activeColor.hex || '').toLowerCase() ===
-                          sw.hex.toLowerCase() &&
-                        activeColor.name.trim().toLowerCase() ===
-                          sw.name.toLowerCase();
+                        sw.hex.toLowerCase();
                       return (
                         <TouchableOpacity
                           key={`${sw.name}_${sw.hex}`}
@@ -1809,6 +2002,7 @@ export function ProductStudioForm({
                             style={[
                               styles.swatchCircle,
                               { backgroundColor: sw.hex },
+                              isCurrent && styles.swatchCircleSelected,
                             ]}
                           />
                           <Text
@@ -1816,7 +2010,7 @@ export function ProductStudioForm({
                               styles.swatchChipText,
                               isCurrent && styles.swatchChipTextSelected,
                             ]}>
-                            {paletteClickMode === 'add' ? `+ ${sw.name}` : sw.name}
+                            {isCurrent ? `✓ ${sw.name}` : sw.name}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -2399,18 +2593,36 @@ const styles = StyleSheet.create({
   optionPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: '#FAF6F0',
     borderWidth: 1,
     borderColor: '#E6DDD0',
+    maxWidth: '100%',
   },
   optionPillSelected: {
     backgroundColor: '#F1E7DA',
     borderColor: '#6E4F37',
     borderWidth: 1.5,
+  },
+  optionPillThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(61,43,31,0.18)',
+  },
+  optionPillThumbEmpty: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#EFE6DA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#DBCAB8',
   },
   colorDot: {
     width: 14,
@@ -2423,6 +2635,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#5C4738',
+    flexShrink: 1,
   },
   optionPillTextSelected: {
     fontWeight: '700',
@@ -2431,7 +2644,7 @@ const styles = StyleSheet.create({
   addOptionPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
@@ -2445,18 +2658,109 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4A3728',
   },
+  emptyVariantPromptBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 13,
+    padding: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#F59E0B',
+    marginTop: 2,
+  },
+  emptyVariantPromptTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  emptyVariantPromptSub: {
+    fontSize: 11.5,
+    color: '#78350F',
+    marginTop: 2,
+    lineHeight: 16,
+  },
   activeColorEditorBox: {
     backgroundColor: '#FAF6F0',
     borderRadius: 13,
     padding: 10,
     borderWidth: 1,
     borderColor: '#E6DDD0',
-    gap: 8,
+    gap: 10,
     marginTop: 2,
+  },
+  activeColorTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  activeColorPhotoPreviewBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#EFE6DA',
+    borderWidth: 1.5,
+    borderColor: '#C4AA90',
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  activeColorPhotoEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  activeColorPhotoEmptyText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  activeColorPhotoIndexBadge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(61, 43, 31, 0.78)',
+    paddingVertical: 1.5,
+    alignItems: 'center',
+  },
+  activeColorPhotoIndexText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFDF9',
+  },
+  activeColorStepMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  activeColorStepLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#6E5A4B',
+  },
+  useSwatchNameMiniBtn: {
+    backgroundColor: '#EFE6DA',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D6C3B0',
+  },
+  useSwatchNameMiniBtnText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#4A3728',
   },
   activeColorInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
   },
   colorDotLarge: {

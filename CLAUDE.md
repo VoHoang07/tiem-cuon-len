@@ -1,1 +1,71 @@
-@AGENTS.md
+# PROJECT AGENT HARNESS & ENGINEERING CONSTITUTION
+
+> **Expo Reference:** Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any Expo-specific native/router code.
+
+---
+
+## 1. SYSTEM ARCHITECTURE & TECH STACK
+
+- **Hosting & Edge:** Vercel (`vercel.json` + Serverless Functions tại `api/*.js`) + Cloudflare (`CLOUDFLARE_SECURITY_GUIDE.md` — WAF, DNS, SSL/TLS Full Strict, Rate Limiting).
+- **Database & Auth:** Supabase (`src/services/supabase.ts` cho Client/Anon session; `api/_securityCore.js` cho Server-side REST/Service-Role verification; PostgreSQL Row Level Security đã bật toàn diện tại `supabase/migrations/20261104_rls_security_hardening.sql`).
+- **Payment Integration:** SePay (`api/sepay-webhook.js`, `src/app/payment/[orderId].tsx`, `src/app/payment-methods.tsx`, `src/store/PaymentMethodsContext.tsx` — VietQR / Webhook tự động xác nhận giao dịch chuyển khoản ngân hàng).
+- **Order & Authoritative Pricing Pipeline:**
+  - Server-side Order Guard & Price Calculator: `api/orders-guard.js`
+  - Client Order Store & Sync: `src/store/OrderContext.tsx`, `src/app/checkout.tsx`, `src/app/orders/index.tsx`, `src/app/orders/[id].tsx`
+  - Server-side Email Notification Dispatch: `api/_securityCore.js` (`sendOrderNotificationServer`), `src/utils/sendOrderNotification.ts`
+- **Security Stack:**
+  - **HTTP Security Headers (CSP, HSTS, CORS, X-Frame-Options, Permissions-Policy):** `vercel.json` & `api/_securityCore.js` (`applySecurityHeaders`, `verifyCsrfOrigin`, `setHardenedSessionCookie`)
+  - **Rate Limiter Middleware & Bot Guard:** `src/utils/securityGuard.ts` (Client Sliding-Window Rate Limiter) & `api/_securityCore.js` (`checkServerRateLimit`, `enforceNotBlockedIp`)
+  - **Request Audit Logger (SIEM) & HMAC-Signed IP Blocklist:** `api/security-audit.js`, `api/_securityCore.js`, `src/app/privacy.tsx`
+  - **Form Honeypot Validation (Hidden Bot Trap):** `src/components/HiddenBotField.tsx` & `src/utils/securityGuard.ts` (`validateHiddenBotField`)
+  - **Strict Schema Validation (Anti-Mass-Assignment) & XSS Sanitizer:** `src/utils/schemaValidator.ts` & `api/_securityCore.js` (`stripUnknownFieldsServer`, `sanitizeTextServer`)
+  - **File Upload Guard (Magic Bytes + Max Size + UUID v4 Rename):** `src/utils/fileUploadGuard.ts` & `src/components/ProductStudioForm.tsx`
+- **Verification Commands:**
+  - Kiểm tra bảo mật tự động (Quét lộ Secret/API Key, Global Error Handler, Anti-Mass-Assignment, Magic Bytes, HTTP Headers, `npm audit`): `npm run security:check` (hoặc `npm run security:scan`)
+  - Quét lỗ hổng thư viện Production: `npm run security:audit` (`npm audit --omit=dev --audit-level=high`)
+  - Build kiểm tra bundle Web thực tế (Vercel Web Export): `npm run build:web` (`npx expo export -p web`)
+
+---
+
+## 2. CRITICAL PATHS (VÙNG CẤM ĐỊA - BẤT KHẢ XÂM PHẠM)
+
+> Tuyệt đối KHÔNG tự ý sửa đổi cấu trúc, chữ ký xác thực hoặc nới lỏng bảo mật ở các file sau nếu không có yêu cầu đích danh:
+
+- **Luồng Webhook & Thanh toán SePay:** `api/sepay-webhook.js`, `api/orders-guard.js`, `src/app/payment/[orderId].tsx`, `src/store/OrderContext.tsx`
+  - Luôn phải tính toán tổng tiền đơn hàng từ bảng `products` trên Server (`computeServerAuthoritativePricing` trong `api/orders-guard.js`), tuyệt đối không tin `price` hoặc `total` do Client gửi lên.
+  - Kiểm tra chữ ký/API key của SePay (`SEPAY_WEBHOOK_SECRET`), chỉ nhận giao dịch `transferType === 'in'` vào đúng số tài khoản ngân hàng hợp lệ (`ALLOWED_ACCOUNTS`), đối chiếu số tiền chuyển khoản `transferAmount >= Number(matchedOrder.total)` và đảm bảo tính **Idempotency** (chống cộng tiền/cập nhật trạng thái hoặc bắn Email 2 lần khi SePay gọi lại webhook cho đơn đã `processing`/`completed`).
+- **Bảo mật & Middleware:** `api/_securityCore.js`, `api/security-audit.js`, `vercel.json`, `src/utils/securityGuard.ts`, `src/utils/schemaValidator.ts`, `src/utils/fileUploadGuard.ts`, `src/components/HiddenBotField.tsx`, `scripts/security-check.js`
+  - Không được làm gãy luồng chặn bot (Honeypot + Rate Limiter), không tháo bỏ `withGlobalErrorHandler` trên bất kỳ API route nào, và tuyệt đối không lộ biến môi trường nhạy cảm (`SUPABASE_SERVICE_ROLE_KEY`, `SEPAY_WEBHOOK_SECRET`, `EMAILJS_PRIVATE_KEY`, `SECURITY_HMAC_SECRET`, `__TCL_SECURITY_AUDIT_LOG_V1__`, `__TCL_SECURITY_BLOCKLIST_V1__`) ra phía Client (`src/`).
+- **Database & RLS:** `supabase/migrations/20261104_rls_security_hardening.sql`, `supabase/migrations/payment_methods.sql`, `src/services/supabase.ts`
+  - Không xóa cột, không tắt RLS (`ALTER TABLE ... DISABLE ROW LEVEL SECURITY` bị nghiêm cấm). Mọi thay đổi cấu trúc DB hoặc Policy bắt buộc tạo file migration SQL mới trong `supabase/migrations/`.
+
+---
+
+## 3. QUY TRÌNH THỰC THI 3 PHA (PLAN -> EXECUTE -> VERIFY)
+
+- **Pha 1 (Plan):**
+  - Phân tích yêu cầu, kiểm tra xem có chạm vào **Critical Paths (Mục 2)** hay vi phạm **Self-Evolving Memory (Mục 4)** không.
+  - Đề xuất phương án ngắn gọn trước khi sửa nhiều file.
+- **Pha 2 (Execute):**
+  - **Đồng bộ toàn diện Client + Admin & Desktop + Mobile:**
+    1. Luôn cập nhật đồng bộ cả luồng Khách hàng (`customer`) và Quản trị (`admin`) trong cùng 1 lần sửa.
+    2. Kiểm tra và tối ưu bố cục cho cả màn hình Desktop (`>= 768px`) lẫn Mobile (`< 640px`, chiều rộng `360px–430px`). Trên Mobile: căn lề chuẩn (`paddingHorizontal: 12`), dùng `flexWrap: 'wrap'` cho các hàng nút, dùng `minWidth: 0` cho `TextInput` trong hàng ngang, và đảm bảo không có phần tử nào bị tràn mép phải hoặc bị `BottomNav` che khuất.
+  - **Tối ưu Supabase:** Chỉ `.select()` đúng các cột cần thiết, tuyệt đối tránh `select('*')` không giới hạn và lỗi N+1 query.
+  - **Chuẩn UX:** Mọi thao tác bất đồng bộ (thêm giỏ hàng, tạo mã QR SePay, lọc sản phẩm, lưu nháp sản phẩm) bắt buộc phải có đầy đủ 3 trạng thái: `Loading/Skeleton`, `Success`, và `Error handling` rõ ràng.
+- **Pha 3 (Verify):**
+  - Sau khi sửa code, BẮT BUỘC tự chạy lệnh kiểm tra bảo mật & build (`npm run security:check` / `npm run build:web`) trên terminal. Nếu có lỗi đỏ, phải tự đọc log và sửa đến khi Pass 100% mới kết thúc.
+
+---
+
+## 4. SELF-EVOLVING MEMORY (BỘ NHỚ TỰ HỌC TỪ BUG)
+
+> **[QUY TẮC BẮT BUỘC]:** Trước khi code phải đọc mục này. Sau mỗi lần fix bug (do người dùng báo hoặc do lệnh build/test bắt được), AI phải tự động ghi nối thêm 1 quy tắc mới vào dưới đây theo định dạng: `[Phân hệ] Triệu chứng lỗi -> Nguyên nhân gốc -> Luật bất khả kháng`.
+
+1. **[Product & Storage Quota Sync]** Thêm sản phẩm mới có nhiều ảnh phân loại HD (12 cung hoàng đạo / 34 màu len) bị mất dữ liệu sau khi tải lại trang hoặc không đồng bộ từ máy tính Admin sang điện thoại Khách -> `localStorage` của trình duyệt chỉ có giới hạn ~5MB nên ném lỗi `QuotaExceededError` khi lưu mảng ảnh Base64 lớn, đồng thời `cart_items`/`orders` lưu nguyên chuỗi ảnh Base64 của toàn bộ biến thể làm phình payload Supabase -> **Luật bất khả kháng:** Mọi dữ liệu sản phẩm và bản nháp Admin (`ProductContext.tsx`, `productDraftStore.ts`) bắt buộc lưu trữ qua `IndexedDB` (`tcl_products_idb_v1`) kết hợp đồng bộ Supabase; khi lưu `cart_items` hoặc `orders` chỉ lưu ảnh đại diện của đúng phân loại khách chọn (`compactOrderItems`), tuyệt đối không nhúng toàn bộ `gallery` và `colorOptions` vào đơn hàng.
+2. **[Order & Cart Price Integrity]** Giá sản phẩm sau khi Admin chỉnh sửa bị nhảy về giá cũ trong giỏ hàng, hoặc kẻ tấn công sửa `price`/`total` trong request tạo đơn hàng -> Giỏ hàng rehydrate từ `localStorage` ghi đè lên giá mới trong DB và API tạo đơn tin tưởng trường `total` từ Client gửi lên -> **Luật bất khả kháng:** `CartContext` phải luôn đồng bộ lại đơn giá từ danh mục sản phẩm mới nhất; ở tầng Backend (`api/orders-guard.js` và `api/sepay-webhook.js`), mọi phép tính tiền hàng, phí vận chuyển, giảm giá Freeship (`>= 199.000đ`) và tổng thanh toán bắt buộc tính lại 100% từ Database trên Server (`computeServerAuthoritativePricing`).
+3. **[Security & IP Blocklist Integrity]** Kẻ tấn công có nguy cơ chèn IP giả hoặc dải mạng (`0.0.0.0/0`, `::/0`) vào bảng blocklist để khóa toàn bộ khách hàng truy cập web, hoặc đọc trộm nhật ký SIEM từ Client -> Khoá phân vùng (`HOLDER_USER_ID`) dùng chung với cấu hình công khai và dòng blocklist không có chữ ký xác thực Server -> **Luật bất khả kháng:** Phân vùng SIEM (`__TCL_SECURITY_AUDIT_LOG_V1__`) và Blocklist (`__TCL_SECURITY_BLOCKLIST_V1__`) chỉ được truy cập ở tầng Server (`api/`), bị chặn `SELECT/WRITE` đối với `anon` bằng RLS (`supabase/migrations/20261104_rls_security_hardening.sql`); mọi bản ghi chặn IP bắt buộc phải là địa chỉ IP đơn lẻ đã ký `HMAC-SHA256` bằng khoá bí mật Server (`signBlocklistEntry` / `verifyBlocklistEntry`), tuyệt đối cấm chặn theo CIDR/vùng địa lý từ phía ứng dụng.
+4. **[Polling & Delete Race Condition]** Khi Admin xoá đơn hàng hoặc cuộc trò chuyện Chat, mục vừa xoá tự động xuất hiện lại sau vài giây -> Chu kỳ polling nền (`setInterval` đang bay trên mạng) trả về dữ liệu cũ sau khi lệnh `delete` vừa chạy xong và ghi đè lại vào React state -> **Luật bất khả kháng:** Trong `OrderContext.tsx` và `ChatContext.tsx`, bắt buộc duy trì tập hợp `deletedIdsRef` (`Set<string>`) và kiểm tra lọc bỏ các ID đã xoá trước khi merge kết quả từ mọi lệnh fetch/poll bất đồng bộ.
+5. **[React Hooks Order & Early Return Crash]** Trang Quản lý kho sản phẩm (`manage-products.tsx`) bị văng lỗi trắng trang (`Rendered more/fewer hooks than expected`) khi chuyển đổi tài khoản hoặc reload -> Đặt các hook `useMemo` / `useEffect` nằm phía sau câu lệnh `if (role !== 'admin') return ...` -> **Luật bất khả kháng:** Toàn bộ React Hooks (`useState`, `useMemo`, `useCallback`, `useEffect`, `useFocusEffect`) bắt buộc phải khai báo ở đầu Component trước bất kỳ câu lệnh `if (...) return` kiểm tra quyền truy cập (`role !== 'admin'`) hoặc trạng thái `isLoading` nào.
+6. **[Checkout & Notification Timing]** Shop nhận được email báo đơn hàng mới ngay cả khi khách chọn chuyển khoản QR nhưng chưa quét mã thanh toán, hoặc khách bấm nút Thanh toán khi chưa có địa chỉ mà không thấy phản hồi -> Gọi hàm gửi email ngay lúc khởi tạo đơn `pending_payment` và khoá cứng `disabled={!hasAddress}` trên nút đặt hàng khiến khách bấm không có tín hiệu -> **Luật bất khả kháng:** Đơn COD gửi thông báo ngay khi đặt, còn đơn chuyển khoản QR (`pending_payment`) chỉ gửi thông báo sau khi SePay Webhook xác nhận tiền về thành công; khi khách bấm Thanh toán mà thiếu địa chỉ, phải tự động cuộn lên khung địa chỉ và kích hoạt hiệu ứng rung cảnh báo viền đỏ (`triggerAddressShake`).
+7. **[Web Image Quality & Aspect Ratio Framing]** Ảnh sản phẩm tải lên từ điện thoại (`3:4`, `9:16`) hoặc ảnh nhỏ bị mờ, vỡ hạt hoặc bị cắt mất đầu/đuôi sản phẩm trong khung vuông -> Nén canvas 1 bước từ ảnh lớn gây răng cưa (bilinear aliasing) và `objectFit: 'cover'` cắt mất rìa của ảnh chữ nhật -> **Luật bất khả kháng:** Mọi ảnh tải lên trên Web trong `ProductStudioForm.tsx` bắt buộc đi qua bộ kiểm tra Magic Bytes + đổi tên UUID v4 (`fileUploadGuard.ts`) và hàm hạ cỡ đa bước 2x (`optimizeHdImageIfWeb`) về chuẩn khung vuông **Ultra-HD `1440×1440` (1:1)** chất lượng `0.94`, tự động căn vừa khung cho ảnh chữ nhật kèm nền studio mờ để không bao giờ làm mất chi tiết sản phẩm.
+8. **[TypeScript CLI & Clean Source Tree]** Chạy lệnh `npx tsc` trực tiếp không có cấu hình chuẩn khi thiếu `expo/tsconfig.base` làm phát sinh hàng loạt file `.js` rác nằm lẫn trong thư mục `src/` -> `tsc` mặc định bật chế độ emit file `.js` nếu không đọc được file cấu hình gốc -> **Luật bất khả kháng:** Không bao giờ để file `.js` biên dịch tự động tồn tại trong `src/` (mọi code trong `src/` chỉ dùng `.ts` và `.tsx`); sử dụng `npm run security:check` và `npm run build:web` (`npx expo export -p web`) để xác thực toàn bộ dự án trước khi commit.
