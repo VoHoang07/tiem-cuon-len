@@ -1,5 +1,5 @@
 import { Platform, Dimensions } from 'react-native';
-import { supabaseUrl, supabaseAnonKey } from '@/services/supabase';
+import { supabase } from '@/services/supabase';
 
 export type SecurityEventType =
   | 'PAGE_VISIT'
@@ -11,7 +11,8 @@ export type SecurityEventType =
   | 'RATE_LIMIT_TRIGGERED'
   | 'BOT_TRAP_TRIGGERED'
   | 'BLOCKED_IP_ATTEMPT'
-  | 'ADMIN_SECURITY_ACTION';
+  | 'ADMIN_SECURITY_ACTION'
+  | 'SERVER_API_ERROR';
 
 export type SecuritySeverity = 'INFO' | 'WARNING' | 'CRITICAL';
 
@@ -42,10 +43,6 @@ export interface BlockedIpEntry {
   createdAt: string;
 }
 
-const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
-const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
-const HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
-
 const LOCAL_AUDIT_KEY = 'tcl_security_audit_logs_v1';
 const LOCAL_BLOCKLIST_KEY = 'tcl_security_blocklist_v1';
 const LOCAL_RATE_LIMIT_PREFIX = 'tcl_ratelimit_v1_';
@@ -60,6 +57,24 @@ interface ClientTelemetryCache {
 
 let cachedTelemetry: ClientTelemetryCache | null = null;
 const memoryRateBuckets = new Map<string, { timestamps: number[]; lockedUntil: number }>();
+
+async function getAdminAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  try {
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return headers;
+}
 
 function getDeviceScreenSize(): string {
   try {
@@ -360,7 +375,7 @@ export async function isCurrentIpBlocked(): Promise<{
 }
 
 /**
- * Records a detailed Request Audit Log entry both locally and to Supabase (__TCL_SECURITY_AUDIT_LOG_V1__)
+ * Records a detailed Request Audit Log entry via the Server API (`/api/security-audit`)
  */
 export async function recordSecurityAudit(params: {
   eventType: SecurityEventType;
@@ -402,30 +417,30 @@ export async function recordSecurityAudit(params: {
   const existing = readLocalAuditLogs();
   writeLocalAuditLogs([entry, ...existing]);
 
-  // 2. Push to Supabase directly via REST so Admin on all devices sees the log immediately
-  if (supabaseUrl && supabaseAnonKey) {
-    const row = {
-      id: entry.id,
-      userId: HOLDER_USER_ID,
-      fullName: AUDIT_LOG_PARTITION,
-      phone: entry.ip.slice(0, 45),
-      city: entry.eventType,
-      district: entry.timestamp,
-      ward: entry.severity,
-      detailAddress: JSON.stringify(entry),
-      isDefault: false,
-    };
-
+  // 2. Dispatch to server API (`/api/security-audit`) so server handles storage
+  if (typeof window !== 'undefined') {
     try {
-      await fetch(`${supabaseUrl}/rest/v1/addresses`, {
+      await fetch('/api/security-audit', {
         method: 'POST',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        body: JSON.stringify(row),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'log',
+          eventType: entry.eventType,
+          severity: entry.severity,
+          path: entry.path,
+          method: entry.method,
+          userEmail: entry.userEmail,
+          actorUserId: entry.userId,
+          ip: entry.ip,
+          location: entry.location,
+          asn: entry.asn,
+          userAgent: entry.userAgent,
+          screenSize: entry.screenSize,
+          language: entry.language,
+          referer: entry.referer,
+          details: entry.details,
+          hiddenTrap: params.hiddenTrap,
+        }),
       });
     } catch {
       // ignore network error
@@ -486,6 +501,9 @@ function parseBlockedIpRow(row: Record<string, unknown>): BlockedIpEntry | null 
   return null;
 }
 
+/**
+ * Fetches security dashboard data via `/api/security-audit` (requires Admin Bearer JWT)
+ */
 export async function fetchSecurityDashboardData(): Promise<{
   telemetry: ClientTelemetryCache;
   logs: SecurityAuditEntry[];
@@ -495,48 +513,26 @@ export async function fetchSecurityDashboardData(): Promise<{
   let remoteLogs: SecurityAuditEntry[] = [];
   let remoteBlocks: BlockedIpEntry[] = [];
 
-  if (supabaseUrl && supabaseAnonKey) {
+  if (typeof window !== 'undefined') {
     try {
-      const [logsRes, blocksRes] = await Promise.all([
-        fetch(
-          `${supabaseUrl}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}&order=district.desc&limit=120&_t=${Date.now()}`,
-          {
-            method: 'GET',
-            cache: 'no-store',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
-            },
-          }
-        ),
-        fetch(
-          `${supabaseUrl}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&order=district.desc&limit=100&_t=${Date.now()}`,
-          {
-            method: 'GET',
-            cache: 'no-store',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
-            },
-          }
-        ),
-      ]);
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(`/api/security-audit?_t=${Date.now()}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers,
+      });
 
-      if (logsRes.ok) {
-        const rawLogs = await logsRes.json();
-        if (Array.isArray(rawLogs)) {
-          remoteLogs = rawLogs
-            .map((r) => parseAuditRow(r as Record<string, unknown>))
-            .filter((x): x is SecurityAuditEntry => x !== null);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.logs)) {
+          remoteLogs = data.logs
+            .map((r: unknown) => parseAuditRow(r as Record<string, unknown>))
+            .filter((x: SecurityAuditEntry | null): x is SecurityAuditEntry => x !== null);
         }
-      }
-
-      if (blocksRes.ok) {
-        const rawBlocks = await blocksRes.json();
-        if (Array.isArray(rawBlocks)) {
-          remoteBlocks = rawBlocks
-            .map((r) => parseBlockedIpRow(r as Record<string, unknown>))
-            .filter((x): x is BlockedIpEntry => x !== null && Boolean(x.ip));
+        if (Array.isArray(data?.blocklist)) {
+          remoteBlocks = data.blocklist
+            .map((r: unknown) => parseBlockedIpRow(r as Record<string, unknown>))
+            .filter((x: BlockedIpEntry | null): x is BlockedIpEntry => x !== null && Boolean(x.ip));
           writeLocalBlockedIps(remoteBlocks);
         }
       }
@@ -545,7 +541,6 @@ export async function fetchSecurityDashboardData(): Promise<{
     }
   }
 
-  // Merge remote logs with local logs
   const localLogs = readLocalAuditLogs();
   const mergedMap = new Map<string, SecurityAuditEntry>();
   for (const item of [...remoteLogs, ...localLogs]) {
@@ -588,28 +583,17 @@ export async function blockIpAddress(
   const current = readLocalBlockedIps().filter((b) => b.ip !== cleanIp);
   writeLocalBlockedIps([entry, ...current]);
 
-  if (supabaseUrl && supabaseAnonKey) {
-    const row = {
-      id: entry.id,
-      userId: HOLDER_USER_ID,
-      fullName: BLOCKLIST_PARTITION,
-      phone: cleanIp.slice(0, 45),
-      city: entry.reason.slice(0, 120),
-      district: nowIso,
-      ward: 'BLOCKED',
-      detailAddress: JSON.stringify(entry),
-      isDefault: false,
-    };
+  if (typeof window !== 'undefined') {
     try {
-      await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+      const headers = await getAdminAuthHeaders();
+      await fetch('/api/security-audit', {
         method: 'POST',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates,return=minimal',
-        },
-        body: JSON.stringify(row),
+        headers,
+        body: JSON.stringify({
+          action: 'block_ip',
+          ip: cleanIp,
+          reason: entry.reason,
+        }),
       });
     } catch {
       // ignore
@@ -632,19 +616,17 @@ export async function unblockIpAddress(ip: string, adminEmail?: string): Promise
   const next = readLocalBlockedIps().filter((b) => b.ip !== cleanIp);
   writeLocalBlockedIps(next);
 
-  if (supabaseUrl && supabaseAnonKey) {
-    const blockId = `block_${cleanIp.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  if (typeof window !== 'undefined') {
     try {
-      await fetch(
-        `${supabaseUrl}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&or=(id.eq.${encodeURIComponent(blockId)},phone.eq.${encodeURIComponent(cleanIp)})`,
-        {
-          method: 'DELETE',
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
-        }
-      );
+      const headers = await getAdminAuthHeaders();
+      await fetch('/api/security-audit', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          action: 'unblock_ip',
+          ip: cleanIp,
+        }),
+      });
     } catch {
       // ignore
     }
@@ -661,18 +643,16 @@ export async function unblockIpAddress(ip: string, adminEmail?: string): Promise
 
 export async function clearSecurityAuditLogs(): Promise<void> {
   writeLocalAuditLogs([]);
-  if (supabaseUrl && supabaseAnonKey) {
+  if (typeof window !== 'undefined') {
     try {
-      await fetch(
-        `${supabaseUrl}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}`,
-        {
-          method: 'DELETE',
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
-        }
-      );
+      const headers = await getAdminAuthHeaders();
+      await fetch('/api/security-audit', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          action: 'clear_logs',
+        }),
+      });
     } catch {
       // ignore
     }

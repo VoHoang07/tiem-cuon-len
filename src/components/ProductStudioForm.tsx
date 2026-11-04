@@ -38,6 +38,12 @@ import {
 } from '@/utils/generateProductDescription';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { formatVND } from '@/utils/formatCurrency';
+import {
+  validateWebFileUpload,
+  validateBase64ImageUpload,
+  generateUuidFilename,
+  MAX_PROCESSED_DATA_URI_BYTES,
+} from '@/utils/fileUploadGuard';
 
 const MAX_WIDTH = 1040;
 
@@ -257,7 +263,11 @@ async function optimizeHdImageIfWeb(
   });
 }
 
-async function pickMultipleHdImages(): Promise<{ uri: string; fileName: string }[]> {
+async function pickMultipleHdImages(): Promise<{
+  uri: string;
+  fileName: string;
+  labelHint?: string;
+}[]> {
   if (
     Platform.OS === 'web' &&
     typeof window !== 'undefined' &&
@@ -267,9 +277,11 @@ async function pickMultipleHdImages(): Promise<{ uri: string; fileName: string }
       const input = document.createElement('input');
       input.type = 'file';
       input.multiple = true;
-      input.accept = 'image/png,image/jpeg,image/webp,image/avif,image/*';
+      input.accept = 'image/png,image/jpeg,image/webp,image/avif,image/gif';
       let settled = false;
-      const finish = (items: { uri: string; fileName: string }[]) => {
+      const finish = (
+        items: { uri: string; fileName: string; labelHint?: string }[]
+      ) => {
         if (settled) return;
         settled = true;
         resolve(items);
@@ -280,8 +292,19 @@ async function pickMultipleHdImages(): Promise<{ uri: string; fileName: string }
           finish([]);
           return;
         }
-        const results: { uri: string; fileName: string }[] = [];
-        for (const file of fileList) {
+        const results: { uri: string; fileName: string; labelHint?: string }[] = [];
+        for (let idx = 0; idx < fileList.length; idx++) {
+          const file = fileList[idx];
+          // 1. Validate file size & Magic Bytes before reading
+          const check = await validateWebFileUpload(file);
+          if (!check.valid) {
+            Alert.alert(
+              'Tệp tải lên bị từ chối',
+              check.error || 'Định dạng file ảnh không hợp lệ.'
+            );
+            continue;
+          }
+
           const dataUri = await new Promise<string | null>((resFile) => {
             const reader = new FileReader();
             reader.onload = () =>
@@ -291,7 +314,27 @@ async function pickMultipleHdImages(): Promise<{ uri: string; fileName: string }
           });
           if (dataUri) {
             const optimized = await optimizeHdImageIfWeb(dataUri);
-            results.push({ uri: optimized, fileName: file.name });
+            const postCheck = validateBase64ImageUpload(
+              optimized,
+              MAX_PROCESSED_DATA_URI_BYTES
+            );
+            if (!postCheck.valid) {
+              Alert.alert(
+                'Ảnh vượt quá giới hạn',
+                postCheck.error || 'Không thể xử lý ảnh này.'
+              );
+              continue;
+            }
+            // Automatically rename file to random UUID v4 before saving
+            const uuidName =
+              postCheck.uuidFileName ||
+              check.uuidFileName ||
+              generateUuidFilename(check.ext || 'webp');
+            results.push({
+              uri: optimized,
+              fileName: uuidName,
+              labelHint: formatVariantNameFromFilename(file.name, idx),
+            });
           }
         }
         finish(results);
@@ -302,11 +345,13 @@ async function pickMultipleHdImages(): Promise<{ uri: string; fileName: string }
   }
 
   const single = await pickHdImage(false);
-  return single ? [{ uri: single, fileName: '' }] : [];
+  return single
+    ? [{ uri: single, fileName: generateUuidFilename('jpg') }]
+    : [];
 }
 
 async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
-  // On Web: use direct native file input + FileReader so the uploaded file is read 100% losslessly without ImagePicker cropping/re-encoding
+  // On Web: use direct native file input + FileReader with Magic Bytes & Size verification
   if (
     Platform.OS === 'web' &&
     typeof window !== 'undefined' &&
@@ -315,7 +360,7 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
     return new Promise((resolve) => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = 'image/png,image/jpeg,image/webp,image/avif,image/*';
+      input.accept = 'image/png,image/jpeg,image/webp,image/avif,image/gif';
       if (useCamera) {
         input.setAttribute('capture', 'environment');
       }
@@ -325,9 +370,18 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
         settled = true;
         resolve(val);
       };
-      input.onchange = () => {
+      input.onchange = async () => {
         const file = input.files?.[0];
         if (!file) {
+          finish(null);
+          return;
+        }
+        const check = await validateWebFileUpload(file);
+        if (!check.valid) {
+          Alert.alert(
+            'Tệp tải lên bị từ chối',
+            check.error || 'Định dạng file ảnh không hợp lệ.'
+          );
           finish(null);
           return;
         }
@@ -339,6 +393,18 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
             return;
           }
           const finalUri = await optimizeHdImageIfWeb(rawDataUri);
+          const postCheck = validateBase64ImageUpload(
+            finalUri,
+            MAX_PROCESSED_DATA_URI_BYTES
+          );
+          if (!postCheck.valid) {
+            Alert.alert(
+              'Ảnh không hợp lệ',
+              postCheck.error || 'Dung lượng ảnh sau xử lý vượt quá giới hạn.'
+            );
+            finish(null);
+            return;
+          }
           finish(finalUri);
         };
         reader.onerror = () => finish(null);
@@ -361,8 +427,12 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
       base64: true,
     });
     if (!res.canceled && res.assets[0]?.base64) {
-      const mime = res.assets[0].mimeType || 'image/jpeg';
-      return `data:${mime};base64,${res.assets[0].base64}`;
+      const check = validateBase64ImageUpload(res.assets[0].base64);
+      if (!check.valid) {
+        Alert.alert('Ảnh bị từ chối', check.error || 'Định dạng ảnh không hợp lệ.');
+        return null;
+      }
+      return `data:${check.mime || 'image/jpeg'};base64,${res.assets[0].base64}`;
     }
     return null;
   }
@@ -378,8 +448,12 @@ async function pickHdImage(useCamera: boolean = false): Promise<string | null> {
     base64: true,
   });
   if (!res.canceled && res.assets[0]?.base64) {
-    const mime = res.assets[0].mimeType || 'image/jpeg';
-    return `data:${mime};base64,${res.assets[0].base64}`;
+    const check = validateBase64ImageUpload(res.assets[0].base64);
+    if (!check.valid) {
+      Alert.alert('Ảnh bị từ chối', check.error || 'Định dạng ảnh không hợp lệ.');
+      return null;
+    }
+    return `data:${check.mime || 'image/jpeg'};base64,${res.assets[0].base64}`;
   }
   return null;
 }
@@ -540,8 +614,8 @@ export function ProductStudioForm({
     const baseList = hasOnlyEmptyDefaults ? [] : [...colorOptions];
     const newItems: ProductColorOption[] = picked.map((item, i) => {
       const idx = baseList.length + i;
-      const inferredName = item.fileName
-        ? formatVariantNameFromFilename(item.fileName, idx)
+      const inferredName = item.labelHint
+        ? item.labelHint
         : COLOR_SWATCHES[idx % COLOR_SWATCHES.length].name;
       return {
         id: `c_${Date.now()}_${idx + 1}`,

@@ -3,6 +3,11 @@
  * Synchronized across Client & Admin forms and API payloads.
  */
 
+import {
+  validateBase64ImageUpload,
+  MAX_PROCESSED_DATA_URI_BYTES,
+} from './fileUploadGuard';
+
 export interface ValidationResult<T> {
   success: boolean;
   data?: T;
@@ -79,8 +84,9 @@ export function sanitizeSafeUrlOrImage(input: unknown): string | null {
   if (!trimmed) return null;
 
   if (trimmed === '__COVER__') return '__COVER__';
-  if (/^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(trimmed)) {
-    return trimmed;
+  if (/^data:image\/(png|jpeg|jpg|webp|gif|avif);base64,[A-Za-z0-9+/=\s]+$/i.test(trimmed)) {
+    const check = validateBase64ImageUpload(trimmed, MAX_PROCESSED_DATA_URI_BYTES);
+    return check.valid ? trimmed : null;
   }
   if (/^https?:\/\/[^\s<>"'`]+$/i.test(trimmed)) {
     return trimmed.slice(0, 2048);
@@ -95,7 +101,7 @@ export function sanitizeSafeUrlOrImage(input: unknown): string | null {
  * Anti-Mass-Assignment helper: extracts ONLY explicitly declared keys from an untrusted object,
  * discarding any extra fields (such as injected `role`, `isAdmin`, `status`, `price`, etc.).
  */
-export function stripUnknownFields<T extends Record<string, unknown>>(
+export function stripUnknownFields<T extends object>(
   raw: unknown,
   allowedKeys: readonly (keyof T)[]
 ): Partial<T> {

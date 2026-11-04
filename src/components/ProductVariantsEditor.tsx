@@ -28,6 +28,7 @@ import {
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { inferColorHex } from '@/utils/generateProductDescription';
 import { formatVND } from '@/utils/formatCurrency';
+import { validateBase64ImageUpload, MAX_PROCESSED_DATA_URI_BYTES } from '@/utils/fileUploadGuard';
 
 export const PRESET_COLOR_SWATCHES = [
   { name: 'Kem Sữa', hex: '#F5EBE0' },
@@ -120,8 +121,19 @@ export async function pickCompressedImageFromLibrary(): Promise<string | null> {
     base64: true,
   });
   if (!result.canceled && result.assets[0]?.base64) {
-    const rawUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-    return await compressDataUriIfWeb(rawUri);
+    const check = validateBase64ImageUpload(result.assets[0].base64);
+    if (!check.valid) {
+      Alert.alert('Ảnh bị từ chối', check.error || 'Định dạng ảnh không hợp lệ.');
+      return null;
+    }
+    const rawUri = `data:${check.mime || 'image/jpeg'};base64,${result.assets[0].base64}`;
+    const compressed = await compressDataUriIfWeb(rawUri);
+    const postCheck = validateBase64ImageUpload(compressed, MAX_PROCESSED_DATA_URI_BYTES);
+    if (!postCheck.valid) {
+      Alert.alert('Ảnh vượt quá giới hạn', postCheck.error || 'Không thể lưu ảnh này.');
+      return null;
+    }
+    return compressed;
   }
   return null;
 }
@@ -139,8 +151,19 @@ export async function takeCompressedPhoto(): Promise<string | null> {
     base64: true,
   });
   if (!result.canceled && result.assets[0]?.base64) {
-    const rawUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-    return await compressDataUriIfWeb(rawUri);
+    const check = validateBase64ImageUpload(result.assets[0].base64);
+    if (!check.valid) {
+      Alert.alert('Ảnh bị từ chối', check.error || 'Định dạng ảnh không hợp lệ.');
+      return null;
+    }
+    const rawUri = `data:${check.mime || 'image/jpeg'};base64,${result.assets[0].base64}`;
+    const compressed = await compressDataUriIfWeb(rawUri);
+    const postCheck = validateBase64ImageUpload(compressed, MAX_PROCESSED_DATA_URI_BYTES);
+    if (!postCheck.valid) {
+      Alert.alert('Ảnh vượt quá giới hạn', postCheck.error || 'Không thể lưu ảnh này.');
+      return null;
+    }
+    return compressed;
   }
   return null;
 }

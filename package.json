@@ -36,7 +36,10 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "security:scan": "node scripts/security-check.js",
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "security:check": "node scripts/security-check.js"
   },
   "private": true
 }

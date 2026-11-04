@@ -83,6 +83,8 @@ function getEventLabel(eventType: SecurityAuditEntry['eventType']): {
       return { label: '🛍️ Đặt đơn hàng thành công', bg: '#E0F2FE', color: '#0369A1' };
     case 'ADMIN_SECURITY_ACTION':
       return { label: '🛡️ Thao tác Bảo mật Admin', bg: '#F3E8FF', color: '#6B21A8' };
+    case 'SERVER_API_ERROR':
+      return { label: '🚨 Lỗi API Hệ thống (Global Handler)', bg: '#FEE2E2', color: '#991B1B' };
     case 'PAGE_VISIT':
     default:
       return { label: '🌐 Truy cập phiên (Session Visit)', bg: '#F3EFEA', color: '#5C4332' };
@@ -114,6 +116,7 @@ export default function PrivacyScreen() {
   const [manualReasonInput, setManualReasonInput] = useState('');
 
   const loadDashboard = useCallback(async () => {
+    if (!isAdmin) return;
     setLoading(true);
     try {
       const data = await fetchSecurityDashboardData();
@@ -125,11 +128,13 @@ export default function PrivacyScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+    if (isAdmin) {
+      loadDashboard();
+    }
+  }, [isAdmin, loadDashboard]);
 
   const blockedIpSet = useMemo(
     () => new Set(blocklist.map((b) => b.ip.trim())),
@@ -256,58 +261,61 @@ export default function PrivacyScreen() {
             <Text style={[styles.headerTitle, isMobile && styles.headerTitleMobile]}>
               {isAdmin ? 'Trung Tâm Bảo Mật & Nhật Ký IP' : 'Bảo Mật & Quyền Riêng Tư'}
             </Text>
-            <TouchableOpacity
-              style={styles.refreshIconBtn}
-              onPress={loadDashboard}
-              activeOpacity={0.75}>
-              {loading ? (
-                <ActivityIndicator size="small" color={COLORS.primary} />
-              ) : (
-                <RefreshCw size={18} color={COLORS.primary} />
-              )}
-            </TouchableOpacity>
+            {isAdmin ? (
+              <TouchableOpacity
+                style={styles.refreshIconBtn}
+                onPress={loadDashboard}
+                activeOpacity={0.75}>
+                {loading ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <RefreshCw size={18} color={COLORS.primary} />
+                )}
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 40 }} />
+            )}
           </View>
 
-          {/* Active Protection Layers Card (Visible to both Admin & Customer) */}
-          <View style={[styles.shieldBanner, isMobile && styles.cardMobile]}>
-            <View style={styles.shieldBannerTop}>
-              <View style={styles.shieldIconWrap}>
-                <ShieldCheck size={26} color="#15803D" />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.shieldTitle}>
-                  Hệ thống phòng thủ đa lớp đang hoạt động
-                </Text>
-                <Text style={styles.shieldSub}>
-                  IP hiện tại của bạn: {currentIp} ({currentLocation}
-                  {currentAsn ? ` • ${currentAsn}` : ''})
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.layersGrid}>
-              {[
-                { label: 'HTTP CSP & HSTS', desc: 'Chống XSS & Clickjacking' },
-                { label: 'CORS Origin Guard', desc: 'Chỉ nhận từ tiemcuonlen.shop' },
-                { label: 'Rate Limiter', desc: 'Chống Brute-force & Spam đơn' },
-                { label: 'Hidden Bot Trap', desc: 'Lọc tự động Script / Bot AI' },
-                { label: 'Supabase RLS', desc: 'Phân quyền dữ liệu theo vai trò' },
-                { label: 'Audit SIEM Logger', desc: 'Ghi nhận nhật ký IP thời gian thực' },
-              ].map((layer) => (
-                <View key={layer.label} style={styles.layerBadge}>
-                  <CheckCircle2 size={14} color="#15803D" />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.layerBadgeTitle}>{layer.label}</Text>
-                    <Text style={styles.layerBadgeDesc}>{layer.desc}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* ADMIN ONLY: Detailed Request Audit Logger & IP Blocklist */}
+          {/* ADMIN ONLY: Active Protection Layers, Request Audit Logger & IP Blocklist */}
           {isAdmin && (
             <>
+              <View style={[styles.shieldBanner, isMobile && styles.cardMobile]}>
+                <View style={styles.shieldBannerTop}>
+                  <View style={styles.shieldIconWrap}>
+                    <ShieldCheck size={26} color="#15803D" />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.shieldTitle}>
+                      Hệ thống phòng thủ đa lớp đang hoạt động
+                    </Text>
+                    <Text style={styles.shieldSub}>
+                      IP hiện tại của bạn: {currentIp} ({currentLocation}
+                      {currentAsn ? ` • ${currentAsn}` : ''})
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.layersGrid}>
+                  {[
+                    { label: 'HTTP CSP & HSTS', desc: 'Chống XSS & Clickjacking' },
+                    { label: 'CORS & CSRF Guard', desc: 'Chỉ nhận từ tiemcuonlen.shop' },
+                    { label: 'Rate Limiter', desc: 'Chống Brute-force & Spam đơn' },
+                    { label: 'Hidden Bot Trap', desc: 'Lọc tự động Script / Bot AI' },
+                    { label: 'Supabase RLS & Anti-IDOR', desc: 'Phân quyền dữ liệu theo vai trò' },
+                    { label: 'Magic Bytes & Global Error', desc: 'Kiểm định ảnh & ẩn lỗi hệ thống' },
+                  ].map((layer) => (
+                    <View key={layer.label} style={styles.layerBadge}>
+                      <CheckCircle2 size={14} color="#15803D" />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.layerBadgeTitle}>{layer.label}</Text>
+                        <Text style={styles.layerBadgeDesc}>{layer.desc}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
               {/* Summary Metrics */}
               <View style={[styles.metricsRow, isMobile && styles.cardMobile]}>
                 <View style={styles.metricCard}>
@@ -598,33 +606,28 @@ export default function PrivacyScreen() {
               Chính Sách Quyền Riêng Tư & Bảo Vệ Dữ Liệu
             </Text>
             <Text style={styles.paragraph}>
-              Tiệm Cuộn Len cam kết bảo vệ quyền riêng tư của khách hàng. Chúng tôi chỉ
-              thu thập những thông tin cần thiết để xử lý đơn hàng, chống gian lận tự
-              động và cải thiện trải nghiệm mua sắm.
+              Tiệm Cuộn Len cam kết tôn trọng và bảo vệ quyền riêng tư của khách hàng.
+              Chúng tôi chỉ thu thập những thông tin cần thiết để xử lý đơn hàng, giao
+              nhận sản phẩm và chăm sóc khách hàng tốt nhất.
             </Text>
 
             <Text style={styles.subheading}>1. Thông tin thu thập</Text>
             <Text style={styles.paragraph}>
               - Họ tên, email, số điện thoại và địa chỉ giao hàng khi bạn đặt đơn.{'\n'}
-              - Lịch sử đơn hàng và sản phẩm yêu thích.{'\n'}
-              - Nhật ký bảo mật kỹ thuật (IP, loại trình duyệt, thời gian truy cập) nhằm
-              ngăn chặn các cuộc tấn công tự động (Bot / DDoS / Brute-force).
+              - Lịch sử đơn hàng và danh sách sản phẩm yêu thích của bạn tại tiệm.
             </Text>
 
-            <Text style={styles.subheading}>2. Các lớp bảo vệ kỹ thuật</Text>
+            <Text style={styles.subheading}>2. Mục đích sử dụng & Cam kết bảo mật</Text>
             <Text style={styles.paragraph}>
-              - Mã hóa truyền tải HTTPS / HSTS toàn diện và chính sách Content Security
-              Policy (CSP).{'\n'}
-              - Bộ giới hạn tần suất yêu cầu (Rate Limiter) và trường kiểm tra chống Bot
-              tự động (Hidden Field Validation) tại các biểu mẫu Đăng nhập, Đăng ký và
-              Thanh toán.{'\n'}
-              - Cơ sở dữ liệu phân quyền theo dòng (Row Level Security - RLS).
+              - Xác nhận đơn hàng, thông báo tình trạng vận chuyển và hỗ trợ đổi trả.{'\n'}
+              - Thông tin cá nhân của khách hàng được bảo mật tuyệt đối và không chia sẻ
+              cho bên thứ ba ngoài đơn vị vận chuyển phục vụ giao đơn hàng của bạn.
             </Text>
 
             <Text style={styles.subheading}>3. Liên hệ</Text>
             <Text style={styles.paragraph}>
-              Nếu bạn có câu hỏi về chính sách quyền riêng tư và bảo mật, vui lòng liên
-              hệ:{'\n'}
+              Nếu bạn có câu hỏi về chính sách quyền riêng tư hoặc cần hỗ trợ đơn hàng,
+              vui lòng liên hệ:{'\n'}
               Website: https://www.tiemcuonlen.shop{'\n'}
               Email: vohoang1327@gmail.com
             </Text>

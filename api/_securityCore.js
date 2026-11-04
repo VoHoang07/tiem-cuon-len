@@ -7,6 +7,27 @@ const SUPABASE_KEY =
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dlYWVpcnd0dHFveWdlb3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MzA0MjUsImV4cCI6MjA5NTIwNjQyNX0.fa1AsIt3qcv24GvUz6Jzup7G_BUwvB4OKPzhQYYvOes';
 
+const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
+const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
+const SHOP_CONFIG_PARTITION = '__TCL_SHOP_CONFIG_V1__';
+const HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
+
+// Server-only EmailJS configuration (kept out of client bundle)
+const SERVER_EMAILJS_SERVICE_ID =
+  process.env.EMAILJS_SERVICE_ID ||
+  process.env.EXPO_PUBLIC_EMAILJS_SERVICE_ID ||
+  'service_fk9anb7';
+const SERVER_EMAILJS_TEMPLATE_ID =
+  process.env.EMAILJS_TEMPLATE_ID ||
+  process.env.EXPO_PUBLIC_EMAILJS_TEMPLATE_ID ||
+  'template_q41v0ct';
+const SERVER_EMAILJS_PUBLIC_KEY =
+  process.env.EMAILJS_PUBLIC_KEY ||
+  process.env.EXPO_PUBLIC_EMAILJS_PUBLIC_KEY ||
+  'kT2DQJicRXPdQjvb3';
+const SERVER_OWNER_NOTIFY_EMAIL =
+  process.env.OWNER_NOTIFY_EMAIL || 'khanhly30072007@gmail.com';
+
 const ADMIN_EMAILS = new Set([
   'vohoang1327@gmail.com',
   'khanhly30072007@gmail.com',
@@ -56,6 +77,50 @@ const STATIC_CATALOG_PRICES = {
   vw_stem_pastel_07: 75000,
   vw_stem_glitter_08: 39000,
 };
+
+let cachedBlockedIps = new Set();
+let cachedBlockedIpsAt = 0;
+
+/**
+ * Extracts client IP & geo telemetry from Cloudflare / Vercel headers
+ */
+function extractClientTelemetry(req) {
+  const headers = (req && req.headers) || {};
+  const rawForwarded = String(headers['x-forwarded-for'] || '');
+  const firstForwardedIp = rawForwarded.split(',')[0].trim();
+  const ip =
+    String(headers['cf-connecting-ip'] || '').trim() ||
+    String(headers['x-real-ip'] || '').trim() ||
+    firstForwardedIp ||
+    'unknown';
+
+  const country = String(
+    headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || 'VN'
+  ).trim();
+  const cityRaw = String(headers['x-vercel-ip-city'] || '').trim();
+  let city = cityRaw;
+  try {
+    if (cityRaw) city = decodeURIComponent(cityRaw);
+  } catch {
+    // ignore decode error
+  }
+  const region = String(headers['x-vercel-ip-country-region'] || '').trim();
+  const asn = String(headers['x-vercel-ip-as-number'] || '').trim();
+  const userAgent = String(headers['user-agent'] || 'unknown').slice(0, 300);
+  const referer = String(headers['referer'] || headers['referrer'] || '').slice(0, 240);
+  const origin = String(headers['origin'] || '').slice(0, 160);
+
+  return {
+    ip,
+    country,
+    city,
+    region,
+    asn,
+    userAgent,
+    referer,
+    origin,
+  };
+}
 
 /**
  * Strips all HTML/Script tags, dangerous protocols, and inline event handlers
@@ -153,7 +218,6 @@ function verifyCsrfRequest(req, options = { allowWebhook: false }) {
   const referer = String(headers.referer || headers.referrer || '').trim();
   const host = String(headers.host || headers['x-forwarded-host'] || '').trim();
 
-  // 1. Check Origin if present
   if (origin) {
     const originAllowed =
       ALLOWED_ORIGINS.has(origin) ||
@@ -163,7 +227,6 @@ function verifyCsrfRequest(req, options = { allowWebhook: false }) {
       return { valid: false, reason: `Untrusted Origin header: ${origin}` };
     }
   } else if (referer) {
-    // 2. Fallback to Referer check
     const refAllowed =
       referer.startsWith('https://www.tiemcuonlen.shop') ||
       referer.startsWith('https://tiemcuonlen.shop') ||
@@ -173,7 +236,6 @@ function verifyCsrfRequest(req, options = { allowWebhook: false }) {
       return { valid: false, reason: `Untrusted Referer header: ${referer}` };
     }
   } else if (host) {
-    // 3. Fallback to Host check
     const hostAllowed =
       ALLOWED_HOSTS.has(host) ||
       host.endsWith('.vercel.app') ||
@@ -184,6 +246,43 @@ function verifyCsrfRequest(req, options = { allowWebhook: false }) {
   }
 
   return { valid: true };
+}
+
+/**
+ * Checks if an IP address is on the server-side blocklist (`__TCL_SECURITY_BLOCKLIST_V1__`)
+ */
+async function isIpBlockedOnServer(ip) {
+  if (!ip || ip === 'unknown' || ip === '127.0.0.1') return false;
+  const now = Date.now();
+  if (now - cachedBlockedIpsAt < 15000 && cachedBlockedIps.size > 0) {
+    return cachedBlockedIps.has(ip);
+  }
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&select=phone,detailAddress&limit=100`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      }
+    );
+    if (res.ok) {
+      const rows = await res.json();
+      const nextSet = new Set();
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          if (r && r.phone) nextSet.add(String(r.phone).trim());
+        }
+      }
+      cachedBlockedIps = nextSet;
+      cachedBlockedIpsAt = now;
+      return nextSet.has(ip);
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 /**
@@ -237,7 +336,9 @@ async function resolveAuthoritativeProductPrices(baseIds) {
     priceMap.set(k, v);
   }
 
-  const cleanIds = Array.from(new Set((baseIds || []).map((id) => String(id).split('__')[0]).filter(Boolean)));
+  const cleanIds = Array.from(
+    new Set((baseIds || []).map((id) => String(id).split('__')[0]).filter(Boolean))
+  );
   if (cleanIds.length === 0) return priceMap;
 
   try {
@@ -265,15 +366,270 @@ async function resolveAuthoritativeProductPrices(baseIds) {
   return priceMap;
 }
 
+/**
+ * Resolves authoritative shop shipping configuration from `__TCL_SHOP_CONFIG_V1__`
+ */
+async function resolveAuthoritativeShippingConfig() {
+  const defaults = {
+    hcmFee: 20000,
+    provincialFee: 30000,
+    freeshipThreshold: 150000,
+  };
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/addresses?fullName=eq.${SHOP_CONFIG_PARTITION}&select=detailAddress&limit=1`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      }
+    );
+    if (res.ok) {
+      const rows = await res.json();
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (row && row.detailAddress) {
+        const parsed =
+          typeof row.detailAddress === 'string'
+            ? JSON.parse(row.detailAddress)
+            : row.detailAddress;
+        if (parsed && typeof parsed === 'object') {
+          return {
+            hcmFee:
+              typeof parsed.hcmFee === 'number' && parsed.hcmFee >= 0
+                ? parsed.hcmFee
+                : defaults.hcmFee,
+            provincialFee:
+              typeof parsed.provincialFee === 'number' && parsed.provincialFee >= 0
+                ? parsed.provincialFee
+                : defaults.provincialFee,
+            freeshipThreshold:
+              typeof parsed.freeshipThreshold === 'number' && parsed.freeshipThreshold >= 0
+                ? parsed.freeshipThreshold
+                : defaults.freeshipThreshold,
+          };
+        }
+      }
+    }
+  } catch {
+    // fallback to defaults
+  }
+  return defaults;
+}
+
+/**
+ * Writes a server-side security or error event directly into `__TCL_SECURITY_AUDIT_LOG_V1__`
+ */
+async function logServerAuditEvent(req, payload = {}) {
+  try {
+    const telemetry = extractClientTelemetry(req);
+    const nowIso = new Date().toISOString();
+    const eventType = sanitizeTextServer(payload.eventType || 'SERVER_API_ERROR', 60);
+    const severity = sanitizeTextServer(payload.severity || 'CRITICAL', 20);
+    const path = sanitizeTextServer(
+      payload.path || (req && req.url) || '/api/unknown',
+      200
+    );
+    const method = sanitizeTextServer(
+      payload.method || (req && req.method) || 'API',
+      30
+    );
+    const userEmail = sanitizeTextServer(payload.userEmail || 'System/API', 120);
+    const locationLabel =
+      [telemetry.city, telemetry.region, telemetry.country].filter(Boolean).join(', ') ||
+      'VN';
+
+    const logRow = {
+      id: `audit_srv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: HOLDER_USER_ID,
+      fullName: AUDIT_LOG_PARTITION,
+      phone: telemetry.ip.slice(0, 45),
+      city: eventType,
+      district: nowIso,
+      ward: severity,
+      detailAddress: JSON.stringify({
+        ip: telemetry.ip,
+        location: locationLabel,
+        asn: telemetry.asn || '',
+        eventType,
+        severity,
+        path,
+        method,
+        userEmail,
+        userId: payload.userId || null,
+        userAgent: telemetry.userAgent,
+        screenSize: 'Server-API',
+        language: 'vi-VN',
+        referer: telemetry.referer || 'Direct',
+        details: payload.details || {},
+        timestamp: nowIso,
+      }),
+      isDefault: false,
+    };
+
+    await fetch(`${SUPABASE_URL}/rest/v1/addresses`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(logRow),
+    });
+  } catch {
+    // Never throw from audit logger
+  }
+}
+
+/**
+ * Global API Error Handler Wrapper:
+ * - Catches any unexpected runtime, parsing, or database error
+ * - Logs full diagnostic details (stack, error message, route, IP) to the Audit Logger
+ * - Returns ONLY a generic safe error message to the Client (zero stack trace leak)
+ */
+function withGlobalErrorHandler(routeName, handlerFn) {
+  return async function wrappedHandler(req, res) {
+    applySecureCookiesAndHeaders(req, res);
+
+    if (req && req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
+    try {
+      // Check server-side IP blocklist before executing business logic
+      const telemetry = extractClientTelemetry(req);
+      const blocked = await isIpBlockedOnServer(telemetry.ip);
+      if (blocked) {
+        await logServerAuditEvent(req, {
+          eventType: 'BLOCKED_IP_ATTEMPT',
+          severity: 'CRITICAL',
+          path: routeName,
+          details: { blockedIp: telemetry.ip, reason: 'Blocked at API gateway' },
+        });
+        return res.status(403).json({
+          success: false,
+          error: 'Truy cập bị từ chối: Địa chỉ IP của bạn đã bị khóa bởi hệ thống bảo mật.',
+        });
+      }
+
+      return await handlerFn(req, res);
+    } catch (err) {
+      const errorId = `err_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      await logServerAuditEvent(req, {
+        eventType: 'SERVER_API_ERROR',
+        severity: 'CRITICAL',
+        path: routeName,
+        details: {
+          errorId,
+          errorName: err && err.name ? String(err.name) : 'Error',
+          errorMessage: err && err.message ? String(err.message).slice(0, 300) : 'Unknown error',
+          stackPreview:
+            err && err.stack
+              ? String(err.stack)
+                  .split('\n')
+                  .slice(0, 4)
+                  .join(' | ')
+                  .slice(0, 500)
+              : undefined,
+        },
+      });
+
+      if (!res.headersSent) {
+        return res.status(500).json({
+          success: false,
+          error: 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.',
+          errorId,
+        });
+      }
+    }
+  };
+}
+
+/**
+ * Sends order notification email from the Server so EmailJS keys never leak to the Client bundle
+ */
+async function sendOrderNotificationServer(order) {
+  if (!order || !order.id) return false;
+  if (!SERVER_EMAILJS_SERVICE_ID || !SERVER_EMAILJS_TEMPLATE_ID || !SERVER_EMAILJS_PUBLIC_KEY) {
+    return false;
+  }
+
+  try {
+    const addr = order.shippingAddress || {};
+    const shippingMethod = addr.shippingMethod || 'Giao Tiết Kiệm';
+    const shippingFee = typeof addr.shippingFee === 'number' ? addr.shippingFee : 0;
+    const formatPrice = (n) => `${Math.round(Number(n) || 0).toLocaleString('vi-VN')}đ`;
+
+    const itemLines = (order.items || []).map((ci, idx) => {
+      const pName = (ci.product && ci.product.name) || 'Sản phẩm';
+      const qty = Number(ci.quantity) || 1;
+      const unitPrice = Number(ci.price || (ci.product && ci.product.price) || 0);
+      return `${idx + 1}. ${pName} x${qty} — ${formatPrice(unitPrice * qty)}`;
+    });
+    itemLines.push(`🚚 Vận chuyển: ${shippingMethod} — ${formatPrice(shippingFee)}`);
+
+    const orderDate = new Date(order.createdAt || Date.now()).toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const templateParams = {
+      order_id: String(order.id),
+      customer_name: String(addr.fullName || 'Khách hàng'),
+      customer_phone: String(addr.phone || ''),
+      customer_address: [addr.detailAddress, addr.ward, addr.district, addr.city]
+        .filter(Boolean)
+        .join(', '),
+      items_list: itemLines.join('\n'),
+      total: formatPrice(order.total),
+      payment_method: `${order.paymentMethod || ''} • ${shippingMethod}`,
+      order_date: orderDate,
+      subject: `🧶 Đơn hàng mới #${order.id} — ${addr.fullName || 'Khách hàng'}`,
+      email: SERVER_OWNER_NOTIFY_EMAIL,
+    };
+
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://www.tiemcuonlen.shop',
+      },
+      body: JSON.stringify({
+        service_id: SERVER_EMAILJS_SERVICE_ID,
+        template_id: SERVER_EMAILJS_TEMPLATE_ID,
+        user_id: SERVER_EMAILJS_PUBLIC_KEY,
+        template_params: templateParams,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
   SUPABASE_URL,
   SUPABASE_KEY,
+  AUDIT_LOG_PARTITION,
+  BLOCKLIST_PARTITION,
+  HOLDER_USER_ID,
   ADMIN_EMAILS,
   STATIC_CATALOG_PRICES,
+  extractClientTelemetry,
   sanitizeTextServer,
   stripUnknownFieldsServer,
   applySecureCookiesAndHeaders,
   verifyCsrfRequest,
+  isIpBlockedOnServer,
   verifySupabaseUser,
   resolveAuthoritativeProductPrices,
+  resolveAuthoritativeShippingConfig,
+  logServerAuditEvent,
+  withGlobalErrorHandler,
+  sendOrderNotificationServer,
 };

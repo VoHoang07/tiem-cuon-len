@@ -1,46 +1,37 @@
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
+  HOLDER_USER_ID,
   sanitizeTextServer,
   stripUnknownFieldsServer,
-  applySecureCookiesAndHeaders,
+  withGlobalErrorHandler,
+  sendOrderNotificationServer,
 } = require('./_securityCore');
 
 const SEPAY_LOG_PARTITION = '__TCL_SEPAY_LOG_V1__';
-const HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
 
-module.exports = async function handler(req, res) {
-  applySecureCookiesAndHeaders(req, res);
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function handler(req, res) {
   if (req.method === 'GET') {
     const query = req.query || {};
     if (query.action === 'qr' && query.url) {
-      try {
-        const targetUrl = String(query.url);
-        if (!targetUrl.startsWith('https://vietqr.app/')) {
-          return res.status(400).json({ success: false, message: 'Invalid QR URL' });
-        }
-        const safeFilename = String(query.filename || 'VietQR-TiemCuonLen.png').replace(
-          /[^A-Za-z0-9._-]/g,
-          '_'
-        );
-        const qrRes = await fetch(targetUrl);
-        if (!qrRes.ok) {
-          return res.status(502).json({ success: false, message: 'Failed to fetch QR' });
-        }
-        const arrayBuf = await qrRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuf);
-        res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        return res.status(200).send(buffer);
-      } catch (e) {
-        return res.status(500).json({ success: false, message: 'QR download error' });
+      const targetUrl = String(query.url);
+      if (!targetUrl.startsWith('https://vietqr.app/')) {
+        return res.status(400).json({ success: false, message: 'Invalid QR URL' });
       }
+      const safeFilename = String(query.filename || 'VietQR-TiemCuonLen.png').replace(
+        /[^A-Za-z0-9._-]/g,
+        '_'
+      );
+      const qrRes = await fetch(targetUrl);
+      if (!qrRes.ok) {
+        return res.status(502).json({ success: false, message: 'Failed to fetch QR' });
+      }
+      const arrayBuf = await qrRes.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(200).send(buffer);
     }
 
     return res.status(200).json({
@@ -57,184 +48,181 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Method Not Allowed' });
   }
 
-  try {
-    const rawBody =
-      typeof req.body === 'string'
-        ? JSON.parse(req.body || '{}')
-        : req.body || {};
+  const rawBody =
+    typeof req.body === 'string'
+      ? JSON.parse(req.body || '{}')
+      : req.body || {};
 
-    // Anti-Mass-Assignment: strip undeclared webhook properties
-    const body = stripUnknownFieldsServer(rawBody, [
-      'id',
-      'gateway',
-      'transactionDate',
-      'accountNumber',
-      'transferType',
-      'transferAmount',
-      'amount',
-      'code',
-      'content',
-      'description',
-      'referenceCode',
-    ]);
+  // Anti-Mass-Assignment: strip undeclared webhook properties
+  const body = stripUnknownFieldsServer(rawBody, [
+    'id',
+    'gateway',
+    'transactionDate',
+    'accountNumber',
+    'transferType',
+    'transferAmount',
+    'amount',
+    'code',
+    'content',
+    'description',
+    'referenceCode',
+  ]);
 
-    const transferType = sanitizeTextServer(body.transferType || 'in', 10).toLowerCase();
-    if (transferType !== 'in') {
-      return res.status(200).json({
-        success: true,
-        ignored: true,
-        reason: 'Only incoming transactions (transferType=in) are processed',
-      });
-    }
+  const transferType = sanitizeTextServer(body.transferType || 'in', 10).toLowerCase();
+  if (transferType !== 'in') {
+    return res.status(200).json({
+      success: true,
+      ignored: true,
+      reason: 'Only incoming transactions (transferType=in) are processed',
+    });
+  }
 
-    const transferAmount = Number(body.transferAmount || body.amount || 0);
-    const code = sanitizeTextServer(body.code || '', 200);
-    const content = sanitizeTextServer(body.content || '', 300);
-    const description = sanitizeTextServer(body.description || '', 300);
-    const gateway = sanitizeTextServer(body.gateway || 'Ngân hàng', 80);
-    const accountNumber = String(body.accountNumber || '').replace(/[^0-9]/g, '').slice(0, 30);
-    const referenceCode = sanitizeTextServer(body.referenceCode || '', 100);
-    const transactionDate = sanitizeTextServer(
-      body.transactionDate || new Date().toISOString(),
-      60
+  const transferAmount = Number(body.transferAmount || body.amount || 0);
+  const code = sanitizeTextServer(body.code || '', 200);
+  const content = sanitizeTextServer(body.content || '', 300);
+  const description = sanitizeTextServer(body.description || '', 300);
+  const gateway = sanitizeTextServer(body.gateway || 'Ngân hàng', 80);
+  const accountNumber = String(body.accountNumber || '').replace(/[^0-9]/g, '').slice(0, 30);
+  const referenceCode = sanitizeTextServer(body.referenceCode || '', 100);
+  const transactionDate = sanitizeTextServer(
+    body.transactionDate || new Date().toISOString(),
+    60
+  );
+
+  // Optional webhook secret check if configured in Vercel environment
+  const webhookSecret = process.env.SEPAY_WEBHOOK_SECRET;
+  if (webhookSecret) {
+    const authHeader = String(
+      (req.headers && (req.headers.authorization || req.headers.Authorization)) || ''
     );
-
-    // Optional webhook secret check if configured in Vercel environment
-    const webhookSecret = process.env.SEPAY_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const authHeader = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');
-      if (!authHeader.includes(webhookSecret)) {
-        return res.status(401).json({ success: false, message: 'Unauthorized webhook' });
-      }
+    if (!authHeader.includes(webhookSecret)) {
+      return res.status(401).json({ success: false, message: 'Unauthorized webhook' });
     }
+  }
 
-    // Reject zero/negative or non-numeric transfer amounts immediately
-    if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
-      return res.status(400).json({
-        success: false,
-        ignored: true,
-        reason: 'Invalid transferAmount (must be > 0)',
-      });
-    }
+  // Reject zero/negative or non-numeric transfer amounts immediately
+  if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
+    return res.status(400).json({
+      success: false,
+      ignored: true,
+      reason: 'Invalid transferAmount (must be > 0)',
+    });
+  }
 
-    // Validate recipient bank account if provided
-    const ALLOWED_ACCOUNTS = new Set(['107888618456', '3387966507']);
-    if (accountNumber && !ALLOWED_ACCOUNTS.has(accountNumber)) {
-      return res.status(400).json({
-        success: false,
-        ignored: true,
-        reason: 'Unrecognized recipient accountNumber',
-      });
-    }
+  // Validate recipient bank account if provided
+  const ALLOWED_ACCOUNTS = new Set(['107888618456', '3387966507']);
+  if (accountNumber && !ALLOWED_ACCOUNTS.has(accountNumber)) {
+    return res.status(400).json({
+      success: false,
+      ignored: true,
+      reason: 'Unrecognized recipient accountNumber',
+    });
+  }
 
-    const rawText = `${code} ${content} ${description}`.toUpperCase();
-    const compactText = rawText.replace(/[^A-Z0-9]/g, '');
+  const rawText = `${code} ${content} ${description}`.toUpperCase();
+  const compactText = rawText.replace(/[^A-Z0-9]/g, '');
 
-    // 1. Fetch recent orders from Supabase
-    const ordersRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/orders?select=id,total,status,paymentMethod&order=createdAt.desc&limit=100`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
-    );
-
-    const orders = ordersRes.ok ? await ordersRes.json() : [];
-    let matchedOrder = null;
-
-    if (Array.isArray(orders)) {
-      for (const order of orders) {
-        if (!order || !order.id) continue;
-        const orderIdUpper = String(order.id).toUpperCase(); // e.g. CUONLEN-769732
-        const orderIdCompact = orderIdUpper.replace(/[^A-Z0-9]/g, ''); // e.g. CUONLEN769732
-        const shortDigits = orderIdUpper.replace(/^CUONLEN[-_]?/, ''); // e.g. 769732
-
-        const isMatched =
-          compactText.includes(orderIdCompact) ||
-          rawText.includes(orderIdUpper) ||
-          (shortDigits.length >= 8 && rawText.includes(shortDigits));
-
-        if (isMatched) {
-          matchedOrder = order;
-          break;
-        }
-      }
-    }
-
-    let orderUpdated = false;
-    let newStatus = null;
-
-    if (matchedOrder) {
-      const expectedTotal = Number(matchedOrder.total || 0);
-      // Strict amount verification: transferAmount must be positive and >= expectedTotal
-      const amountValid =
-        expectedTotal > 0 &&
-        transferAmount >= expectedTotal &&
-        matchedOrder.status === 'pending_payment';
-
-      if (amountValid) {
-        newStatus = 'Đang xử lý';
-        const patchRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(matchedOrder.id)}`,
-          {
-            method: 'PATCH',
-            headers: {
-              apikey: SUPABASE_KEY,
-              Authorization: `Bearer ${SUPABASE_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ status: newStatus }),
-          }
-        );
-        orderUpdated = patchRes.ok;
-      }
-    }
-
-    // 2. Log webhook event so Admin & Client can inspect real-time SePay transactions
-    const logRow = {
-      id: `sepay_${body.id || Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      userId: HOLDER_USER_ID,
-      fullName: SEPAY_LOG_PARTITION,
-      city: matchedOrder ? String(matchedOrder.id) : 'UNMATCHED',
-      phone: gateway,
-      district: new Date().toISOString(),
-      ward: orderUpdated ? 'MATCHED' : 'RECEIVED',
-      detailAddress: JSON.stringify({
-        sepayId: body.id || null,
-        gateway,
-        accountNumber,
-        transferAmount,
-        content: content || code || description,
-        referenceCode,
-        transactionDate,
-        matchedOrderId: matchedOrder ? matchedOrder.id : null,
-        orderUpdated,
-      }),
-      isDefault: false,
-    };
-
-    await fetch(`${SUPABASE_URL}/rest/v1/addresses`, {
-      method: 'POST',
+  // 1. Fetch recent orders from Supabase
+  const ordersRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/orders?select=*&order=createdAt.desc&limit=100`,
+    {
       headers: {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(logRow),
-    }).catch(() => {});
+    }
+  );
 
-    return res.status(200).json({
-      success: true,
+  const orders = ordersRes.ok ? await ordersRes.json() : [];
+  let matchedOrder = null;
+
+  if (Array.isArray(orders)) {
+    for (const order of orders) {
+      if (!order || !order.id) continue;
+      const orderIdUpper = String(order.id).toUpperCase();
+      const orderIdCompact = orderIdUpper.replace(/[^A-Z0-9]/g, '');
+      const shortDigits = orderIdUpper.replace(/^CUONLEN[-_]?/, '');
+
+      const isMatched =
+        compactText.includes(orderIdCompact) ||
+        rawText.includes(orderIdUpper) ||
+        (shortDigits.length >= 8 && rawText.includes(shortDigits));
+
+      if (isMatched) {
+        matchedOrder = order;
+        break;
+      }
+    }
+  }
+
+  let orderUpdated = false;
+  let newStatus = null;
+
+  if (matchedOrder) {
+    const expectedTotal = Number(matchedOrder.total || 0);
+    const amountValid =
+      expectedTotal > 0 &&
+      transferAmount >= expectedTotal &&
+      matchedOrder.status === 'pending_payment';
+
+    if (amountValid) {
+      newStatus = 'Đang xử lý';
+      const patchRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(matchedOrder.id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+      orderUpdated = patchRes.ok;
+      if (orderUpdated) {
+        await sendOrderNotificationServer({ ...matchedOrder, status: newStatus });
+      }
+    }
+  }
+
+  // 2. Log webhook event so Admin can inspect real-time SePay transactions
+  const logRow = {
+    id: `sepay_${body.id || Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    userId: HOLDER_USER_ID,
+    fullName: SEPAY_LOG_PARTITION,
+    city: matchedOrder ? String(matchedOrder.id) : 'UNMATCHED',
+    phone: gateway,
+    district: new Date().toISOString(),
+    ward: orderUpdated ? 'MATCHED' : 'RECEIVED',
+    detailAddress: JSON.stringify({
+      sepayId: body.id || null,
+      gateway,
+      accountNumber,
+      transferAmount,
+      content: content || code || description,
+      referenceCode,
+      transactionDate,
       matchedOrderId: matchedOrder ? matchedOrder.id : null,
       orderUpdated,
-      newStatus,
-    });
-  } catch (err) {
-    return res.status(200).json({
-      success: true,
-      error: err && err.message ? err.message : 'Parse error',
-    });
-  }
-};
+    }),
+    isDefault: false,
+  };
+
+  await fetch(`${SUPABASE_URL}/rest/v1/addresses`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(logRow),
+  });
+
+  return res.status(200).json({
+    success: true,
+    matchedOrderId: matchedOrder ? matchedOrder.id : null,
+    orderUpdated,
+    newStatus,
+  });
+});
