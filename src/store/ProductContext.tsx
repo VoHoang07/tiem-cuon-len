@@ -17,7 +17,7 @@ import {
   validateReviewSchema,
 } from '@/utils/schemaValidator';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 250;
 const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v12';
 const LEGACY_CACHE_KEYS = ['tcl_products_cache_v11', 'tcl_products_cache_v10'];
 const CUSTOM_ADMIN_PRODUCTS_KEY = 'tcl_custom_admin_products_v1';

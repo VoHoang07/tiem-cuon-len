@@ -390,7 +390,7 @@ async function resolveAuthoritativeProductPrices(baseIds) {
   if (cleanIds.length === 0) return priceMap;
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/products?select=id,price,name`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/products?select=id,price,name&limit=500`, {
       method: 'GET',
       headers: {
         apikey: SUPABASE_KEY,
