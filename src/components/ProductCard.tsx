@@ -124,6 +124,7 @@ export const ProductCard = memo(function ProductCard({
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScale = useRef(new Animated.Value(1)).current;
+  const pressInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDesktop = windowWidth >= 768;
   const containerWidth = Math.min(windowWidth, MAX_CONTAINER_WIDTH);
@@ -145,13 +146,20 @@ export const ProductCard = memo(function ProductCard({
       : Math.min(Math.round(cardWidth * 0.94), 232);
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.97,
-      useNativeDriver: true,
-    }).start();
+    if (pressInTimerRef.current) clearTimeout(pressInTimerRef.current);
+    pressInTimerRef.current = setTimeout(() => {
+      Animated.spring(scaleAnim, {
+        toValue: 0.97,
+        useNativeDriver: true,
+      }).start();
+    }, 65);
   };
 
   const handlePressOut = () => {
+    if (pressInTimerRef.current) {
+      clearTimeout(pressInTimerRef.current);
+      pressInTimerRef.current = null;
+    }
     Animated.spring(scaleAnim, {
       toValue: 1,
       friction: 5,
@@ -639,6 +647,19 @@ export const ProductCard = memo(function ProductCard({
         />
       ) : null}
     </Animated.View>
+  );
+}, (prev, next) => {
+  return (
+    prev.variant === next.variant &&
+    prev.numColumns === next.numColumns &&
+    prev.onPress === next.onPress &&
+    prev.product.id === next.product.id &&
+    prev.product.name === next.product.name &&
+    prev.product.price === next.product.price &&
+    prev.product.image === next.product.image &&
+    prev.product.quantity === next.product.quantity &&
+    prev.product.rating === next.product.rating &&
+    (prev.product.colorOptions?.length || 0) === (next.product.colorOptions?.length || 0)
   );
 });
 

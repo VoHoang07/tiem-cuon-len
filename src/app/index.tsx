@@ -585,8 +585,10 @@ export default function HomeScreen() {
             data={featuredProducts}
             keyExtractor={(item) => `featured-${item.id}`}
             showsHorizontalScrollIndicator={false}
-            initialNumToRender={4}
-            maxToRenderPerBatch={4}
+            initialNumToRender={5}
+            maxToRenderPerBatch={5}
+            decelerationRate="fast"
+            scrollEventThrottle={16}
             style={Platform.OS === 'web' ? ({ cursor: 'grab', userSelect: 'none' } as any) : undefined}
             contentContainerStyle={[
               styles.featuredRow,
@@ -831,9 +833,10 @@ export default function HomeScreen() {
           filteredProducts.length === 0 ? styles.listContent : undefined
         }
         showsVerticalScrollIndicator={false}
-        initialNumToRender={8}
+        initialNumToRender={12}
         maxToRenderPerBatch={8}
-        windowSize={5}
+        windowSize={11}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }

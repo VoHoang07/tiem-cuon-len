@@ -110,6 +110,10 @@ export default function ProductDetailScreen() {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const thumbScrollRef = useRef<ScrollView | null>(null);
+  const mainSwipeRef = useRef<{ startX: number; startY: number }>({
+    startX: 0,
+    startY: 0,
+  });
   const thumbDragRef = useRef<{
     isDown: boolean;
     startX: number;
@@ -565,18 +569,85 @@ export default function ProductDetailScreen() {
               styles.galleryCol,
               isDesktop && styles.galleryColDesktop,
             ]}>
-            <View style={styles.mainImageFrame}>
+            <View
+              style={styles.mainImageFrame}
+              onTouchStart={(e: any) => {
+                const t = e?.nativeEvent?.touches?.[0] || e?.touches?.[0];
+                if (t) {
+                  mainSwipeRef.current = {
+                    startX: t.pageX ?? t.clientX ?? 0,
+                    startY: t.pageY ?? t.clientY ?? 0,
+                  };
+                }
+              }}
+              onTouchEnd={(e: any) => {
+                if (galleryItems.length <= 1) return;
+                const t =
+                  e?.nativeEvent?.changedTouches?.[0] ||
+                  e?.changedTouches?.[0];
+                if (!t) return;
+                const dx =
+                  (t.pageX ?? t.clientX ?? 0) - mainSwipeRef.current.startX;
+                const dy =
+                  (t.pageY ?? t.clientY ?? 0) - mainSwipeRef.current.startY;
+                if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+                  if (dx < 0) {
+                    handleSelectGalleryIndex(
+                      (safeGalleryIndex + 1) % galleryItems.length
+                    );
+                  } else {
+                    handleSelectGalleryIndex(
+                      (safeGalleryIndex - 1 + galleryItems.length) %
+                        galleryItems.length
+                    );
+                  }
+                }
+              }}
+              {...(Platform.OS === 'web'
+                ? ({
+                    onMouseDown: (e: any) => {
+                      mainSwipeRef.current = {
+                        startX: e.clientX ?? 0,
+                        startY: e.clientY ?? 0,
+                      };
+                    },
+                    onMouseUp: (e: any) => {
+                      if (galleryItems.length <= 1) return;
+                      const dx =
+                        (e.clientX ?? 0) - mainSwipeRef.current.startX;
+                      const dy =
+                        (e.clientY ?? 0) - mainSwipeRef.current.startY;
+                      if (
+                        Math.abs(dx) > 45 &&
+                        Math.abs(dx) > Math.abs(dy) * 1.2
+                      ) {
+                        if (dx < 0) {
+                          handleSelectGalleryIndex(
+                            (safeGalleryIndex + 1) % galleryItems.length
+                          );
+                        } else {
+                          handleSelectGalleryIndex(
+                            (safeGalleryIndex - 1 + galleryItems.length) %
+                              galleryItems.length
+                          );
+                        }
+                      }
+                    },
+                  } as any)
+                : {})}>
               {activeDisplayImage ? (
                 Platform.OS === 'web' && resolveImgUri(activeDisplayImage) ? (
                   React.createElement('img', {
                     src: resolveImgUri(activeDisplayImage)!,
                     alt: product.name,
                     decoding: 'async',
+                    draggable: false,
                     style: {
                       width: '100%',
                       height: '100%',
                       objectFit: 'cover',
                       display: 'block',
+                      userSelect: 'none',
                     },
                   })
                 ) : (

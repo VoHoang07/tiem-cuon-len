@@ -131,8 +131,19 @@ export default function RootLayout() {
     let isDown = false;
     let startX = 0;
     let startScrollLeft = 0;
+    let lastX = 0;
+    let lastTime = 0;
+    let velocityX = 0;
+    let rafId: number | null = null;
     let hasDragged = false;
     let lastDragEndTs = 0;
+
+    const stopInertia = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
 
     const findHorizontalScrollable = (target: EventTarget | null): HTMLElement | null => {
       let node = target as HTMLElement | null;
@@ -158,16 +169,24 @@ export default function RootLayout() {
       if (e.button !== 0) return;
       const scrollable = findHorizontalScrollable(e.target);
       if (!scrollable) return;
+      stopInertia();
       activeEl = scrollable;
       isDown = true;
       hasDragged = false;
       startX = e.clientX;
+      lastX = e.clientX;
+      lastTime = performance.now();
+      velocityX = 0;
       startScrollLeft = scrollable.scrollLeft;
     };
 
     const onMouseMove = (e: MouseEvent) => {
       if (!isDown || !activeEl) return;
+      const now = performance.now();
+      const dt = Math.max(1, now - lastTime);
       const dx = e.clientX - startX;
+      const stepX = e.clientX - lastX;
+
       if (!hasDragged && Math.abs(dx) > 5) {
         hasDragged = true;
         activeEl.style.cursor = 'grabbing';
@@ -176,20 +195,54 @@ export default function RootLayout() {
       if (hasDragged) {
         e.preventDefault();
         activeEl.scrollLeft = startScrollLeft - dx;
+        velocityX = 0.75 * (stepX / dt) * 16 + 0.25 * velocityX;
+        lastX = e.clientX;
+        lastTime = now;
       }
     };
 
     const endDrag = () => {
       if (!isDown) return;
       isDown = false;
-      if (activeEl) {
-        activeEl.style.cursor = '';
-        activeEl.style.userSelect = '';
+      const targetEl = activeEl;
+      if (targetEl) {
+        targetEl.style.cursor = '';
+        targetEl.style.userSelect = '';
       }
       if (hasDragged) {
         lastDragEndTs = Date.now();
+        // Smooth 60/120fps inertia glide after mouse flick
+        if (targetEl && Math.abs(velocityX) > 1.2) {
+          let vx = velocityX;
+          const stepInertia = () => {
+            if (!targetEl || Math.abs(vx) < 0.4) {
+              rafId = null;
+              return;
+            }
+            targetEl.scrollLeft -= vx;
+            vx *= 0.93;
+            rafId = requestAnimationFrame(stepInertia);
+          };
+          rafId = requestAnimationFrame(stepInertia);
+        }
       }
       activeEl = null;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      // Translate vertical mouse wheel into smooth horizontal scroll on compact horizontal pill bars / thumbnail strips
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const scrollable = findHorizontalScrollable(e.target);
+      if (!scrollable || scrollable.clientHeight > 120) return;
+      const maxScroll = scrollable.scrollWidth - scrollable.clientWidth;
+      if (maxScroll <= 4) return;
+      if (
+        (e.deltaY > 0 && scrollable.scrollLeft < maxScroll - 1) ||
+        (e.deltaY < 0 && scrollable.scrollLeft > 1)
+      ) {
+        e.preventDefault();
+        scrollable.scrollLeft += e.deltaY;
+      }
     };
 
     const onClickCapture = (e: MouseEvent) => {
@@ -210,14 +263,17 @@ export default function RootLayout() {
     window.addEventListener('mousemove', onMouseMove, { passive: false });
     window.addEventListener('mouseup', endDrag, { passive: true });
     window.addEventListener('mouseleave', endDrag, { passive: true });
+    window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('click', onClickCapture, true);
     window.addEventListener('dragstart', onDragStartCapture, true);
 
     return () => {
+      stopInertia();
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', endDrag);
       window.removeEventListener('mouseleave', endDrag);
+      window.removeEventListener('wheel', onWheel);
       window.removeEventListener('click', onClickCapture, true);
       window.removeEventListener('dragstart', onDragStartCapture, true);
     };

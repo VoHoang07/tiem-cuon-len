@@ -86,6 +86,40 @@ export default function Root({ children }: PropsWithChildren) {
         />
 
         <ScrollViewStyleReset />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              html, body {
+                -webkit-tap-highlight-color: transparent;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+                overscroll-behavior-y: none;
+              }
+              * {
+                -webkit-overflow-scrolling: touch;
+              }
+              img {
+                -webkit-user-drag: none;
+                user-select: none;
+                backface-visibility: hidden;
+              }
+              ::-webkit-scrollbar {
+                width: 6px;
+                height: 5px;
+              }
+              ::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              ::-webkit-scrollbar-thumb {
+                background: rgba(118, 83, 65, 0.24);
+                border-radius: 999px;
+              }
+              ::-webkit-scrollbar-thumb:hover {
+                background: rgba(118, 83, 65, 0.42);
+              }
+            `,
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>
