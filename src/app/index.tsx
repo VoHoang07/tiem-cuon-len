@@ -9,6 +9,8 @@ import {
   StyleSheet,
   useWindowDimensions,
   RefreshControl,
+  Image,
+  Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -438,18 +440,44 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <View style={styles.heroVisual}>
+            <View style={[styles.heroVisual, isDesktop && styles.heroVisualDesktop]}>
+              {/* Desktop: Mini Handcrafted Polaroid Showcase Card alongside Emblem */}
+              {isDesktop && featuredProducts[0]?.image ? (
+                <TouchableOpacity
+                  style={styles.heroPolaroidCard}
+                  onPress={() => router.push(`/product/${featuredProducts[0].id}`)}
+                  activeOpacity={0.85}>
+                  <View style={styles.heroPolaroidImgWrap}>
+                    <Image
+                      source={
+                        typeof featuredProducts[0].image === 'string'
+                          ? { uri: featuredProducts[0].image }
+                          : (featuredProducts[0].image as any)
+                      }
+                      style={styles.heroPolaroidImg}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <Text style={styles.heroPolaroidCaption} numberOfLines={1}>
+                    ✨ {featuredProducts[0].name}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {/* Signature Tiệm Cuộn Len Artisan Medallion */}
               <View style={[styles.heroCircleOuter, isMobile && styles.heroCircleOuterMobile]}>
                 <View style={[styles.heroCircleInner, isMobile && styles.heroCircleInnerMobile]}>
-                  <Text style={[styles.heroMainEmoji, isMobile && styles.heroMainEmojiMobile]}>
-                    🧸
-                  </Text>
+                  <Image
+                    source={require('../../assets/images/logo-shop.png')}
+                    style={styles.heroLogoImage}
+                    resizeMode="cover"
+                  />
                 </View>
-                <View style={styles.heroFloatTagTop}>
-                  <Text style={styles.heroFloatEmoji}>🌷</Text>
+                <View style={[styles.heroFloatPill, styles.heroFloatPillTop]}>
+                  <Text style={styles.heroFloatPillText}>🧶 Đan tay</Text>
                 </View>
-                <View style={styles.heroFloatTagBottom}>
-                  <Text style={styles.heroFloatEmoji}>🍒</Text>
+                <View style={[styles.heroFloatPill, styles.heroFloatPillBottom]}>
+                  <Text style={styles.heroFloatPillText}>🌸 Kẽm nhung</Text>
                 </View>
               </View>
             </View>
@@ -559,6 +587,7 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             initialNumToRender={4}
             maxToRenderPerBatch={4}
+            style={Platform.OS === 'web' ? ({ cursor: 'grab', userSelect: 'none' } as any) : undefined}
             contentContainerStyle={[
               styles.featuredRow,
               isMobile && styles.featuredRowMobile,
@@ -701,6 +730,7 @@ export default function HomeScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={Platform.OS === 'web' ? ({ cursor: 'grab', userSelect: 'none' } as any) : undefined}
           contentContainerStyle={[styles.sortRow, isMobile && styles.sortRowMobile]}>
           <View style={styles.sortLabelPill}>
             <SlidersHorizontal size={13} color={COLORS.mediumText} />
@@ -1121,66 +1151,99 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  heroVisualDesktop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  heroPolaroidCard: {
+    width: 112,
+    backgroundColor: '#FFFDF9',
+    borderRadius: 16,
+    padding: 6,
+    paddingBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E6D7C5',
+    transform: [{ rotate: '-4deg' }],
+    ...SHADOWS.small,
+  },
+  heroPolaroidImgWrap: {
+    width: '100%',
+    height: 86,
+    borderRadius: 11,
+    overflow: 'hidden',
+    backgroundColor: '#F3ECE2',
+  },
+  heroPolaroidImg: {
+    width: '100%',
+    height: '100%',
+  },
+  heroPolaroidCaption: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#3D2B1F',
+    marginTop: 5,
+    textAlign: 'center',
+  },
   heroCircleOuter: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(250, 245, 238, 0.5)',
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    backgroundColor: 'rgba(255, 253, 249, 0.52)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 253, 249, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   heroCircleOuterMobile: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
   },
   heroCircleInner: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 98,
+    height: 98,
+    borderRadius: 49,
     backgroundColor: '#FAF5EE',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#FFFDF9',
     ...SHADOWS.small,
   },
   heroCircleInnerMobile: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
   },
-  heroMainEmoji: {
-    fontSize: 36,
+  heroLogoImage: {
+    width: '100%',
+    height: '100%',
   },
-  heroMainEmojiMobile: {
-    fontSize: 28,
-  },
-  heroFloatTagTop: {
+  heroFloatPill: {
     position: 'absolute',
+    backgroundColor: '#FFFDF9',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    ...SHADOWS.small,
+  },
+  heroFloatPillTop: {
     top: -4,
-    right: -4,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.small,
+    right: -8,
   },
-  heroFloatTagBottom: {
-    position: 'absolute',
-    bottom: -2,
-    left: -4,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.small,
+  heroFloatPillBottom: {
+    bottom: -4,
+    left: -10,
   },
-  heroFloatEmoji: {
-    fontSize: 13,
+  heroFloatPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#3D2B1F',
   },
   trustBar: {
     flexDirection: 'row',

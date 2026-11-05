@@ -234,11 +234,15 @@ export const ProductCard = memo(function ProductCard({
                   src: resolveImgUri(product.image)!,
                   alt: product.name,
                   decoding: 'async',
+                  loading: variant === 'carousel' ? 'eager' : 'lazy',
+                  fetchPriority: variant === 'carousel' ? 'high' : 'auto',
+                  draggable: false,
                   style: {
                     width: '100%',
                     height: '100%',
                     objectFit: 'cover',
                     display: 'block',
+                    userSelect: 'none',
                   },
                 })}
               </View>

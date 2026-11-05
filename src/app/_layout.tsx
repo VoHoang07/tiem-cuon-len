@@ -121,6 +121,108 @@ function BottomNavGate() {
 }
 
 export default function RootLayout() {
+  // Global Desktop Web Mouse-Drag Horizontal Scroll Engine for all horizontal ScrollViews & FlatLists
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    let activeEl: HTMLElement | null = null;
+    let isDown = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let hasDragged = false;
+    let lastDragEndTs = 0;
+
+    const findHorizontalScrollable = (target: EventTarget | null): HTMLElement | null => {
+      let node = target as HTMLElement | null;
+      while (node && node !== document.body && node !== document.documentElement) {
+        if (node instanceof HTMLElement) {
+          const tag = node.tagName.toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+            return null;
+          }
+          if (node.scrollWidth > node.clientWidth + 4) {
+            const style = window.getComputedStyle(node);
+            if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+              return node;
+            }
+          }
+        }
+        node = node.parentElement;
+      }
+      return null;
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const scrollable = findHorizontalScrollable(e.target);
+      if (!scrollable) return;
+      activeEl = scrollable;
+      isDown = true;
+      hasDragged = false;
+      startX = e.clientX;
+      startScrollLeft = scrollable.scrollLeft;
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDown || !activeEl) return;
+      const dx = e.clientX - startX;
+      if (!hasDragged && Math.abs(dx) > 5) {
+        hasDragged = true;
+        activeEl.style.cursor = 'grabbing';
+        activeEl.style.userSelect = 'none';
+      }
+      if (hasDragged) {
+        e.preventDefault();
+        activeEl.scrollLeft = startScrollLeft - dx;
+      }
+    };
+
+    const endDrag = () => {
+      if (!isDown) return;
+      isDown = false;
+      if (activeEl) {
+        activeEl.style.cursor = '';
+        activeEl.style.userSelect = '';
+      }
+      if (hasDragged) {
+        lastDragEndTs = Date.now();
+      }
+      activeEl = null;
+    };
+
+    const onClickCapture = (e: MouseEvent) => {
+      if (hasDragged || Date.now() - lastDragEndTs < 140) {
+        hasDragged = false;
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    };
+
+    const onDragStartCapture = (e: DragEvent) => {
+      if (findHorizontalScrollable(e.target)) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('mousedown', onMouseDown, { passive: true });
+    window.addEventListener('mousemove', onMouseMove, { passive: false });
+    window.addEventListener('mouseup', endDrag, { passive: true });
+    window.addEventListener('mouseleave', endDrag, { passive: true });
+    window.addEventListener('click', onClickCapture, true);
+    window.addEventListener('dragstart', onDragStartCapture, true);
+
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', endDrag);
+      window.removeEventListener('mouseleave', endDrag);
+      window.removeEventListener('click', onClickCapture, true);
+      window.removeEventListener('dragstart', onDragStartCapture, true);
+    };
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>

@@ -5,6 +5,7 @@ import {
   useState,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
 import { Product, Review } from '@/types/product';
@@ -980,43 +981,47 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
+  const idbHydrationPromiseRef = useRef<Promise<void> | null>(null);
 
   // Hydrate cached, custom admin products, and deleted IDs from IndexedDB on mount
   useEffect(() => {
-    Promise.all([
+    const p = Promise.all([
       loadFromIdb('cached_all_products'),
       loadCustomProductsFromIdb(),
       loadFromIdb('deleted_product_ids') as unknown as Promise<string[]>,
-    ]).then(([cachedAll, idbCustom, idbDeleted]) => {
-      if (Array.isArray(idbDeleted) && idbDeleted.length > 0) {
-        const mergedDeleted = getDeletedIds();
-        for (const id of idbDeleted) {
-          if (typeof id === 'string' && id.trim()) {
-            mergedDeleted.add(id.trim());
+    ])
+      .then(([cachedAll, idbCustom, idbDeleted]) => {
+        if (Array.isArray(idbDeleted) && idbDeleted.length > 0) {
+          const mergedDeleted = getDeletedIds();
+          for (const id of idbDeleted) {
+            if (typeof id === 'string' && id.trim()) {
+              mergedDeleted.add(id.trim());
+            }
+          }
+          saveDeletedIds(mergedDeleted);
+        }
+        const deleted = getDeletedIds();
+        if (cachedAll.length > 0) {
+          for (const item of cachedAll) {
+            if (item && item.id && !deleted.has(item.id)) {
+              cacheProductMediaInMemory(item);
+            }
           }
         }
-        saveDeletedIds(mergedDeleted);
-      }
-      const deleted = getDeletedIds();
-      if (cachedAll.length > 0) {
-        for (const p of cachedAll) {
-          if (p && p.id && !deleted.has(p.id)) {
-            cacheProductMediaInMemory(p);
+        if (idbCustom.length > 0) {
+          for (const item of idbCustom) {
+            if (item && item.id && !deleted.has(item.id)) {
+              customAdminProductsMemory.set(item.id, item);
+              cacheProductMediaInMemory(item);
+            }
           }
         }
-      }
-      if (idbCustom.length > 0) {
-        for (const p of idbCustom) {
-          if (p && p.id && !deleted.has(p.id)) {
-            customAdminProductsMemory.set(p.id, p);
-            cacheProductMediaInMemory(p);
-          }
-        }
-      }
-      setProducts((prev) =>
-        mergeWithMockProducts(cachedAll.length > 0 ? cachedAll : prev)
-      );
-    });
+        setProducts((prev) =>
+          mergeWithMockProducts(cachedAll.length > 0 ? cachedAll : prev)
+        );
+      })
+      .catch(() => {});
+    idbHydrationPromiseRef.current = p;
   }, []);
 
   // Sync shop reviews from Supabase partition
@@ -1035,22 +1040,102 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const hydrateMissingProductMedia = useCallback(
     async (baseRows: Product[]) => {
       if (!supabaseUrl || !supabaseAnonKey || !Array.isArray(baseRows)) return;
+
+      // Wait briefly for local IndexedDB cache hydration (< 30ms) so already-cached images render in 0ms without re-downloading over mobile network
+      if (idbHydrationPromiseRef.current) {
+        try {
+          await Promise.race([
+            idbHydrationPromiseRef.current,
+            new Promise((r) => setTimeout(r, 250)),
+          ]);
+        } catch {
+          // ignore
+        }
+      }
+
       const deleted = getDeletedIds();
-      const missingIds = baseRows
+      // Prioritize featured products (rating >= 4.8) first so above-the-fold mobile screen renders images immediately
+      const activeRows = [...baseRows]
+        .filter(
+          (r) =>
+            r &&
+            r.id &&
+            !deleted.has(r.id) &&
+            !RETIRED_PRODUCT_IDS.has(r.id)
+        )
+        .sort((a, b) => (b.rating >= 4.8 ? 1 : 0) - (a.rating >= 4.8 ? 1 : 0));
+
+      // PASS 1: Fast Cover Photo Hydration (`select=id,image` ONLY, skipping multi-MB `tags` variant galleries)
+      const missingCoverIds = activeRows
         .filter((r) => {
-          if (!r || !r.id || deleted.has(r.id) || RETIRED_PRODUCT_IDS.has(r.id)) {
-            return false;
-          }
           const cached = hydratedMediaMemory.get(r.id);
           return !cached || !cached.image;
         })
         .map((r) => r.id);
 
-      if (missingIds.length === 0) return;
+      if (missingCoverIds.length > 0) {
+        const COVER_CHUNK = 3;
+        const coverChunks: string[][] = [];
+        for (let i = 0; i < missingCoverIds.length; i += COVER_CHUNK) {
+          coverChunks.push(missingCoverIds.slice(i, i + COVER_CHUNK));
+        }
 
-      const CHUNK_SIZE = 2;
-      for (let i = 0; i < missingIds.length; i += CHUNK_SIZE) {
-        const chunk = missingIds.slice(i, i + CHUNK_SIZE);
+        // Run 2 concurrent workers for fast cover image loading on mobile
+        let cursor = 0;
+        const runCoverWorker = async () => {
+          while (cursor < coverChunks.length) {
+            const chunk = coverChunks[cursor++];
+            if (!chunk || chunk.length === 0) continue;
+            const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
+            try {
+              const res = await fetch(
+                `${supabaseUrl}/rest/v1/products?select=id,image&id=in.(${inFilter})`,
+                {
+                  cache: 'no-store',
+                  headers: {
+                    apikey: supabaseAnonKey,
+                    Authorization: `Bearer ${supabaseAnonKey}`,
+                  },
+                }
+              );
+              if (res.ok) {
+                const rows = (await res.json()) as Array<{
+                  id: string;
+                  image?: Product['image'];
+                }>;
+                if (Array.isArray(rows) && rows.length > 0) {
+                  for (const mr of rows) {
+                    const target = baseRows.find((b) => b.id === mr.id);
+                    if (target && mr.image) {
+                      target.image = mr.image;
+                      hydrateDbProduct(target);
+                    }
+                  }
+                  const merged = mergeWithMockProducts(baseRows);
+                  setProducts(merged);
+                }
+              }
+            } catch {
+              // continue next chunk
+            }
+          }
+        };
+        await Promise.all([runCoverWorker(), runCoverWorker()]);
+      }
+
+      // PASS 2: Background Variant & Gallery Hydration (`select=id,tags`)
+      const missingVariantIds = activeRows
+        .filter((r) => {
+          const cached = hydratedMediaMemory.get(r.id);
+          return !cached || !Array.isArray(cached.colorOptions);
+        })
+        .map((r) => r.id);
+
+      if (missingVariantIds.length === 0) return;
+
+      const VARIANT_CHUNK = 2;
+      for (let i = 0; i < missingVariantIds.length; i += VARIANT_CHUNK) {
+        const chunk = missingVariantIds.slice(i, i + VARIANT_CHUNK);
         const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
         try {
           const res = await fetch(
