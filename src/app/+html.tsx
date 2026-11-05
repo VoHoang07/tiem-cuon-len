@@ -3,14 +3,19 @@ import type { PropsWithChildren } from 'react';
 
 const SHOP_JSON_LD = {
   '@context': 'https://schema.org',
-  '@type': 'OnlineStore',
+  '@type': ['OnlineStore', 'Organization'],
   name: 'Tiệm Cuộn Len',
-  alternateName: 'Tiệm Cuộn Len Handmade',
-  url: 'https://www.tiemcuonlen.shop',
-  logo: 'https://www.tiemcuonlen.shop/logo-512x512.png',
+  alternateName: 'Tiệm Cuộn Len Handmade (tiemcuonlen.shop)',
+  url: 'https://www.tiemcuonlen.shop/',
+  logo: {
+    '@type': 'ImageObject',
+    url: 'https://www.tiemcuonlen.shop/logo-512x512.png',
+    width: 512,
+    height: 512,
+  },
   image: 'https://www.tiemcuonlen.shop/logo-512x512.png',
   description:
-    'Tiệm Cuộn Len (tiemcuonlen.shop) — Cửa hàng trực tuyến chuyên bán sẵn và nhận đặt đan móc thủ công thú bông len, móc khóa len, bó hoa len, chậu hoa kẽm nhung và phụ kiện handmade cao cấp. Giao hàng toàn quốc & Hỏa tốc 2h tại TP.HCM.',
+    'Tiệm Cuộn Len (tiemcuonlen.shop) — Cửa hàng trực tuyến chính thức chuyên bán sẵn và nhận đặt đan móc thủ công thú bông len, móc khóa len, bó hoa len, chậu hoa kẽm nhung và phụ kiện handmade cao cấp. Giao hàng toàn quốc & Hỏa tốc 2h tại TP.HCM.',
   telephone: '+84387966507',
   email: 'vohoang1327@gmail.com',
   priceRange: '12.000₫ - 350.000₫',
@@ -48,12 +53,14 @@ export default function Root({ children }: PropsWithChildren) {
         />
 
         {/* Google Search Favicon Requirements: multiples of 48px (48x48, 96x96, 192x192) */}
-        <link rel="icon" href="/favicon.ico" sizes="48x48" />
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48" />
+        <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
         <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
+        <link rel="canonical" href="https://www.tiemcuonlen.shop/" />
 
         {/* OpenGraph / Social Preview */}
         <meta property="og:type" content="website" />
