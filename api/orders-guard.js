@@ -138,6 +138,9 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         'selectedColorId',
         'selectedColorName',
         'selectedColorHex',
+        'selectedAccessoryId',
+        'selectedAccessoryName',
+        'selectedAccessoryEmoji',
       ]);
 
       const baseId = String(rawProd.baseProductId || rawProd.id || '').split('__')[0];
@@ -150,17 +153,29 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       )
         .trim()
         .toLowerCase();
+      const selectedAccIdCandidate = String(
+        rawProd.selectedAccessoryId || (rawIdParts.length >= 3 ? rawIdParts[2] : '')
+      ).trim();
+      const isGiftBoxOption =
+        selectedAccIdCandidate === 'gift_box_letter' ||
+        String(rawProd.selectedAccessoryName || '')
+          .toLowerCase()
+          .includes('hộp quà') ||
+        String(rawProd.name || '')
+          .toLowerCase()
+          .includes('hộp quà');
+      const accessoryDelta = isGiftBoxOption ? 15000 : 0;
       const qty = Math.max(1, Math.min(99, Math.round(Number(it.quantity) || 1)));
 
       // RED TEAM FIX: Never fall back to client-supplied `rawProd.price`!
       // Require product ID (or variant ID/name) to exist in the authoritative server catalog / Supabase DB.
-      const serverUnitPrice =
+      const baseServerUnitPrice =
         (selectedColorIdCandidate &&
           priceMap.get(`${baseId}__${selectedColorIdCandidate}`)) ||
         (selectedColorNameCandidate &&
           priceMap.get(`${baseId}__name:${selectedColorNameCandidate}`)) ||
         priceMap.get(baseId);
-      if (!baseId || typeof serverUnitPrice !== 'number' || serverUnitPrice <= 0) {
+      if (!baseId || typeof baseServerUnitPrice !== 'number' || baseServerUnitPrice <= 0) {
         await logServerAuditEvent(req, {
           eventType: 'ADMIN_SECURITY_ACTION',
           severity: 'CRITICAL',
@@ -179,6 +194,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         });
       }
 
+      const serverUnitPrice = baseServerUnitPrice + accessoryDelta;
       authoritativeSubtotal += serverUnitPrice * qty;
 
       sanitizedItems.push({
@@ -201,6 +217,8 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
           selectedColorHex: rawProd.selectedColorHex
             ? sanitizeTextServer(rawProd.selectedColorHex, 20)
             : undefined,
+          selectedAccessoryId: isGiftBoxOption ? 'gift_box_letter' : 'no_box',
+          selectedAccessoryName: isGiftBoxOption ? 'Hộp quà + Thư tay' : 'Không hộp',
         },
         quantity: qty,
         price: serverUnitPrice,

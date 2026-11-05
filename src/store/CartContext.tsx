@@ -44,6 +44,7 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
   const baseId = getBaseProductId(p.id, p.baseProductId);
   const parts = p.id.split('__');
   const parsedColorId = p.selectedColorId || (parts.length >= 2 ? parts[1] : undefined);
+  const parsedAccessoryId = p.selectedAccessoryId || (parts.length >= 3 ? parts[2] : undefined);
 
   const liveProduct = catalogProducts?.find((m) => m.id === baseId);
   const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
@@ -61,24 +62,33 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     ) ||
     colorOptions?.[0];
 
+  const isGiftBox =
+    parsedAccessoryId === 'gift_box_letter' ||
+    (p.selectedAccessoryName || ci.selectedAccessory || '')
+      .toLowerCase()
+      .includes('hộp quà');
+  const accessoryDelta = isGiftBox ? 15000 : 0;
+  const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
+  const resolvedAccessoryName = isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp';
+  const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
+
   const resolvedImage = colorOpt?.image || p.image || source.image || mock?.image || null;
   // Always prefer live catalog variant price (or base price) when available so admin price edits apply immediately
   const variantLivePrice =
     colorOpt?.price && Number(colorOpt.price) > 0
       ? Number(colorOpt.price)
       : undefined;
-  const resolvedPrice =
+  const baseCatalogPrice =
     variantLivePrice ??
     (liveProduct
       ? liveProduct.price
-      : p.price && p.price > 0
-        ? p.price
-        : source.price);
+      : source.price);
+  const resolvedPrice = baseCatalogPrice + accessoryDelta;
 
   return {
     ...ci,
     selectedColor: p.selectedColorName || colorOpt?.name || ci.selectedColor,
-    selectedAccessory: undefined,
+    selectedAccessory: resolvedAccessoryName,
     product: {
       ...p,
       baseProductId: baseId,
@@ -89,9 +99,9 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
       selectedColorId: colorOpt?.id ?? parsedColorId,
       selectedColorName: p.selectedColorName || colorOpt?.name || p.color,
       selectedColorHex: p.selectedColorHex || colorOpt?.hex,
-      selectedAccessoryId: undefined,
-      selectedAccessoryName: undefined,
-      selectedAccessoryEmoji: undefined,
+      selectedAccessoryId: resolvedAccessoryId,
+      selectedAccessoryName: resolvedAccessoryName,
+      selectedAccessoryEmoji: resolvedAccessoryEmoji,
     },
   };
 }

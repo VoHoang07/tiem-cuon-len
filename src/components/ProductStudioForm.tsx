@@ -636,6 +636,7 @@ export function ProductStudioForm({
   const [savedDrafts, setSavedDrafts] = useState<AdminProductDraft[]>([]);
   const [draftStatusMsg, setDraftStatusMsg] = useState<string | null>(null);
   const [frameFitMode, setFrameFitMode] = useState<'contain_square' | 'cover_square'>('contain_square');
+  const [previewPackagingId, setPreviewPackagingId] = useState<'no_box' | 'gift_box_letter'>('no_box');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const draftHydratedRef = useRef(false);
 
@@ -1133,7 +1134,20 @@ export function ProductStudioForm({
       image: c.image || firstAvailableImg || undefined,
     }));
 
-    const cleanAccessories: ProductAccessoryOption[] = [];
+    const cleanAccessories: ProductAccessoryOption[] = [
+      {
+        id: 'no_box',
+        name: 'Không hộp',
+        emoji: '🛍️',
+        priceDelta: 0,
+      },
+      {
+        id: 'gift_box_letter',
+        name: 'Hộp quà + Thư tay',
+        emoji: '🎁',
+        priceDelta: 15000,
+      },
+    ];
 
     const builtGallery: ProductGalleryItem[] = extraPhotos.map((uri, idx) => ({
       id: `g_extra_${idx + 1}`,
@@ -1765,6 +1779,65 @@ export function ProductStudioForm({
                   </View>
                 )}
               </View>
+            </View>
+
+            {/* Packaging / Gift Box Options (Synchronized with Client Product Page) */}
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>
+                Đóng gói & Quà tặng (Khách chọn khi mua)
+              </Text>
+              <View style={styles.stockModeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.stockModePill,
+                    previewPackagingId === 'no_box' && styles.stockModePillActive,
+                  ]}
+                  onPress={() => setPreviewPackagingId('no_box')}
+                  activeOpacity={0.8}>
+                  <Text
+                    style={[
+                      styles.stockModeText,
+                      previewPackagingId === 'no_box' && styles.stockModeTextActive,
+                    ]}>
+                    🛍️ Không hộp (+0₫)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.stockModePill,
+                    previewPackagingId === 'gift_box_letter' &&
+                      styles.stockModePillActive,
+                  ]}
+                  onPress={() => setPreviewPackagingId('gift_box_letter')}
+                  activeOpacity={0.8}>
+                  <Text
+                    style={[
+                      styles.stockModeText,
+                      previewPackagingId === 'gift_box_letter' &&
+                        styles.stockModeTextActive,
+                    ]}>
+                    🎁 Hộp quà + Thư tay (+15.000₫)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {activeColor?.price && Number(activeColor.price) > 0 ? (
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '700',
+                    color: '#6E4F37',
+                    marginTop: 2,
+                  }}>
+                  {previewPackagingId === 'gift_box_letter'
+                    ? `💡 Giá hiển thị của Ảnh #${safeColorIdx + 1} khi chọn Hộp quà + Thư tay: ${(
+                        Number(activeColor.price) + 15000
+                      ).toLocaleString('vi-VN')}₫`
+                    : `💡 Giá hiển thị của Ảnh #${safeColorIdx + 1} khi chọn Không hộp: ${Number(
+                        activeColor.price
+                      ).toLocaleString('vi-VN')}₫`}
+                </Text>
+              ) : null}
             </View>
 
             {/* Description with inline AI generator button */}

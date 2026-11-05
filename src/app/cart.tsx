@@ -109,6 +109,11 @@ export default function CartScreen() {
     const colorLabel =
       item.product.selectedColorName || item.selectedColor || item.product.color;
     const colorHex = item.product.selectedColorHex;
+    const packagingLabel =
+      item.product.selectedAccessoryName || item.selectedAccessory || 'Không hộp';
+    const isGiftBox =
+      item.product.selectedAccessoryId === 'gift_box_letter' ||
+      packagingLabel.toLowerCase().includes('hộp quà');
 
     return (
       <Swipeable renderRightActions={() => renderRightActions(item)}>
@@ -151,6 +156,13 @@ export default function CartScreen() {
                   </Text>
                 </View>
               ) : null}
+              <View style={styles.variantTagPill}>
+                <Text style={styles.variantTagText} numberOfLines={1}>
+                  {isGiftBox
+                    ? '🎁 Hộp quà + Thư tay (+15.000₫)'
+                    : '🛍️ Không hộp'}
+                </Text>
+              </View>
             </View>
 
             <Text style={styles.itemPrice}>

@@ -110,8 +110,21 @@ export default function ProductDetailScreen() {
     [product]
   );
   const accessoryOptions: ProductAccessoryOption[] = useMemo(
-    () => product?.accessoryOptions ?? [],
-    [product]
+    () => [
+      {
+        id: 'no_box',
+        name: 'Không hộp',
+        emoji: '🛍️',
+        priceDelta: 0,
+      },
+      {
+        id: 'gift_box_letter',
+        name: 'Hộp quà + Thư tay',
+        emoji: '🎁',
+        priceDelta: 15000,
+      },
+    ],
+    []
   );
 
   // Build clean gallery from all distinct color variant photos + extra gallery angles
@@ -202,7 +215,9 @@ export default function ProductDetailScreen() {
 
   const activeColor: ProductColorOption | null =
     colorOptions.find((c) => c.id === selectedColorId) ?? colorOptions[0] ?? null;
-  const activeAccessory: ProductAccessoryOption | null = null;
+  const activeAccessory: ProductAccessoryOption =
+    accessoryOptions.find((a) => a.id === selectedAccessoryId) ??
+    accessoryOptions[0];
 
   const safeGalleryIndex =
     activeGalleryIndex >= 0 && activeGalleryIndex < galleryItems.length
@@ -510,11 +525,11 @@ export default function ProductDetailScreen() {
                 </>
               )}
 
-              {activeAccessory && (
+              {activeAccessory && (activeAccessory.priceDelta ?? 0) > 0 && (
                 <View style={styles.attachedAccessoryPill}>
                   <Text style={styles.attachedAccessoryText} numberOfLines={1}>
                     {activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}
-                    Kèm: {activeAccessory.name}
+                    Kèm: {activeAccessory.name} (+{formatVND(activeAccessory.priceDelta || 0)})
                   </Text>
                 </View>
               )}
@@ -620,7 +635,7 @@ export default function ProductDetailScreen() {
               <Text style={styles.priceText}>{formatVND(effectivePrice)}</Text>
               {accessoryDelta > 0 && (
                 <Text style={styles.priceDeltaNote}>
-                  (Đã gồm +{formatVND(accessoryDelta)} phụ kiện)
+                  (Đã gồm +{formatVND(accessoryDelta)} {activeAccessory?.name})
                 </Text>
               )}
             </View>
@@ -673,6 +688,46 @@ export default function ProductDetailScreen() {
               </View>
             )}
 
+            {/* 2. Packaging / Gift Box Pill Selector ("Không hộp" vs "Hộp quà + Thư tay (+15k)") */}
+            <View style={styles.selectorGroup}>
+              <Text style={styles.selectorLabel}>
+                Đóng gói:{' '}
+                <Text style={styles.selectorValue}>
+                  {activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}
+                  {activeAccessory.name}
+                  {(activeAccessory.priceDelta ?? 0) > 0
+                    ? ` (+${formatVND(activeAccessory.priceDelta || 0)})`
+                    : ''}
+                </Text>
+              </Text>
+              <View style={styles.pillWrap}>
+                {accessoryOptions.map((acc) => {
+                  const isSelected = activeAccessory?.id === acc.id;
+                  const delta = acc.priceDelta ?? 0;
+                  return (
+                    <TouchableOpacity
+                      key={acc.id}
+                      style={[
+                        styles.optionPill,
+                        isSelected && styles.optionPillSelected,
+                      ]}
+                      onPress={() => handleSelectAccessory(acc)}
+                      activeOpacity={0.8}>
+                      <Text
+                        style={[
+                          styles.optionPillText,
+                          isSelected && styles.optionPillTextSelected,
+                        ]}>
+                        {acc.emoji ? `${acc.emoji} ` : ''}
+                        {acc.name}
+                        {delta > 0 ? ` (+${formatVND(delta)})` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             {/* Desktop Inline Purchase Row */}
             {!isAdmin && isDesktop && (
               <View style={styles.purchaseRow}>
@@ -712,7 +767,7 @@ export default function ProductDetailScreen() {
             {/* Subtle Material & Care Footnote + Chat Link */}
             <View style={styles.subtleFooterBox}>
               <Text style={styles.subtleMetaLine}>
-                🧶 Chất liệu: {product.material} • Tặng kèm hộp quà & thiệp viết tay
+                🧶 Chất liệu: {product.material} • Tuỳ chọn Không hộp hoặc Hộp quà + Thư tay (+15.000₫)
               </Text>
 
               {isAdmin ? (

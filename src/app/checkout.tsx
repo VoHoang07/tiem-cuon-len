@@ -587,14 +587,24 @@ export default function CheckoutScreen() {
           ...compactProd
         } = ci.product;
         const colorLabel = (ci.product.selectedColorName || ci.selectedColor || '').trim();
+        const isGiftBox =
+          ci.product.selectedAccessoryId === 'gift_box_letter' ||
+          (ci.product.selectedAccessoryName || ci.selectedAccessory || '')
+            .toLowerCase()
+            .includes('hộp quà');
+        const boxLabel = isGiftBox ? '🎁 Hộp quà + Thư tay' : 'Không hộp';
+        const suffixParts = [colorLabel, boxLabel].filter(Boolean);
+        const suffixStr = suffixParts.join(' • ');
         const displayName =
-          colorLabel && !compactProd.name.includes(`(${colorLabel})`)
-            ? `${compactProd.name} (${colorLabel})`
+          suffixStr && !compactProd.name.includes(`(${suffixStr})`)
+            ? `${compactProd.name} (${suffixStr})`
             : compactProd.name;
         return {
           product: {
             ...compactProd,
             name: displayName,
+            selectedAccessoryId: isGiftBox ? 'gift_box_letter' : 'no_box',
+            selectedAccessoryName: isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp',
           },
           quantity: ci.quantity,
           price: ci.product.price,
@@ -1118,11 +1128,20 @@ export default function CheckoutScreen() {
                       <Text style={styles.itemName} numberOfLines={2}>
                         {item.product.name}
                       </Text>
-                      {item.product.selectedColorName ? (
-                        <Text style={styles.summaryVariantText} numberOfLines={1}>
-                          {`Màu: ${item.product.selectedColorName}`}
-                        </Text>
-                      ) : null}
+                      <Text style={styles.summaryVariantText} numberOfLines={1}>
+                        {`${
+                          item.product.selectedColorName
+                            ? `Màu: ${item.product.selectedColorName} • `
+                            : ''
+                        }${
+                          item.product.selectedAccessoryId === 'gift_box_letter' ||
+                          (item.product.selectedAccessoryName || '')
+                            .toLowerCase()
+                            .includes('hộp quà')
+                            ? '🎁 Hộp quà + Thư tay (+15.000₫)'
+                            : '🛍️ Không hộp'
+                        }`}
+                      </Text>
                       <View style={styles.summaryMetaInline}>
                         <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
                         <Text style={styles.summaryStockBadge}>
