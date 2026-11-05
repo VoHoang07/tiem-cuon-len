@@ -1,4 +1,4 @@
-import React, { useRef, useState, memo } from 'react';
+import React, { useRef, useState, useMemo, memo } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,26 @@ import {
   Platform,
   useWindowDimensions,
   Animated,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Heart, Plus, Check, Edit3, MessageCircle, Share2 } from 'lucide-react-native';
-import { Product } from '@/types/product';
+import {
+  Heart,
+  Plus,
+  Minus,
+  Check,
+  Edit3,
+  MessageCircle,
+  Share2,
+  X,
+  ShoppingCart,
+} from 'lucide-react-native';
+import {
+  Product,
+  ProductColorOption,
+  ProductAccessoryOption,
+} from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { useFavorites } from '@/store/FavoritesContext';
 import { useCart } from '@/store/CartContext';
@@ -21,6 +37,21 @@ import { useChatTrigger } from '@/store/ChatContext';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
+
+const PACKAGING_OPTIONS: ProductAccessoryOption[] = [
+  {
+    id: 'no_box',
+    name: 'Không hộp',
+    emoji: '🛍️',
+    priceDelta: 0,
+  },
+  {
+    id: 'gift_box_letter',
+    name: 'Hộp quà + Thư tay',
+    emoji: '🎁',
+    priceDelta: 15000,
+  },
+];
 
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
@@ -62,6 +93,29 @@ export const ProductCard = memo(function ProductCard({
   const fav = isFavorite(product.id);
   const [justAdded, setJustAdded] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showQuickOptionModal, setShowQuickOptionModal] = useState(false);
+  const [quickColorId, setQuickColorId] = useState<string | null>(
+    product.colorOptions?.[0]?.id ?? null
+  );
+  const [quickAccessoryId, setQuickAccessoryId] = useState<string>('no_box');
+  const [quickQty, setQuickQty] = useState<number>(1);
+
+  const colorOptions: ProductColorOption[] = useMemo(
+    () => product.colorOptions ?? [],
+    [product.colorOptions]
+  );
+  const activeQuickColor: ProductColorOption | null =
+    colorOptions.find((c) => c.id === quickColorId) ?? colorOptions[0] ?? null;
+  const activeQuickAccessory: ProductAccessoryOption =
+    PACKAGING_OPTIONS.find((a) => a.id === quickAccessoryId) ??
+    PACKAGING_OPTIONS[0];
+  const quickBasePrice =
+    activeQuickColor?.price && Number(activeQuickColor.price) > 0
+      ? Number(activeQuickColor.price)
+      : product.price;
+  const quickAccessoryDelta = activeQuickAccessory?.priceDelta ?? 0;
+  const quickEffectivePrice = quickBasePrice + quickAccessoryDelta;
+  const quickPreviewImage = activeQuickColor?.image || product.image;
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScale = useRef(new Animated.Value(1)).current;
@@ -76,13 +130,13 @@ export const ProductCard = memo(function ProductCard({
   const cardWidth =
     variant === 'carousel'
       ? isDesktop
-        ? 236
-        : 176
+        ? 254
+        : 182
       : gridCardWidth;
 
   const imageHeight =
     variant === 'carousel'
-      ? Math.round(cardWidth * 0.92)
+      ? Math.round(cardWidth * 0.9)
       : Math.min(Math.round(cardWidth * 0.94), 232);
 
   const handlePressIn = () => {
@@ -101,7 +155,8 @@ export const ProductCard = memo(function ProductCard({
     }).start();
   };
 
-  const handleFavoritePress = () => {
+  const handleFavoritePress = (e?: any) => {
+    e?.stopPropagation?.();
     Animated.sequence([
       Animated.spring(heartScale, {
         toValue: 1.3,
@@ -118,13 +173,39 @@ export const ProductCard = memo(function ProductCard({
     toggleFavorite(product.id);
   };
 
-  const handleQuickAdd = () => {
-    addToCart(product, 1);
-    setJustAdded(true);
-    setTimeout(() => setJustAdded(false), 950);
+  const handleOpenQuickAdd = (e?: any) => {
+    e?.stopPropagation?.();
+    setQuickColorId(product.colorOptions?.[0]?.id ?? null);
+    setQuickAccessoryId('no_box');
+    setQuickQty(1);
+    setShowQuickOptionModal(true);
   };
 
-  const handleAdminEdit = () => {
+  const handleConfirmQuickAdd = () => {
+    const colorId = activeQuickColor?.id ?? 'c1';
+    const accId = activeQuickAccessory?.id ?? 'no_box';
+    const variantProduct: Product = {
+      ...product,
+      id: `${product.id}__${colorId}__${accId}`,
+      baseProductId: product.id,
+      color: activeQuickColor ? activeQuickColor.name : product.color,
+      selectedColorId: activeQuickColor?.id,
+      selectedColorName: activeQuickColor?.name ?? product.color,
+      selectedColorHex: activeQuickColor?.hex,
+      selectedAccessoryId: activeQuickAccessory?.id,
+      selectedAccessoryName: activeQuickAccessory?.name,
+      selectedAccessoryEmoji: activeQuickAccessory?.emoji,
+      image: activeQuickColor?.image || product.image,
+      price: quickEffectivePrice,
+    };
+    addToCart(variantProduct, quickQty);
+    setShowQuickOptionModal(false);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1100);
+  };
+
+  const handleAdminEdit = (e?: any) => {
+    e?.stopPropagation?.();
     router.push(`/edit-product/${product.id}`);
   };
 
@@ -259,7 +340,11 @@ export const ProductCard = memo(function ProductCard({
 
           <View style={styles.priceRow}>
             <Text
-              style={[styles.price, !isDesktop && styles.priceMobile]}
+              style={[
+                styles.price,
+                variant === 'carousel' && styles.priceCarousel,
+                !isDesktop && styles.priceMobile,
+              ]}
               numberOfLines={1}>
               {formatVND(product.price)}
             </Text>
@@ -273,7 +358,7 @@ export const ProductCard = memo(function ProductCard({
                   }}
                   activeOpacity={0.75}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                  <Share2 size={isDesktop ? 13.5 : 13} color="#3D2B1F" strokeWidth={2.3} />
+                  <Share2 size={isDesktop ? 13 : 12.5} color="#3D2B1F" strokeWidth={2.3} />
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -284,7 +369,7 @@ export const ProductCard = memo(function ProductCard({
                 }}
                 activeOpacity={0.75}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <MessageCircle size={isDesktop ? 14 : 13} color="#3D2B1F" strokeWidth={2.3} />
+                <MessageCircle size={isDesktop ? 13.5 : 13} color="#3D2B1F" strokeWidth={2.3} />
               </TouchableOpacity>
               {isAdmin ? (
                 isDesktop ? (
@@ -305,13 +390,13 @@ export const ProductCard = memo(function ProductCard({
                     isDesktop && styles.quickAddBtnDesktop,
                     justAdded && styles.quickAddBtnAdded,
                   ]}
-                  onPress={handleQuickAdd}
+                  onPress={handleOpenQuickAdd}
                   activeOpacity={0.75}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                   {justAdded ? (
-                    <Check size={isDesktop ? 15 : 14} color="#3D2B1F" strokeWidth={2.8} />
+                    <Check size={isDesktop ? 14 : 14} color="#3D2B1F" strokeWidth={2.8} />
                   ) : (
-                    <Plus size={isDesktop ? 15 : 14} color="#3D2B1F" strokeWidth={2.6} />
+                    <Plus size={isDesktop ? 14 : 14} color="#3D2B1F" strokeWidth={2.6} />
                   )}
                   {isDesktop && (
                     <Text style={styles.quickAddText}>
@@ -324,6 +409,203 @@ export const ProductCard = memo(function ProductCard({
           </View>
         </View>
       </Pressable>
+
+      {/* Compact Quick Option Picker Modal when clicking "+ Thêm" */}
+      {showQuickOptionModal ? (
+        <Modal
+          visible={showQuickOptionModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowQuickOptionModal(false)}>
+          <Pressable
+            style={[
+              styles.quickModalOverlay,
+              !isDesktop && styles.quickModalOverlayMobile,
+            ]}
+            onPress={() => setShowQuickOptionModal(false)}>
+            <Pressable
+              style={[
+                styles.quickModalCard,
+                !isDesktop && styles.quickModalCardMobile,
+              ]}
+              onPress={(e: any) => e?.stopPropagation?.()}>
+              {/* Header: Product Preview + Live Price + Close */}
+              <View style={styles.quickModalHeader}>
+                <View style={styles.quickModalThumbWrap}>
+                  {quickPreviewImage ? (
+                    <Image
+                      source={
+                        typeof quickPreviewImage === 'string'
+                          ? { uri: quickPreviewImage }
+                          : (quickPreviewImage as any)
+                      }
+                      style={styles.quickModalThumb}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={{ fontSize: 26 }}>
+                      {getCategoryEmoji(product.category)}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.quickModalHeaderInfo}>
+                  <Text style={styles.quickModalTitle} numberOfLines={2}>
+                    {product.name}
+                  </Text>
+                  <View style={styles.quickModalPriceRow}>
+                    <Text style={styles.quickModalPrice}>
+                      {formatVND(quickEffectivePrice)}
+                    </Text>
+                    {quickAccessoryDelta > 0 && (
+                      <Text style={styles.quickModalPriceSub}>
+                        (gồm +{formatVND(quickAccessoryDelta)} hộp quà)
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowQuickOptionModal(false);
+                      router.push(`/product/${product.id}`);
+                    }}
+                    activeOpacity={0.7}>
+                    <Text style={styles.quickModalDetailLink}>
+                      Xem trang chi tiết sản phẩm ›
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.quickModalCloseBtn}
+                  onPress={() => setShowQuickOptionModal(false)}
+                  activeOpacity={0.75}>
+                  <X size={16} color="#4A3728" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.quickModalBody}
+                showsVerticalScrollIndicator={false}>
+                {/* 1. Color / Variant Options */}
+                {colorOptions.length > 0 && (
+                  <View style={styles.quickOptionGroup}>
+                    <Text style={styles.quickOptionLabel}>
+                      Chọn mẫu / màu:{' '}
+                      <Text style={styles.quickOptionValue}>
+                        {activeQuickColor?.name ?? product.color}
+                      </Text>
+                    </Text>
+                    <View style={styles.quickPillsWrap}>
+                      {colorOptions.map((c) => {
+                        const isSelected = activeQuickColor?.id === c.id;
+                        return (
+                          <TouchableOpacity
+                            key={c.id}
+                            style={[
+                              styles.quickPill,
+                              isSelected && styles.quickPillSelected,
+                            ]}
+                            onPress={() => setQuickColorId(c.id)}
+                            activeOpacity={0.8}>
+                            <View
+                              style={[
+                                styles.quickPillDot,
+                                { backgroundColor: c.hex },
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.quickPillText,
+                                isSelected && styles.quickPillTextSelected,
+                              ]}>
+                              {c.price &&
+                              Number(c.price) > 0 &&
+                              colorOptions.length > 1
+                                ? `${c.name} • ${formatVND(Number(c.price))}`
+                                : c.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {/* 2. Packaging Options (Không hộp vs Hộp quà + Thư tay +15k) */}
+                <View style={styles.quickOptionGroup}>
+                  <Text style={styles.quickOptionLabel}>
+                    Đóng gói:{' '}
+                    <Text style={styles.quickOptionValue}>
+                      {activeQuickAccessory.emoji} {activeQuickAccessory.name}
+                    </Text>
+                  </Text>
+                  <View style={styles.quickPillsWrap}>
+                    {PACKAGING_OPTIONS.map((acc) => {
+                      const isSelected = activeQuickAccessory.id === acc.id;
+                      const delta = acc.priceDelta ?? 0;
+                      return (
+                        <TouchableOpacity
+                          key={acc.id}
+                          style={[
+                            styles.quickPill,
+                            isSelected && styles.quickPillSelected,
+                          ]}
+                          onPress={() => setQuickAccessoryId(acc.id)}
+                          activeOpacity={0.8}>
+                          <Text
+                            style={[
+                              styles.quickPillText,
+                              isSelected && styles.quickPillTextSelected,
+                            ]}>
+                            {acc.emoji} {acc.name}
+                            {delta > 0 ? ` (+${formatVND(delta)})` : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </ScrollView>
+
+              {/* Footer: Quantity + Confirm Add to Cart */}
+              <View style={styles.quickModalFooter}>
+                <View style={styles.quickQtyBox}>
+                  <TouchableOpacity
+                    style={styles.quickQtyBtn}
+                    onPress={() => setQuickQty(Math.max(1, quickQty - 1))}>
+                    <Minus size={14} color="#4A3728" />
+                  </TouchableOpacity>
+                  <Text style={styles.quickQtyText}>{quickQty}</Text>
+                  <TouchableOpacity
+                    style={styles.quickQtyBtn}
+                    onPress={() =>
+                      setQuickQty(
+                        Math.min(
+                          quickQty + 1,
+                          product.isMadeToOrder !== false
+                            ? 99
+                            : Math.max(1, product.quantity)
+                        )
+                      )
+                    }>
+                    <Plus size={14} color="#4A3728" />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.quickConfirmBtn}
+                  onPress={handleConfirmQuickAdd}
+                  activeOpacity={0.85}>
+                  <ShoppingCart size={15} color="#FFFDF9" />
+                  <Text style={styles.quickConfirmBtnText} numberOfLines={1}>
+                    Thêm vào giỏ • {formatVND(quickEffectivePrice * quickQty)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
 
       {showShareModal ? (
         <ShareModal
@@ -508,6 +790,9 @@ const styles = StyleSheet.create({
     color: '#3D2B1F',
     flexShrink: 1,
   },
+  priceCarousel: {
+    fontSize: 14.5,
+  },
   priceMobile: {
     fontSize: 14,
   },
@@ -518,9 +803,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   pingCardBtn: {
-    width: 31,
-    height: 31,
-    borderRadius: 10,
+    width: 29,
+    height: 29,
+    borderRadius: 9,
     backgroundColor: '#F3ECE2',
     borderWidth: 1,
     borderColor: '#DFCBB5',
@@ -533,16 +818,16 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   quickAddBtn: {
-    minWidth: 31,
-    height: 31,
-    borderRadius: 10,
+    minWidth: 29,
+    height: 29,
+    borderRadius: 9,
     backgroundColor: '#D8C3AD',
     borderWidth: 1,
     borderColor: '#C5AC92',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
     paddingHorizontal: 8,
   },
   quickAddBtnMobile: {
@@ -553,16 +838,203 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   quickAddBtnDesktop: {
-    paddingHorizontal: 11,
-    borderRadius: 12,
+    paddingHorizontal: 9,
+    borderRadius: 10,
   },
   quickAddBtnAdded: {
     backgroundColor: '#DCEBD6',
     borderColor: '#A3C896',
   },
   quickAddText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  quickModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(42, 30, 21, 0.32)',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 24,
+  },
+  quickModalOverlayMobile: {
+    alignItems: 'center',
+    padding: 12,
+  },
+  quickModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    maxHeight: '84%',
+    backgroundColor: '#FFFDF9',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    padding: 16,
+    gap: 12,
+    ...SHADOWS.large,
+  },
+  quickModalCardMobile: {
+    maxWidth: 420,
+    borderRadius: 20,
+    padding: 14,
+  },
+  quickModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  quickModalThumbWrap: {
+    width: 62,
+    height: 62,
+    borderRadius: 14,
+    backgroundColor: '#F3ECE2',
+    borderWidth: 1,
+    borderColor: '#E5D6C5',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickModalThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  quickModalHeaderInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  quickModalTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#2C1E14',
+    lineHeight: 19,
+  },
+  quickModalPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  quickModalPrice: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  quickModalPriceSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7A5A40',
+  },
+  quickModalDetailLink: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#6E5239',
+    marginTop: 1,
+  },
+  quickModalCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F3ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickModalBody: {
+    maxHeight: 260,
+  },
+  quickOptionGroup: {
+    marginBottom: 12,
+    gap: 7,
+  },
+  quickOptionLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#5C4332',
+  },
+  quickOptionValue: {
+    fontWeight: '800',
+    color: '#2C1E14',
+  },
+  quickPillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  quickPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: '#F6F1E9',
+    borderWidth: 1,
+    borderColor: '#E2D4C3',
+  },
+  quickPillSelected: {
+    backgroundColor: '#3D2B1F',
+    borderColor: '#3D2B1F',
+  },
+  quickPillDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  quickPillText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#3D2B1F',
+  },
+  quickPillTextSelected: {
+    color: '#FFFDF9',
+  },
+  quickModalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#EFE6DA',
+  },
+  quickQtyBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F6F1E9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2D4C3',
+    height: 40,
+    paddingHorizontal: 4,
+  },
+  quickQtyBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickQtyText: {
+    minWidth: 22,
+    textAlign: 'center',
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#2C1E14',
+  },
+  quickConfirmBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#3D2B1F',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+  },
+  quickConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFDF9',
   },
 });

@@ -61,13 +61,27 @@ function resolveImgUri(src: any): string | null {
 }
 
 export default function ProductDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const {
+    id,
+    editCartItemId,
+    initialColorId,
+    initialAccessoryId,
+    initialQty,
+  } = useLocalSearchParams<{
+    id: string;
+    editCartItemId?: string;
+    initialColorId?: string;
+    initialAccessoryId?: string;
+    initialQty?: string;
+  }>();
   const router = useRouter();
   const {
     products,
     toggleFavorite,
     isFavorite,
     addToCart,
+    removeFromCart,
+    updateCartQuantity,
     addReview,
     removeProduct,
     cartCount,
@@ -98,12 +112,15 @@ export default function ProductDetailScreen() {
   const product = products.find((p) => p.id === id);
 
   useEffect(() => {
-    setQuantity(1);
-    setSelectedColorId(null);
-    setSelectedAccessoryId(null);
+    const parsedQty = Math.max(1, Math.min(99, Number(initialQty) || 1));
+    setQuantity(parsedQty);
+    setSelectedColorId(initialColorId ? String(initialColorId) : null);
+    setSelectedAccessoryId(
+      initialAccessoryId ? String(initialAccessoryId) : null
+    );
     setActiveGalleryIndex(0);
     setShowReviewForm(false);
-  }, [id]);
+  }, [id, initialColorId, initialAccessoryId, initialQty]);
 
   const colorOptions: ProductColorOption[] = useMemo(
     () => product?.colorOptions ?? [],
@@ -188,6 +205,16 @@ export default function ProductDetailScreen() {
 
     return items;
   }, [product, colorOptions, accessoryOptions]);
+
+  useEffect(() => {
+    if (!initialColorId || galleryItems.length === 0) return;
+    const matchIdx = galleryItems.findIndex(
+      (g) => g.colorId === String(initialColorId) && g.zoomMode !== 'closeup'
+    );
+    if (matchIdx !== -1) {
+      setActiveGalleryIndex(matchIdx);
+    }
+  }, [initialColorId, galleryItems]);
 
   const relatedProducts = useMemo(() => {
     if (!product) return [];
@@ -317,7 +344,18 @@ export default function ProductDetailScreen() {
       Alert.alert('Không đủ hàng', `Chỉ còn ${product.quantity} sản phẩm trong kho.`);
       return;
     }
-    await addToCart(buildVariantProduct(), quantity);
+    const nextVariant = buildVariantProduct();
+    if (editCartItemId) {
+      if (editCartItemId === nextVariant.id) {
+        updateCartQuantity(nextVariant.id, quantity);
+      } else {
+        removeFromCart(String(editCartItemId));
+        await addToCart(nextVariant, quantity);
+      }
+      router.push('/cart');
+      return;
+    }
+    await addToCart(nextVariant, quantity);
     router.push('/cart');
   };
 
@@ -754,7 +792,9 @@ export default function ProductDetailScreen() {
                   onPress={handleAddToCart}
                   activeOpacity={0.85}>
                   <ShoppingCart size={16} color="#4A3728" />
-                  <Text style={styles.cartBtnText}>{PD_ADD_TO_CART}</Text>
+                  <Text style={styles.cartBtnText}>
+                    {editCartItemId ? 'Cập nhật giỏ hàng' : PD_ADD_TO_CART}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -950,7 +990,7 @@ export default function ProductDetailScreen() {
               <TouchableOpacity
                 style={styles.qtyBtn}
                 onPress={() =>
-                  setQuantity(Math.min(quantity + 1, product.quantity))
+                  setQuantity(Math.min(quantity + 1, maxOrderQty))
                 }>
                 <Plus size={16} color="#4A3728" />
               </TouchableOpacity>
@@ -959,7 +999,7 @@ export default function ProductDetailScreen() {
               style={styles.cartBtn}
               onPress={handleAddToCart}>
               <Text style={styles.cartBtnText} numberOfLines={1}>
-                {PD_ADD_TO_CART}
+                {editCartItemId ? 'Cập nhật giỏ hàng' : PD_ADD_TO_CART}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.buyBtn} onPress={handleBuyNow}>

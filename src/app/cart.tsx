@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
 import { useAuth } from '@/store/AuthContext';
+import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { BottomNav } from '@/components/BottomNav';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
@@ -64,7 +65,34 @@ export default function CartScreen() {
     cartHydrated,
   } = useShop();
   const { isAuthenticated } = useAuth();
+  const { shippingConfig } = usePaymentMethods();
   const [lastClearedItems, setLastClearedItems] = useState<CartItem[]>([]);
+
+  const isFreeShip =
+    shippingConfig.freeShippingEnabled &&
+    cartTotal >= shippingConfig.freeShippingThreshold;
+  const shippingFee =
+    cart.length === 0
+      ? 0
+      : isFreeShip
+        ? 0
+        : shippingConfig.standardShippingFee;
+  const finalTotal = cartTotal + shippingFee;
+
+  const handleEditCartItemOptions = (item: CartItem) => {
+    const baseId = String(
+      item.product.baseProductId || item.product.id
+    ).split('__')[0];
+    router.push({
+      pathname: `/product/${baseId}` as any,
+      params: {
+        editCartItemId: item.product.id,
+        initialColorId: item.product.selectedColorId || '',
+        initialAccessoryId: item.product.selectedAccessoryId || 'no_box',
+        initialQty: String(item.quantity),
+      },
+    });
+  };
 
   const handleCheckout = () => {
     if (cart.length === 0) {
@@ -118,7 +146,10 @@ export default function CartScreen() {
     return (
       <Swipeable renderRightActions={() => renderRightActions(item)}>
         <View style={[styles.cartItem, isMobile && styles.cartItemMobile]}>
-          <View style={styles.itemImage}>
+          <TouchableOpacity
+            style={styles.itemImage}
+            onPress={() => handleEditCartItemOptions(item)}
+            activeOpacity={0.8}>
             {item.product.image ? (
               <Image
                 source={
@@ -134,8 +165,11 @@ export default function CartScreen() {
                 {getCategoryEmoji(item.product.category)}
               </Text>
             )}
-          </View>
-          <View style={styles.itemInfo}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.itemInfo}
+            onPress={() => handleEditCartItemOptions(item)}
+            activeOpacity={0.75}>
             <Text style={styles.itemName} numberOfLines={2}>
               {item.product.name}
             </Text>
@@ -163,12 +197,15 @@ export default function CartScreen() {
                     : '🛍️ Không hộp'}
                 </Text>
               </View>
+              <View style={styles.changeOptionPill}>
+                <Text style={styles.changeOptionText}>Đổi mẫu / hộp ✎</Text>
+              </View>
             </View>
 
             <Text style={styles.itemPrice}>
               {formatVND(item.product.price)} {CART_PER_PIECE}
             </Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.itemActions}>
             <View style={styles.qtyAndDeleteRow}>
               <View style={styles.qtyControl}>
@@ -246,11 +283,19 @@ export default function CartScreen() {
       </View>
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Phí vận chuyển</Text>
-        <Text style={styles.summaryValue}>Miễn phí</Text>
+        <Text style={styles.summaryValue}>
+          {isFreeShip ? 'Miễn phí' : formatVND(shippingFee)}
+        </Text>
       </View>
+      {shippingConfig.freeShippingEnabled && !isFreeShip && (
+        <Text style={styles.freeShipHint}>
+          🚚 Mua thêm {formatVND(shippingConfig.freeShippingThreshold - cartTotal)}{' '}
+          để được Freeship (Đơn từ {formatVND(shippingConfig.freeShippingThreshold)})
+        </Text>
+      )}
       <View style={[styles.summaryRow, styles.totalRow]}>
         <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
-        <Text style={styles.totalValue}>{formatVND(cartTotal)}</Text>
+        <Text style={styles.totalValue}>{formatVND(finalTotal)}</Text>
       </View>
     </View>
   ) : null;
@@ -313,7 +358,7 @@ export default function CartScreen() {
             ]}>
             <View>
               <Text style={styles.totalText}>{CHECKOUT_TOTAL}</Text>
-              <Text style={styles.totalAmount}>{formatVND(cartTotal)}</Text>
+              <Text style={styles.totalAmount}>{formatVND(finalTotal)}</Text>
             </View>
             <TouchableOpacity
               style={styles.checkoutBtn}
@@ -572,6 +617,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#5C4738',
     flexShrink: 1,
+  },
+  changeOptionPill: {
+    backgroundColor: '#EFE6D9',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#DCCBB6',
+  },
+  changeOptionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  freeShipHint: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7A5A40',
+    backgroundColor: '#FAF4EC',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    marginTop: 4,
   },
   itemCategory: {
     fontSize: 12,
