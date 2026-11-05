@@ -403,19 +403,51 @@ async function resolveAuthoritativeProductPrices(baseIds) {
   if (cleanIds.length === 0) return priceMap;
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/products?select=id,price,name&limit=500`, {
-      method: 'GET',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-      },
-    });
+    const idFilter = cleanIds.map((id) => encodeURIComponent(id)).join(',');
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/products?id=in.(${idFilter})&select=id,price,name,tags&limit=200`,
+      {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      }
+    );
     if (res.ok) {
       const rows = await res.json();
       if (Array.isArray(rows)) {
         for (const row of rows) {
           if (row && row.id && Number(row.price) > 0) {
-            priceMap.set(String(row.id), Number(row.price));
+            const baseIdStr = String(row.id);
+            priceMap.set(baseIdStr, Number(row.price));
+            if (Array.isArray(row.tags)) {
+              for (const tag of row.tags) {
+                if (typeof tag === 'string' && tag.startsWith('__tcl_variants_v1__:')) {
+                  try {
+                    const parsedMeta = JSON.parse(tag.slice('__tcl_variants_v1__:'.length));
+                    if (parsedMeta && Array.isArray(parsedMeta.colorOptions)) {
+                      for (const co of parsedMeta.colorOptions) {
+                        const vPrice = Number(co && co.price);
+                        if (vPrice > 0) {
+                          if (co.id) {
+                            priceMap.set(`${baseIdStr}__${String(co.id)}`, vPrice);
+                          }
+                          if (co.name) {
+                            priceMap.set(
+                              `${baseIdStr}__name:${String(co.name).trim().toLowerCase()}`,
+                              vPrice
+                            );
+                          }
+                        }
+                      }
+                    }
+                  } catch {
+                    // ignore malformed variant metadata
+                  }
+                }
+              }
+            }
           }
         }
       }

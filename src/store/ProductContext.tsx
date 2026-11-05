@@ -650,7 +650,7 @@ function productsSignature(list: Product[]): string {
   return list
     .map(
       (p) =>
-        `${p.id}:${p.name}:${p.price}:${p.quantity}:${p.isMadeToOrder !== false ? 1 : 0}:${p.rating}:${p.reviews?.length || 0}:${p.colorOptions?.length || 0}:${p.accessoryOptions?.length || 0}:${p.gallery?.length || 0}:${typeof p.image === 'string' ? p.image.length : 1}`
+        `${p.id}:${p.name}:${p.price}:${p.quantity}:${p.isMadeToOrder !== false ? 1 : 0}:${p.rating}:${p.reviews?.length || 0}:${p.colorOptions?.map((c) => `${c.id}_${c.name}_${c.price || ''}`).join(',') || 0}:${p.accessoryOptions?.length || 0}:${p.gallery?.length || 0}:${typeof p.image === 'string' ? p.image.length : 1}`
     )
     .join('|');
 }
@@ -705,6 +705,12 @@ function toDbProduct(product: Product) {
         id: c.id,
         name: c.name,
         hex: c.hex,
+        price:
+          c.price !== undefined && Number(c.price) > 0
+            ? Number(c.price)
+            : Number(product.price) > 0
+            ? Number(product.price)
+            : undefined,
         image:
           typeof c.image === 'string' &&
           (c.image.startsWith('data:image/') || c.image.startsWith('http'))

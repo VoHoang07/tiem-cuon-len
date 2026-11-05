@@ -141,11 +141,25 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       ]);
 
       const baseId = String(rawProd.baseProductId || rawProd.id || '').split('__')[0];
+      const rawIdParts = String(rawProd.id || '').split('__');
+      const selectedColorIdCandidate = String(
+        rawProd.selectedColorId || (rawIdParts.length >= 2 ? rawIdParts[1] : '')
+      ).trim();
+      const selectedColorNameCandidate = String(
+        rawProd.selectedColorName || rawProd.color || ''
+      )
+        .trim()
+        .toLowerCase();
       const qty = Math.max(1, Math.min(99, Math.round(Number(it.quantity) || 1)));
 
       // RED TEAM FIX: Never fall back to client-supplied `rawProd.price`!
-      // Require product ID to exist in the authoritative server catalog / Supabase DB.
-      const serverUnitPrice = priceMap.get(baseId);
+      // Require product ID (or variant ID/name) to exist in the authoritative server catalog / Supabase DB.
+      const serverUnitPrice =
+        (selectedColorIdCandidate &&
+          priceMap.get(`${baseId}__${selectedColorIdCandidate}`)) ||
+        (selectedColorNameCandidate &&
+          priceMap.get(`${baseId}__name:${selectedColorNameCandidate}`)) ||
+        priceMap.get(baseId);
       if (!baseId || typeof serverUnitPrice !== 'number' || serverUnitPrice <= 0) {
         await logServerAuditEvent(req, {
           eventType: 'ADMIN_SECURITY_ACTION',

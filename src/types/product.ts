@@ -15,6 +15,7 @@ export interface ProductColorOption {
   hex: string;
   secondaryHex?: string;
   image?: string | null;
+  price?: number;
 }
 
 export interface ProductAccessoryOption {

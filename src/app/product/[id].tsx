@@ -233,7 +233,11 @@ export default function ProductDetailScreen() {
   };
 
   const accessoryDelta = activeAccessory?.priceDelta ?? 0;
-  const effectivePrice = product.price + accessoryDelta;
+  const baseVariantPrice =
+    activeColor?.price && Number(activeColor.price) > 0
+      ? Number(activeColor.price)
+      : product.price;
+  const effectivePrice = baseVariantPrice + accessoryDelta;
 
   const buildVariantProduct = (): Product => {
     const colorId = activeColor?.id ?? 'c1';
@@ -658,7 +662,9 @@ export default function ProductDetailScreen() {
                             styles.optionPillText,
                             isSelected && styles.optionPillTextSelected,
                           ]}>
-                          {c.name}
+                          {c.price && Number(c.price) > 0 && colorOptions.length > 1
+                            ? `${c.name} • ${formatVND(Number(c.price))}`
+                            : c.name}
                         </Text>
                       </TouchableOpacity>
                     );

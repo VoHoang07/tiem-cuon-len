@@ -62,12 +62,18 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     colorOptions?.[0];
 
   const resolvedImage = colorOpt?.image || p.image || source.image || mock?.image || null;
-  // Always prefer live catalog base price when available so admin price edits apply immediately
-  const resolvedPrice = liveProduct
-    ? liveProduct.price
-    : p.price && p.price > 0
-      ? p.price
-      : source.price;
+  // Always prefer live catalog variant price (or base price) when available so admin price edits apply immediately
+  const variantLivePrice =
+    colorOpt?.price && Number(colorOpt.price) > 0
+      ? Number(colorOpt.price)
+      : undefined;
+  const resolvedPrice =
+    variantLivePrice ??
+    (liveProduct
+      ? liveProduct.price
+      : p.price && p.price > 0
+        ? p.price
+        : source.price);
 
   return {
     ...ci,

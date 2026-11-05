@@ -592,6 +592,10 @@ export function ProductStudioForm({
     if (initialProduct?.colorOptions && initialProduct.colorOptions.length > 0) {
       return initialProduct.colorOptions.map((c, idx) => ({
         ...c,
+        price:
+          c.price !== undefined && Number(c.price) > 0
+            ? Number(c.price)
+            : initialProduct.price,
         image: c.image || (idx === 0 ? initialProduct.image : undefined),
       }));
     }
@@ -601,6 +605,7 @@ export function ProductStudioForm({
           id: 'c_1',
           name: initialProduct.color || 'Kem Sữa',
           hex: inferColorHex(initialProduct.color || 'Kem Sữa', 0),
+          price: initialProduct.price,
           image: initialProduct.image,
         },
       ];
@@ -651,7 +656,20 @@ export function ProductStudioForm({
         d.colorOptions.every(
           (c) => !c.image && (c.name === 'Kem Sữa' || c.name === 'Hồng Phấn')
         );
-      setColorOptions(isLegacyEmptyDefaults ? [] : d.colorOptions);
+      const fallbackDraftPrice = Number((d.price || '').replace(/[^0-9]/g, ''));
+      setColorOptions(
+        isLegacyEmptyDefaults
+          ? []
+          : d.colorOptions.map((c) => ({
+              ...c,
+              price:
+                c.price !== undefined && Number(c.price) > 0
+                  ? Number(c.price)
+                  : fallbackDraftPrice > 0
+                  ? fallbackDraftPrice
+                  : undefined,
+            }))
+      );
     } else {
       setColorOptions([]);
     }
@@ -992,15 +1010,20 @@ export function ProductStudioForm({
     });
     setColorOptions(next);
 
-    // Automatically advance to the next uploaded photo that still needs a color assigned
-    const nextUnassignedIdx = next.findIndex(
-      (c, i) =>
-        i > safeColorIdx &&
-        Boolean(c.image) &&
-        (!c.hex || c.name.trim().toLowerCase() === 'chưa chọn màu')
-    );
-    if (nextUnassignedIdx !== -1) {
-      setActiveSlot({ type: 'color', index: nextUnassignedIdx });
+    // Only auto-advance to the next photo if the current photo already has its price set
+    if (activeColor.price && Number(activeColor.price) > 0) {
+      const nextUnassignedIdx = next.findIndex(
+        (c, i) =>
+          i > safeColorIdx &&
+          Boolean(c.image) &&
+          (!c.hex ||
+            c.name.trim().toLowerCase() === 'chưa chọn màu' ||
+            !c.price ||
+            Number(c.price) <= 0)
+      );
+      if (nextUnassignedIdx !== -1) {
+        setActiveSlot({ type: 'color', index: nextUnassignedIdx });
+      }
     }
   };
 
@@ -1038,14 +1061,8 @@ export function ProductStudioForm({
       Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên sản phẩm.');
       return;
     }
-    const numPrice = Number(price.replace(/[^0-9]/g, ''));
-    if (!numPrice || numPrice <= 0) {
-      Alert.alert('Thiếu giá bán', 'Vui lòng nhập giá bán hợp lệ (VNĐ).');
-      return;
-    }
 
-    setIsSubmitting(true);
-    try {
+    const fallbackPriceNum = Number(price.replace(/[^0-9]/g, ''));
 
     const cleanColors = colorOptions
       .filter((c) => Boolean(c.image) || c.name.trim().length > 0)
@@ -1053,6 +1070,12 @@ export function ProductStudioForm({
         const rawName = c.name.trim();
         const isUnset =
           !rawName || rawName.toLowerCase() === 'chưa chọn màu';
+        const resolvedVariantPrice =
+          c.price !== undefined && Number(c.price) > 0
+            ? Number(c.price)
+            : fallbackPriceNum > 0
+            ? fallbackPriceNum
+            : undefined;
         return {
           ...c,
           id: c.id || `c_${idx + 1}`,
@@ -1062,8 +1085,40 @@ export function ProductStudioForm({
               : `Mẫu #${idx + 1}`
             : rawName,
           hex: c.hex && c.hex.trim().length > 0 ? c.hex : '#F5EBE0',
+          price: resolvedVariantPrice,
         };
       });
+
+    if (cleanColors.length === 0) {
+      Alert.alert(
+        'Chưa có ảnh mẫu sản phẩm',
+        'Vui lòng gửi ít nhất 1 ảnh sản phẩm lên ở phần "Ảnh sản phẩm & Chọn màu từng ảnh", sau đó nhập giá riêng cho từng mẫu.'
+      );
+      return;
+    }
+
+    const missingPriceIdx = cleanColors.findIndex(
+      (c) => !c.price || Number(c.price) <= 0
+    );
+    if (missingPriceIdx !== -1) {
+      setActiveSlot({ type: 'color', index: missingPriceIdx });
+      Alert.alert(
+        'Thiếu giá bán từng mẫu',
+        `Vui lòng nhập giá bán (VNĐ) cho Ảnh #${missingPriceIdx + 1} (${cleanColors[missingPriceIdx].name}).`
+      );
+      return;
+    }
+
+    const numPrice =
+      Number(cleanColors[0]?.price) ||
+      cleanColors.reduce(
+        (min, c) =>
+          c.price && c.price > 0 && c.price < min ? c.price : min,
+        Number(cleanColors[0]?.price || 0)
+      );
+
+    setIsSubmitting(true);
+    try {
 
     const firstAvailableImg =
       coverImage ||
@@ -1648,29 +1703,16 @@ export function ProductStudioForm({
               />
             </View>
 
-            {/* Price + Material on 1 compact row */}
-            <View style={styles.compactRow}>
-              <View style={[styles.fieldBlock, { flex: 1 }]}>
-                <Text style={styles.fieldLabel}>Giá bán (VNĐ) *</Text>
-                <TextInput
-                  style={styles.priceInput}
-                  value={price}
-                  onChangeText={setPrice}
-                  placeholder="VD: 65000"
-                  placeholderTextColor={COLORS.lightText}
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.fieldBlock, { flex: 1.2 }]}>
-                <Text style={styles.fieldLabel}>Chất liệu</Text>
-                <TextInput
-                  style={styles.stdInput}
-                  value={material}
-                  onChangeText={setMaterial}
-                  placeholder="Len Cotton Milk"
-                  placeholderTextColor={COLORS.lightText}
-                />
-              </View>
+            {/* Material row (Price is now configured per individual uploaded product variant below) */}
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Chất liệu</Text>
+              <TextInput
+                style={styles.stdInput}
+                value={material}
+                onChangeText={setMaterial}
+                placeholder="Len Cotton Milk"
+                placeholderTextColor={COLORS.lightText}
+              />
             </View>
 
             {/* Stock / Order Mode Selector (Synchronized with Client) */}
@@ -1751,10 +1793,10 @@ export function ProductStudioForm({
 
             <View style={styles.divider} />
 
-            {/* COLOR OPTIONS (Photo-first workflow: Upload product photos first -> Pick color for each photo afterwards) */}
+            {/* COLOR OPTIONS (Photo-first workflow: Upload product photos first -> Pick color & individual price for each photo afterwards) */}
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>
-                Ảnh sản phẩm & Chọn màu từng ảnh ({colorOptions.length} ảnh đã tải lên)
+                Ảnh sản phẩm — Chỉnh màu & Giá bán riêng từng cái ({colorOptions.length} mẫu đã tải lên) *
               </Text>
 
               {/* STEP 1: Upload Product Photos First */}
@@ -1794,13 +1836,13 @@ export function ProductStudioForm({
                     activeOpacity={0.8}>
                     <Sparkles size={13} color="#4A3728" />
                     <Text style={styles.addOptionPillText}>
-                      Chọn màu cho ảnh bìa hiện tại
+                      Chọn màu & giá cho ảnh bìa hiện tại
                     </Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
 
-              {/* STEP 2: List of uploaded photos to pick a color for each */}
+              {/* STEP 2: List of uploaded photos to pick a color & price for each */}
               {colorOptions.length > 0 && (
                 <View style={styles.pillWrap}>
                   {colorOptions.map((c, idx) => {
@@ -1811,13 +1853,15 @@ export function ProductStudioForm({
                       !c.hex ||
                       !c.name.trim() ||
                       c.name.trim().toLowerCase() === 'chưa chọn màu';
+                    const hasVariantPrice = Boolean(c.price && Number(c.price) > 0);
+                    const needsAttention = isUnassigned || !hasVariantPrice;
                     return (
                       <TouchableOpacity
                         key={c.id || idx}
                         style={[
                           styles.optionPill,
                           selected && styles.optionPillSelected,
-                          isUnassigned &&
+                          needsAttention &&
                             !selected && {
                               borderColor: '#F59E0B',
                               backgroundColor: '#FFFBEB',
@@ -1870,7 +1914,7 @@ export function ProductStudioForm({
                           style={[
                             styles.optionPillText,
                             selected && styles.optionPillTextSelected,
-                            isUnassigned &&
+                            needsAttention &&
                               !selected && {
                                 color: '#B45309',
                                 fontWeight: '700',
@@ -1879,6 +1923,10 @@ export function ProductStudioForm({
                           numberOfLines={1}>
                           {`Ảnh #${idx + 1}: ${
                             isUnassigned ? 'Chưa chọn màu' : c.name
+                          } • ${
+                            hasVariantPrice
+                              ? `${Number(c.price).toLocaleString('vi-VN')}₫`
+                              : 'Chưa nhập giá'
                           }`}
                         </Text>
                       </TouchableOpacity>
@@ -1898,7 +1946,7 @@ export function ProductStudioForm({
                       Bước 1: Bấm vào đây để gửi ảnh sản phẩm lên trước
                     </Text>
                     <Text style={styles.emptyVariantPromptSub}>
-                      Bạn có thể chọn 1 hoặc nhiều ảnh sản phẩm cùng lúc. Sau khi ảnh tải lên xong, chỉ cần chạm vào bảng màu bên dưới để chọn màu cho từng ảnh.
+                      Bạn có thể chọn 1 hoặc nhiều ảnh sản phẩm cùng lúc. Sau khi ảnh tải lên xong, bạn chỉnh màu và nhập giá bán riêng cho từng ảnh bên dưới.
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -1951,13 +1999,13 @@ export function ProductStudioForm({
                       </View>
                     </TouchableOpacity>
 
-                    {/* Right side: Step label + Prev/Next photo + Name input + Change/Delete photo */}
+                    {/* Right side: Step label + Prev/Next photo + Name input + Per-Variant Price input */}
                     <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <View style={styles.activeColorStepMetaRow}>
                         <Text style={styles.activeColorStepLabel}>
                           {!activeColor.hex ||
                           activeColor.name.trim().toLowerCase() === 'chưa chọn màu'
-                            ? `Bước 2: Chọn màu bên dưới cho Ảnh #${safeColorIdx + 1}`
+                            ? `Bước 2: Chọn màu & giá riêng cho Ảnh #${safeColorIdx + 1}`
                             : `Ảnh #${safeColorIdx + 1} — Đã chọn màu: ${activeColor.name}`}
                         </Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -2034,7 +2082,7 @@ export function ProductStudioForm({
                           onChangeText={(txt) =>
                             handleUpdateActiveColor({ name: txt })
                           }
-                          placeholder="Chạm màu bên dưới hoặc tự gõ tên màu cho ảnh này..."
+                          placeholder="Chạm màu bên dưới hoặc tự gõ tên mẫu này..."
                           placeholderTextColor={COLORS.lightText}
                         />
                         <TouchableOpacity
@@ -2053,6 +2101,79 @@ export function ProductStudioForm({
                           onPress={() => handleRemoveColorOption(safeColorIdx)}>
                           <Trash2 size={14} color={COLORS.error} />
                         </TouchableOpacity>
+                      </View>
+
+                      {/* Per-variant individual price row */}
+                      <View style={styles.activeColorInputRow}>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '800',
+                            color: '#6E4F37',
+                            flexShrink: 0,
+                          }}>
+                          💰 Giá mẫu #{safeColorIdx + 1} (VNĐ) *:
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.activeColorNameInput,
+                            {
+                              borderColor:
+                                activeColor.price && Number(activeColor.price) > 0
+                                  ? '#B58969'
+                                  : '#F59E0B',
+                              backgroundColor: '#FFFDF9',
+                              color: '#6E4F37',
+                              fontWeight: '800',
+                            },
+                          ]}
+                          value={
+                            activeColor.price && Number(activeColor.price) > 0
+                              ? String(activeColor.price)
+                              : ''
+                          }
+                          onChangeText={(txt) => {
+                            const digits = txt.replace(/[^0-9]/g, '');
+                            handleUpdateActiveColor({
+                              price: digits ? Number(digits) : undefined,
+                            });
+                          }}
+                          placeholder="Nhập giá riêng mẫu này (VD: 45000)"
+                          placeholderTextColor={COLORS.lightText}
+                          keyboardType="numeric"
+                        />
+                        {activeColor.price && Number(activeColor.price) > 0 ? (
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '800',
+                              color: '#3D2B1F',
+                              flexShrink: 0,
+                            }}>
+                            {Number(activeColor.price).toLocaleString('vi-VN')}₫
+                          </Text>
+                        ) : null}
+                        {colorOptions.length > 1 &&
+                        activeColor.price &&
+                        Number(activeColor.price) > 0 ? (
+                          <TouchableOpacity
+                            style={styles.useSwatchNameMiniBtn}
+                            onPress={() => {
+                              const currentPrice = Number(activeColor.price);
+                              setColorOptions((prev) =>
+                                prev.map((item) =>
+                                  !item.price || Number(item.price) <= 0
+                                    ? { ...item, price: currentPrice }
+                                    : item
+                                )
+                              );
+                            }}
+                            activeOpacity={0.8}>
+                            <Text style={styles.useSwatchNameMiniBtnText}>
+                              Điền cho ảnh chưa có giá
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     </View>
                   </View>
