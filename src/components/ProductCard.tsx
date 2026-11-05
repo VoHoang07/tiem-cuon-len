@@ -38,6 +38,8 @@ import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
 
+const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-letter.jpg';
+
 const PACKAGING_OPTIONS: ProductAccessoryOption[] = [
   {
     id: 'no_box',
@@ -99,6 +101,7 @@ export const ProductCard = memo(function ProductCard({
   );
   const [quickAccessoryId, setQuickAccessoryId] = useState<string>('no_box');
   const [quickQty, setQuickQty] = useState<number>(1);
+  const [quickPreviewGiftBox, setQuickPreviewGiftBox] = useState<boolean>(false);
 
   const colorOptions: ProductColorOption[] = useMemo(
     () => product.colorOptions ?? [],
@@ -115,7 +118,9 @@ export const ProductCard = memo(function ProductCard({
       : product.price;
   const quickAccessoryDelta = activeQuickAccessory?.priceDelta ?? 0;
   const quickEffectivePrice = quickBasePrice + quickAccessoryDelta;
-  const quickPreviewImage = activeQuickColor?.image || product.image;
+  const quickPreviewImage = quickPreviewGiftBox
+    ? DEFAULT_GIFT_BOX_IMAGE
+    : activeQuickColor?.image || product.image;
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScale = useRef(new Animated.Value(1)).current;
@@ -177,6 +182,7 @@ export const ProductCard = memo(function ProductCard({
     e?.stopPropagation?.();
     setQuickColorId(product.colorOptions?.[0]?.id ?? null);
     setQuickAccessoryId('no_box');
+    setQuickPreviewGiftBox(false);
     setQuickQty(1);
     setShowQuickOptionModal(true);
   };
@@ -505,7 +511,10 @@ export const ProductCard = memo(function ProductCard({
                               styles.quickPill,
                               isSelected && styles.quickPillSelected,
                             ]}
-                            onPress={() => setQuickColorId(c.id)}
+                            onPress={() => {
+                              setQuickColorId(c.id);
+                              setQuickPreviewGiftBox(false);
+                            }}
                             activeOpacity={0.8}>
                             <View
                               style={[
@@ -550,7 +559,10 @@ export const ProductCard = memo(function ProductCard({
                             styles.quickPill,
                             isSelected && styles.quickPillSelected,
                           ]}
-                          onPress={() => setQuickAccessoryId(acc.id)}
+                          onPress={() => {
+                            setQuickAccessoryId(acc.id);
+                            setQuickPreviewGiftBox(acc.id === 'gift_box_letter');
+                          }}
                           activeOpacity={0.8}>
                           <Text
                             style={[

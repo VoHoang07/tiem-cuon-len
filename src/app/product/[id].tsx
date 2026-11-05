@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -52,6 +52,7 @@ import {
 
 const PD_BUY_NOW = 'Mua ngay';
 const MAX_WIDTH = 1040;
+export const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-letter.jpg';
 
 function resolveImgUri(src: any): string | null {
   if (!src) return null;
@@ -108,6 +109,13 @@ export default function ProductDetailScreen() {
   const [reviewText, setReviewText] = useState('');
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const thumbScrollRef = useRef<ScrollView | null>(null);
+  const thumbDragRef = useRef<{
+    isDown: boolean;
+    startX: number;
+    scrollLeft: number;
+    moved: boolean;
+  }>({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
 
   const product = products.find((p) => p.id === id);
 
@@ -144,7 +152,7 @@ export default function ProductDetailScreen() {
     []
   );
 
-  // Build clean gallery from all distinct color variant photos + extra gallery angles
+  // Build clean gallery from all distinct color variant photos + extra gallery angles + default Gift Box slide
   const galleryItems: ProductGalleryItem[] = useMemo(() => {
     if (!product) return [];
 
@@ -167,13 +175,16 @@ export default function ProductDetailScreen() {
       colorOptions.forEach((c, idx) => {
         const img = c.image || product.image;
         if (img) {
+          const isGiftNamed =
+            (c.name || '').toLowerCase().includes('hộp quà') ||
+            (c.name || '').toLowerCase().includes('thư tay');
           items.push({
             id: `g_color_${c.id || idx}`,
             label: c.name,
             angleTag: c.name,
             image: img,
-            colorId: c.id,
-            accessoryId: accessoryOptions[idx]?.id ?? a0?.id,
+            colorId: isGiftNamed ? undefined : c.id,
+            accessoryId: isGiftNamed ? 'gift_box_letter' : undefined,
             zoomMode: 'normal',
           });
         }
@@ -195,11 +206,31 @@ export default function ProductDetailScreen() {
     if (product.gallery && product.gallery.length > 0) {
       product.gallery.forEach((g, idx) => {
         if (g.image && g.zoomMode !== 'closeup') {
+          const isGiftGallery =
+            g.accessoryId === 'gift_box_letter' ||
+            (g.label || '').toLowerCase().includes('hộp quà') ||
+            (g.angleTag || '').toLowerCase().includes('hộp quà');
           items.push({
             ...g,
             id: g.id || `g_extra_${idx}`,
+            accessoryId: isGiftGallery ? 'gift_box_letter' : g.accessoryId,
           });
         }
+      });
+    }
+
+    // Always ensure every product has the default Gift Box + Thank You Card slide
+    const hasGiftBoxSlide = items.some(
+      (it) => it.accessoryId === 'gift_box_letter' || it.id === 'g_gift_box_default'
+    );
+    if (!hasGiftBoxSlide) {
+      items.push({
+        id: 'g_gift_box_default',
+        label: '🎁 Hộp quà + Thư tay',
+        angleTag: '🎁 Hộp quà + Thư tay',
+        image: DEFAULT_GIFT_BOX_IMAGE,
+        accessoryId: 'gift_box_letter',
+        zoomMode: 'normal',
       });
     }
 
@@ -215,6 +246,16 @@ export default function ProductDetailScreen() {
       setActiveGalleryIndex(matchIdx);
     }
   }, [initialColorId, galleryItems]);
+
+  useEffect(() => {
+    if (!thumbScrollRef.current) return;
+    const targetX = Math.max(0, activeGalleryIndex * 74 - 140);
+    try {
+      thumbScrollRef.current.scrollTo({ x: targetX, animated: true });
+    } catch {
+      // ignore
+    }
+  }, [activeGalleryIndex]);
 
   const relatedProducts = useMemo(() => {
     if (!product) return [];
@@ -257,6 +298,9 @@ export default function ProductDetailScreen() {
     setActiveGalleryIndex(idx);
     const item = galleryItems[idx];
     if (item?.colorId) setSelectedColorId(item.colorId);
+    if (item?.accessoryId === 'gift_box_letter') {
+      setSelectedAccessoryId('gift_box_letter');
+    }
   };
 
   const handleSelectColor = (colorOpt: ProductColorOption) => {
@@ -270,8 +314,26 @@ export default function ProductDetailScreen() {
   };
 
   const handleSelectAccessory = (accOpt: ProductAccessoryOption) => {
-    // Attach accessory to the currently selected color without changing the selected color or swapping to another color's photo
     setSelectedAccessoryId(accOpt.id);
+    if (accOpt.id === 'gift_box_letter') {
+      const giftIdx = galleryItems.findIndex(
+        (g) =>
+          g.accessoryId === 'gift_box_letter' || g.id === 'g_gift_box_default'
+      );
+      if (giftIdx !== -1) {
+        setActiveGalleryIndex(giftIdx);
+      }
+    } else if (
+      currentGalleryItem?.accessoryId === 'gift_box_letter' ||
+      currentGalleryItem?.id === 'g_gift_box_default'
+    ) {
+      const colorIdx = activeColor
+        ? galleryItems.findIndex(
+            (g) => g.colorId === activeColor.id && g.zoomMode !== 'closeup'
+          )
+        : 0;
+      setActiveGalleryIndex(colorIdx !== -1 ? colorIdx : 0);
+    }
   };
 
   const accessoryDelta = activeAccessory?.priceDelta ?? 0;
@@ -581,12 +643,46 @@ export default function ProductDetailScreen() {
               </View>
             </View>
 
-            {/* Clean Square Thumbnails */}
+            {/* Clean Square Thumbnails (Swipeable / Mouse-Draggable) */}
             {galleryItems.length > 1 && (
               <ScrollView
+                ref={thumbScrollRef}
                 horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.thumbRow}>
+                showsHorizontalScrollIndicator={true}
+                scrollEventThrottle={16}
+                contentContainerStyle={styles.thumbRow}
+                {...(Platform.OS === 'web'
+                  ? ({
+                      onMouseDown: (e: any) => {
+                        const node = e?.currentTarget;
+                        if (!node) return;
+                        thumbDragRef.current = {
+                          isDown: true,
+                          startX: e.pageX - (node.offsetLeft || 0),
+                          scrollLeft: node.scrollLeft || 0,
+                          moved: false,
+                        };
+                      },
+                      onMouseLeave: () => {
+                        thumbDragRef.current.isDown = false;
+                      },
+                      onMouseUp: () => {
+                        thumbDragRef.current.isDown = false;
+                      },
+                      onMouseMove: (e: any) => {
+                        if (!thumbDragRef.current.isDown) return;
+                        const node = e?.currentTarget;
+                        if (!node) return;
+                        e.preventDefault?.();
+                        const x = e.pageX - (node.offsetLeft || 0);
+                        const walk = x - thumbDragRef.current.startX;
+                        if (Math.abs(walk) > 5) {
+                          thumbDragRef.current.moved = true;
+                        }
+                        node.scrollLeft = thumbDragRef.current.scrollLeft - walk;
+                      },
+                    } as any)
+                  : {})}>
                 {galleryItems.map((gItem, idx) => {
                   const isSelected = safeGalleryIndex === idx;
                   const thumbImg = gItem.image || product.image;
@@ -597,7 +693,13 @@ export default function ProductDetailScreen() {
                         styles.thumbBox,
                         isSelected && styles.thumbBoxActive,
                       ]}
-                      onPress={() => handleSelectGalleryIndex(idx)}
+                      onPress={() => {
+                        if (thumbDragRef.current.moved) {
+                          thumbDragRef.current.moved = false;
+                          return;
+                        }
+                        handleSelectGalleryIndex(idx);
+                      }}
                       activeOpacity={0.85}>
                       {thumbImg ? (
                         Platform.OS === 'web' && resolveImgUri(thumbImg) ? (
@@ -605,11 +707,14 @@ export default function ProductDetailScreen() {
                             src: resolveImgUri(thumbImg)!,
                             alt: gItem.label || product.name,
                             decoding: 'async',
+                            draggable: false,
                             style: {
                               width: '100%',
                               height: '100%',
                               objectFit: 'cover',
                               display: 'block',
+                              userSelect: 'none',
+                              pointerEvents: 'none',
                             },
                           })
                         ) : (
