@@ -22,11 +22,14 @@ const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v12';
 const LEGACY_CACHE_KEYS = ['tcl_products_cache_v11', 'tcl_products_cache_v10'];
 const CUSTOM_ADMIN_PRODUCTS_KEY = 'tcl_custom_admin_products_v1';
 const DELETED_IDS_KEY = 'tcl_deleted_product_ids_v1';
+const DELETED_PRODUCTS_ROW_ID = 'tcl_deleted_products_v1';
+const DELETED_PRODUCTS_PARTITION = '__TCL_CHAT_MSG_V1__';
 const VARIANTS_META_PREFIX = '__tcl_variants_v1__:';
 const COVER_IMG_REF = '__COVER__';
 
-// In-memory map + IndexedDB + localStorage persistence so newly added/edited products NEVER disappear when syncProducts runs
+// In-memory map + IndexedDB + localStorage persistence so newly added/edited/deleted products NEVER disappear or reappear when syncProducts or Vercel redeploy runs
 const customAdminProductsMemory = new Map<string, Product>();
+const deletedIdsMemory = new Set<string>();
 const hydratedMediaMemory = new Map<
   string,
   {
@@ -368,23 +371,120 @@ function getDeletedIds(): Set<string> {
       const raw = window.localStorage.getItem(DELETED_IDS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return new Set(parsed);
+        if (Array.isArray(parsed)) {
+          for (const id of parsed) {
+            if (typeof id === 'string' && id.trim()) {
+              deletedIdsMemory.add(id.trim());
+            }
+          }
+        }
       }
     }
   } catch {
     // ignore
   }
-  return new Set();
+  return new Set(deletedIdsMemory);
 }
 
 function saveDeletedIds(ids: Set<string>) {
+  for (const id of ids) {
+    if (typeof id === 'string' && id.trim()) {
+      deletedIdsMemory.add(id.trim());
+    }
+  }
+  const arr = [...deletedIdsMemory];
+  saveToIdb('deleted_product_ids', arr);
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify([...ids]));
+      try {
+        window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(arr));
+      } catch {
+        // Free up space in localStorage if large product cache caused QuotaExceededError
+        try {
+          window.localStorage.removeItem(PRODUCTS_CACHE_KEY);
+          window.localStorage.removeItem(CUSTOM_ADMIN_PRODUCTS_KEY);
+          window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(arr));
+        } catch {
+          // ignore
+        }
+      }
     }
   } catch {
     // ignore
   }
+}
+
+async function syncDeletedIdsToSupabase(ids: Set<string>): Promise<void> {
+  if (!supabaseUrl || !supabaseAnonKey) return;
+  const arr = [...ids].filter((id) => typeof id === 'string' && id.trim().length > 0);
+  const payload = {
+    id: DELETED_PRODUCTS_ROW_ID,
+    userId: SHOP_REVIEWS_HOLDER_USER,
+    fullName: DELETED_PRODUCTS_PARTITION,
+    phone: '__TCL_DELETED_PRODUCTS_V1__',
+    city: 'HCM',
+    district: 'Q8',
+    ward: '1',
+    detailAddress: JSON.stringify(arr),
+    isDefault: false,
+  };
+  try {
+    const bearer = await getSupabaseAuthBearer();
+    const res = await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${bearer}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) return;
+  } catch {
+    // fall through to anon key
+  }
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function fetchRemoteDeletedIds(): Promise<string[]> {
+  if (!supabaseUrl || !supabaseAnonKey) return [];
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/addresses?id=eq.${DELETED_PRODUCTS_ROW_ID}&select=detailAddress`,
+      {
+        cache: 'no-store',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+      }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0 && rows[0]?.detailAddress) {
+      const parsed = JSON.parse(rows[0].detailAddress);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((x) => typeof x === 'string' && x.trim().length > 0);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
 }
 
 function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
@@ -557,30 +657,33 @@ function productsSignature(list: Product[]): string {
 
 function saveCachedProducts(items: Product[]) {
   if (typeof window === 'undefined' || items.length === 0) return;
+  // Full items (including HD Base64 images) are persisted in IndexedDB (100MB+ quota)
   saveToIdb('cached_all_products', items);
   if (!window.localStorage) return;
   setTimeout(() => {
     try {
-      window.localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(items));
+      // Only store lightweight metadata in localStorage (<20KB) so localStorage NEVER hits 5MB QuotaExceededError
+      // and never blocks saving tcl_deleted_product_ids_v1 or Supabase auth tokens
+      const lightweight = items.map((p) => ({
+        ...p,
+        image:
+          typeof p.image === 'string' && p.image.startsWith('data:image/')
+            ? undefined
+            : p.image,
+        colorOptions: Array.isArray(p.colorOptions)
+          ? p.colorOptions.map((c) => ({
+              ...c,
+              image:
+                typeof c.image === 'string' && c.image.startsWith('data:image/')
+                  ? undefined
+                  : c.image,
+            }))
+          : p.colorOptions,
+        gallery: undefined,
+      }));
+      window.localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(lightweight));
     } catch {
-      // If full base64 variants exceed localStorage 5MB quota, save a compact summary in localStorage while IndexedDB holds the full images
-      try {
-        const compact = items.map((p) => ({
-          ...p,
-          colorOptions: Array.isArray(p.colorOptions)
-            ? p.colorOptions.map((c) => ({
-                ...c,
-                image:
-                  typeof c.image === 'string' && c.image === p.image
-                    ? COVER_IMG_REF
-                    : c.image,
-              }))
-            : p.colorOptions,
-        }));
-        window.localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(compact));
-      } catch {
-        // ignore
-      }
+      // ignore
     }
   }, 0);
 }
@@ -816,33 +919,42 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
 
-  // Hydrate cached and custom admin products from IndexedDB on mount in case localStorage was exceeded
+  // Hydrate cached, custom admin products, and deleted IDs from IndexedDB on mount
   useEffect(() => {
-    Promise.all([loadFromIdb('cached_all_products'), loadCustomProductsFromIdb()]).then(
-      ([cachedAll, idbCustom]) => {
-        const deleted = getDeletedIds();
-        if (cachedAll.length > 0) {
-          for (const p of cachedAll) {
-            if (p && p.id && !deleted.has(p.id)) {
-              cacheProductMediaInMemory(p);
-            }
+    Promise.all([
+      loadFromIdb('cached_all_products'),
+      loadCustomProductsFromIdb(),
+      loadFromIdb('deleted_product_ids') as unknown as Promise<string[]>,
+    ]).then(([cachedAll, idbCustom, idbDeleted]) => {
+      if (Array.isArray(idbDeleted) && idbDeleted.length > 0) {
+        const mergedDeleted = getDeletedIds();
+        for (const id of idbDeleted) {
+          if (typeof id === 'string' && id.trim()) {
+            mergedDeleted.add(id.trim());
           }
         }
-        if (idbCustom.length > 0) {
-          for (const p of idbCustom) {
-            if (p && p.id && !deleted.has(p.id)) {
-              customAdminProductsMemory.set(p.id, p);
-              cacheProductMediaInMemory(p);
-            }
+        saveDeletedIds(mergedDeleted);
+      }
+      const deleted = getDeletedIds();
+      if (cachedAll.length > 0) {
+        for (const p of cachedAll) {
+          if (p && p.id && !deleted.has(p.id)) {
+            cacheProductMediaInMemory(p);
           }
-        }
-        if (cachedAll.length > 0 || idbCustom.length > 0) {
-          setProducts((prev) =>
-            mergeWithMockProducts(cachedAll.length > 0 ? cachedAll : prev)
-          );
         }
       }
-    );
+      if (idbCustom.length > 0) {
+        for (const p of idbCustom) {
+          if (p && p.id && !deleted.has(p.id)) {
+            customAdminProductsMemory.set(p.id, p);
+            cacheProductMediaInMemory(p);
+          }
+        }
+      }
+      setProducts((prev) =>
+        mergeWithMockProducts(cachedAll.length > 0 ? cachedAll : prev)
+      );
+    });
   }, []);
 
   // Sync shop reviews from Supabase partition
@@ -999,9 +1111,30 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return;
       }
-      fetchProducts(0)
-        .then((data) => {
+      Promise.all([fetchProducts(0), fetchRemoteDeletedIds()])
+        .then(([data, remoteDeletedList]) => {
           if (cancelled) return;
+          const currentDeleted = getDeletedIds();
+          let hasNewLocalDeletesToPush = false;
+          const remoteDeletedSet = new Set(remoteDeletedList);
+          for (const rId of remoteDeletedList) {
+            if (!currentDeleted.has(rId)) {
+              currentDeleted.add(rId);
+              removeCustomAdminProduct(rId);
+            }
+          }
+          for (const lId of currentDeleted) {
+            if (!remoteDeletedSet.has(lId)) {
+              hasNewLocalDeletesToPush = true;
+            }
+          }
+          if (currentDeleted.size > 0) {
+            saveDeletedIds(currentDeleted);
+          }
+          if (role === 'admin' && hasNewLocalDeletesToPush && currentDeleted.size > 0) {
+            syncDeletedIdsToSupabase(currentDeleted).catch(() => {});
+          }
+
           if (data) {
             // If Admin has local custom products in memory/IndexedDB/localStorage that aren't in Supabase yet, push them automatically
             if (role === 'admin') {
@@ -1022,6 +1155,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               saveCachedProducts(merged);
               return merged;
             });
+          } else if (remoteDeletedList.length > 0) {
+            setProducts((prev) =>
+              prev.filter((p) => !currentDeleted.has(p.id))
+            );
           }
           setLoaded(true);
         })
@@ -1082,6 +1219,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const addProduct = useCallback(async (product: Product) => {
     if (role !== 'admin') return;
+    if (deletedIdsMemory.has(product.id)) {
+      deletedIdsMemory.delete(product.id);
+      saveDeletedIds(deletedIdsMemory);
+      syncDeletedIdsToSupabase(deletedIdsMemory).catch(() => {});
+    }
     persistCustomAdminProduct(product);
     setProducts((prev) => {
       const next = [product, ...prev.filter((p) => p.id !== product.id)];
@@ -1109,9 +1251,17 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     removeCustomAdminProduct(id);
     const deleted = getDeletedIds();
     deleted.add(id);
+    // Also mark any legacy mapped ID as deleted so original seed products never resurrect via legacy alias
+    for (const [legacyId, mockId] of Object.entries(LEGACY_ID_TO_MOCK_ID)) {
+      if (mockId === id || legacyId === id) {
+        deleted.add(legacyId);
+        deleted.add(mockId);
+      }
+    }
     saveDeletedIds(deleted);
+    syncDeletedIdsToSupabase(deleted).catch(() => {});
     setProducts((prev) => {
-      const next = prev.filter((p) => p.id !== id);
+      const next = prev.filter((p) => !deleted.has(p.id));
       saveCachedProducts(next);
       return next;
     });

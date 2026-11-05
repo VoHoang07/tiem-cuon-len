@@ -327,14 +327,9 @@ export default function ProductDetailScreen() {
   };
 
   const handleDelete = () => {
-    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
-      const confirmed = window.confirm(
-        `Bạn có chắc chắn muốn xóa sản phẩm "${product.name}"?`
-      );
-      if (confirmed) {
-        removeProduct(product.id);
-        router.replace('/');
-      }
+    if (Platform.OS === 'web') {
+      removeProduct(product.id);
+      router.replace('/');
       return;
     }
     Alert.alert(

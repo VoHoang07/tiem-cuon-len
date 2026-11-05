@@ -66,15 +66,6 @@ export default function ManageProductsScreen() {
   );
 
   const handleDeleteDraft = async (draft: AdminProductDraft) => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
-      const ok = window.confirm(
-        `Xoá bản nháp "${draft.name?.trim() || 'Chưa đặt tên'}" khỏi danh sách nháp?`
-      );
-      if (!ok) return;
-      const next = await deleteAdminDraft(draft.id);
-      setDrafts(next);
-      return;
-    }
     const next = await deleteAdminDraft(draft.id);
     setDrafts(next);
   };
@@ -116,9 +107,8 @@ export default function ManageProductsScreen() {
   }
 
   const handleDelete = (product: Product) => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
-      const ok = window.confirm(`Bạn có chắc muốn xóa "${product.name}" khỏi kho không?`);
-      if (ok) removeProduct(product.id);
+    if (Platform.OS === 'web') {
+      removeProduct(product.id);
       return;
     }
     Alert.alert(
