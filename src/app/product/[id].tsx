@@ -336,7 +336,9 @@ export default function ProductDetailScreen() {
         mode: 'buy_now',
         productId: product.id,
         quantity: String(quantity),
+        selectedColorId: activeColor?.id ?? '',
         selectedColor: activeColor?.name ?? product.color,
+        selectedAccessoryId: activeAccessory?.id ?? 'no_box',
         selectedAccessory: activeAccessory
           ? `${activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}${activeAccessory.name}`
           : '',

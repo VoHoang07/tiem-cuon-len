@@ -46,10 +46,33 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
   const parsedColorId = p.selectedColorId || (parts.length >= 2 ? parts[1] : undefined);
   const parsedAccessoryId = p.selectedAccessoryId || (parts.length >= 3 ? parts[2] : undefined);
 
+  const isGiftBox =
+    parsedAccessoryId === 'gift_box_letter' ||
+    (p.selectedAccessoryName || ci.selectedAccessory || '')
+      .toLowerCase()
+      .includes('hộp quà');
+  const accessoryDelta = isGiftBox ? 15000 : 0;
+  const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
+  const resolvedAccessoryName = isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp';
+  const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
+
   const liveProduct = catalogProducts?.find((m) => m.id === baseId);
   const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
   const source = liveProduct || mock;
-  if (!source) return ci;
+  if (!source) {
+    return {
+      ...ci,
+      selectedColor: p.selectedColorName || p.color || ci.selectedColor,
+      selectedAccessory: resolvedAccessoryName,
+      product: {
+        ...p,
+        baseProductId: baseId,
+        selectedAccessoryId: resolvedAccessoryId,
+        selectedAccessoryName: resolvedAccessoryName,
+        selectedAccessoryEmoji: resolvedAccessoryEmoji,
+      },
+    };
+  }
 
   const colorOptions = source.colorOptions || mock?.colorOptions;
 
@@ -61,16 +84,6 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
         (p.selectedColorName || p.color || '').trim().toLowerCase()
     ) ||
     colorOptions?.[0];
-
-  const isGiftBox =
-    parsedAccessoryId === 'gift_box_letter' ||
-    (p.selectedAccessoryName || ci.selectedAccessory || '')
-      .toLowerCase()
-      .includes('hộp quà');
-  const accessoryDelta = isGiftBox ? 15000 : 0;
-  const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
-  const resolvedAccessoryName = isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp';
-  const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
 
   const resolvedImage = colorOpt?.image || p.image || source.image || mock?.image || null;
   // Always prefer live catalog variant price (or base price) when available so admin price edits apply immediately
@@ -165,7 +178,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (
           updated.product.price !== ci.product.price ||
           updated.product.name !== ci.product.name ||
-          updated.product.image !== ci.product.image
+          updated.product.image !== ci.product.image ||
+          updated.product.selectedAccessoryId !== ci.product.selectedAccessoryId ||
+          updated.product.selectedAccessoryName !== ci.product.selectedAccessoryName
         ) {
           changed = true;
           return updated;

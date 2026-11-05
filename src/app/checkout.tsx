@@ -71,14 +71,18 @@ export default function CheckoutScreen() {
     mode,
     productId,
     quantity: buyNowQty,
+    selectedColorId,
     selectedColor,
+    selectedAccessoryId,
     selectedAccessory,
     unitPrice,
   } = useLocalSearchParams<{
     mode?: string;
     productId?: string;
     quantity?: string;
+    selectedColorId?: string;
     selectedColor?: string;
+    selectedAccessoryId?: string;
     selectedAccessory?: string;
     unitPrice?: string;
   }>();
@@ -116,27 +120,56 @@ export default function CheckoutScreen() {
     setDraftThreshold(String(shippingConfig.freeshipThreshold));
   }, [shippingConfig]);
 
-  // Compute buyNow product (derive authoritative price from catalog, never trust URL price param)
+  // Compute buyNow product (derive authoritative variant + packaging price from catalog)
   const buyNowProduct = useMemo(() => {
     if (!isBuyNow || !productId) return null;
     const base = products.find((p) => p.id === productId) ?? null;
     if (!base) return null;
-    const matchedColor = base.colorOptions?.find(
-      (c) => c.name.toLowerCase() === (selectedColor || '').trim().toLowerCase()
-    );
-    const authoritativePrice = Math.max(1000, Number(base.price));
+    const matchedColor =
+      base.colorOptions?.find((c) => c.id === selectedColorId) ||
+      base.colorOptions?.find(
+        (c) => c.name.toLowerCase() === (selectedColor || '').trim().toLowerCase()
+      ) ||
+      base.colorOptions?.[0];
+
+    const isGiftBox =
+      selectedAccessoryId === 'gift_box_letter' ||
+      (selectedAccessory || '').toLowerCase().includes('hộp quà');
+    const accessoryDelta = isGiftBox ? 15000 : 0;
+    const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
+    const resolvedAccessoryName = isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp';
+    const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
+
+    const baseVariantPrice =
+      matchedColor?.price && Number(matchedColor.price) > 0
+        ? Number(matchedColor.price)
+        : Math.max(1000, Number(base.price));
+    const authoritativePrice = baseVariantPrice + accessoryDelta;
     const colorLabel = (selectedColor || matchedColor?.name || '').trim();
     return {
       ...base,
+      id: `${base.id}__${matchedColor?.id || 'c1'}__${resolvedAccessoryId}`,
+      baseProductId: base.id,
       name: colorLabel ? `${base.name} (${colorLabel})` : base.name,
       color: colorLabel || base.color,
+      selectedColorId: matchedColor?.id,
       selectedColorName: colorLabel || base.color,
       selectedColorHex: matchedColor?.hex,
-      selectedAccessoryName: undefined,
+      selectedAccessoryId: resolvedAccessoryId,
+      selectedAccessoryName: resolvedAccessoryName,
+      selectedAccessoryEmoji: resolvedAccessoryEmoji,
       image: matchedColor?.image || base.image,
       price: authoritativePrice,
     };
-  }, [isBuyNow, productId, products, selectedColor]);
+  }, [
+    isBuyNow,
+    productId,
+    products,
+    selectedColorId,
+    selectedColor,
+    selectedAccessoryId,
+    selectedAccessory,
+  ]);
 
   const buyNowQtyNum = Math.max(1, Math.min(99, parseInt(buyNowQty ?? '1', 10) || 1));
 

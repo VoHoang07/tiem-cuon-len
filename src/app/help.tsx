@@ -85,7 +85,7 @@ const CUSTOMER_FAQ: FaqItem[] = [
   {
     category: 'shipping',
     q: 'Phí vận chuyển và điều kiện Miễn phí vận chuyển (Freeship)?',
-    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn 15.000₫ (Miễn phí cho đơn từ 299.000₫); (2) Giao Hỏa Tốc 2h (Grab/Ahamove khoảng 45.000₫ – 65.000₫ — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
+    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn 15.000₫ (Miễn phí cho đơn từ 300.000₫); (2) Giao Hỏa Tốc 2h (Grab/Ahamove khoảng 45.000₫ – 65.000₫ — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
   },
   {
     category: 'shipping',
@@ -265,12 +265,12 @@ export default function HelpScreen() {
       {
         id: 'client-shipping',
         icon: Truck,
-        badge: 'Freeship 299k',
+        badge: 'Freeship 300k',
         title: 'Vận chuyển & Tra cứu Hành trình Đơn',
         summary:
           'Theo dõi tiến độ đơn hàng và định vị kiện hàng trực tuyến.',
         steps: [
-          'Giao tiêu chuẩn toàn quốc (22k nội thành, 30k liên tỉnh — Freeship từ 299k) hoặc Giao Hỏa Tốc 2h (trả cước theo App).',
+          'Giao tiêu chuẩn toàn quốc 15.000₫ (Freeship cho đơn từ 300.000₫) hoặc Giao Hỏa Tốc 2h (~45k – 65k trả cước theo App).',
           'Vào mục "Đơn hàng của tôi" để xem tiến độ 4 bước: Đã đặt đơn → Đang chuẩn bị → Đang vận chuyển → Giao thành công.',
           'Bấm nút "Xem hành trình đơn hàng" để xem vị trí bưu kiện trên Viettel Post, GHTK, GHN, J&T hoặc SPX.',
         ],

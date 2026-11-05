@@ -433,7 +433,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.heroFeaturePill}>
                   <Gift size={13} color={COLORS.primary} />
-                  <Text style={styles.heroFeatureText}>Gói quà miễn phí</Text>
+                  <Text style={styles.heroFeatureText}>Hộp quà & Thư tay</Text>
                 </View>
               </View>
             </View>
@@ -818,9 +818,9 @@ export default function HomeScreen() {
           type="website"
           title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
           subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
-          priceText="Freeship đơn từ 199.000₫"
+          priceText="Freeship đơn từ 300.000₫"
           url={PUBLIC_SHOP_URL}
-          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Tặng kèm hộp quà & thiệp viết tay miễn phí, freeship đơn từ 199k!`}
+          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Có tuỳ chọn Hộp quà + Thư tay xinh xắn, freeship đơn từ 300k!`}
         />
       ) : null}
     </SafeAreaView>
