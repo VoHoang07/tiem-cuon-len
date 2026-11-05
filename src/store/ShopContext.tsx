@@ -17,6 +17,8 @@ interface ShopContextType {
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
   addShopReview: (review: Review) => void;
+  removeShopReview: (reviewId: string) => void;
+  replyToShopReview: (reviewId: string, replyText: string) => void;
   addToCart: (product: Product, quantity: number) => Promise<void>;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
@@ -44,7 +46,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 }
 
 function ShopBridge({ children }: { children: ReactNode }) {
-  const { products, shopReviews, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, addShopReview, refetchProducts } = useProducts();
+  const { products, shopReviews, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, addShopReview, removeShopReview, replyToShopReview, refetchProducts } = useProducts();
   const { cart, cartHydrated, cartTotal, cartCount, addToCart, removeFromCart, updateCartQuantity, clearCart, refetchCart } = useCart();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
@@ -66,6 +68,8 @@ function ShopBridge({ children }: { children: ReactNode }) {
       removeProduct,
       addReview,
       addShopReview,
+      removeShopReview,
+      replyToShopReview,
       addToCart,
       removeFromCart,
       updateCartQuantity,
@@ -90,6 +94,8 @@ function ShopBridge({ children }: { children: ReactNode }) {
       removeProduct,
       addReview,
       addShopReview,
+      removeShopReview,
+      replyToShopReview,
       addToCart,
       removeFromCart,
       updateCartQuantity,

@@ -5,6 +5,8 @@ export interface Review {
   rating: number;
   comment: string;
   date: string;
+  adminReply?: string;
+  adminReplyDate?: string;
 }
 
 export interface ProductColorOption {

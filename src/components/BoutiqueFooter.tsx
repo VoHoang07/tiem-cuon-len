@@ -24,6 +24,9 @@ import {
   Share2,
   Star,
   MessageSquare,
+  Trash2,
+  CornerDownRight,
+  Edit3,
 } from 'lucide-react-native';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
@@ -45,13 +48,38 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
   const router = useRouter();
   const { user, role } = useAuth();
   const { openChat, conversations, unreadCount } = useChat();
-  const { products, shopReviews, addShopReview } = useShop();
+  const {
+    products,
+    shopReviews,
+    addShopReview,
+    removeShopReview,
+    replyToShopReview,
+  } = useShop();
   const { orders } = useOrders();
   const isAdmin = role === 'admin';
   const [showShareModal, setShowShareModal] = React.useState(false);
   const [showShopReviewForm, setShowShopReviewForm] = React.useState(false);
+  const [reviewerName, setReviewerName] = React.useState(user?.name || '');
   const [shopRating, setShopRating] = React.useState(5);
   const [shopComment, setShopComment] = React.useState('');
+  const [reviewStatusMsg, setReviewStatusMsg] = React.useState<string | null>(null);
+  const [replyingReviewId, setReplyingReviewId] = React.useState<string | null>(null);
+  const [replyDraftText, setReplyDraftText] = React.useState('');
+
+  React.useEffect(() => {
+    if (user?.name && !reviewerName.trim()) {
+      setReviewerName(user.name);
+    }
+  }, [user?.name, reviewerName]);
+
+  const formatReviewDate = (raw?: string) => {
+    if (!raw) return '';
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('vi-VN');
+    }
+    return raw;
+  };
 
   const avgShopRating = React.useMemo(() => {
     if (!shopReviews || shopReviews.length === 0) return '5.0';
@@ -64,10 +92,11 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
       Alert.alert('Thiếu nội dung', 'Vui lòng nhập đôi lời nhận xét về Tiệm nhé.');
       return;
     }
+    const finalName = reviewerName.trim() || user?.name || 'Khách hàng Tiệm Len';
     addShopReview({
       id: `shop_rev_${Date.now()}`,
-      userId: user?.email || 'customer',
-      userName: user?.name || 'Khách yêu len',
+      userId: user?.email || user?.id || 'customer',
+      userName: finalName,
       rating: shopRating,
       comment: shopComment.trim(),
       date: new Date().toISOString(),
@@ -75,7 +104,26 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
     setShopComment('');
     setShopRating(5);
     setShowShopReviewForm(false);
-    Alert.alert('Cảm ơn bạn! 🧶', 'Đánh giá về Tiệm Cuộn Len đã được ghi nhận.');
+    setReviewStatusMsg('✅ Cảm ơn bạn! Đánh giá đã được đăng lên trang chủ Tiệm Cuộn Len.');
+    setTimeout(() => setReviewStatusMsg(null), 4000);
+  };
+
+  const handleSaveAdminReply = (revId: string) => {
+    replyToShopReview(revId, replyDraftText.trim());
+    setReplyingReviewId(null);
+    setReplyDraftText('');
+    setReviewStatusMsg('✅ Đã lưu phản hồi của Tiệm cho đánh giá khách hàng.');
+    setTimeout(() => setReviewStatusMsg(null), 3500);
+  };
+
+  const handleDeleteShopReview = (revId: string) => {
+    removeShopReview(revId);
+    if (replyingReviewId === revId) {
+      setReplyingReviewId(null);
+      setReplyDraftText('');
+    }
+    setReviewStatusMsg('🗑️ Đã xoá đánh giá khỏi trang chủ.');
+    setTimeout(() => setReviewStatusMsg(null), 3000);
   };
 
   const { width: rawWindowWidth } = useWindowDimensions();
@@ -250,7 +298,9 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
               <View style={styles.shopRatingPill}>
                 <Star size={13} color="#F59E0B" fill="#F59E0B" />
                 <Text style={styles.shopRatingPillText}>
-                  {avgShopRating}/5 ({shopReviews.length} đánh giá)
+                  {shopReviews.length > 0
+                    ? `${avgShopRating}/5 (${shopReviews.length} đánh giá)`
+                    : 'Chưa có đánh giá'}
                 </Text>
               </View>
             </View>
@@ -269,6 +319,12 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
             </TouchableOpacity>
           )}
         </View>
+
+        {reviewStatusMsg ? (
+          <View style={styles.reviewStatusBanner}>
+            <Text style={styles.reviewStatusBannerText}>{reviewStatusMsg}</Text>
+          </View>
+        ) : null}
 
         {showShopReviewForm && (
           <View style={styles.shopReviewFormBox}>
@@ -290,6 +346,14 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
             </View>
 
             <TextInput
+              style={styles.shopReviewerNameInput}
+              value={reviewerName}
+              onChangeText={setReviewerName}
+              placeholder="Tên của bạn (VD: Minh Anh)"
+              placeholderTextColor={COLORS.lightText}
+            />
+
+            <TextInput
               style={styles.shopReviewInput}
               value={shopComment}
               onChangeText={setShopComment}
@@ -298,7 +362,7 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
               multiline
             />
 
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
               <TouchableOpacity
                 style={styles.shopCancelBtn}
                 onPress={() => {
@@ -316,31 +380,172 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
           </View>
         )}
 
-        <View style={[styles.shopReviewsGrid, isMobile && styles.shopReviewsGridMobile]}>
-          {shopReviews.slice(0, 6).map((rev) => (
-            <View key={rev.id} style={[styles.shopReviewItem, !isMobile && styles.shopReviewItemDesktop]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <Text style={styles.shopReviewerName} numberOfLines={1}>
-                  {rev.userName}
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 2 }}>
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      size={12}
-                      color="#F59E0B"
-                      fill={s <= rev.rating ? '#F59E0B' : 'transparent'}
-                    />
-                  ))}
+        {shopReviews.length === 0 ? (
+          <View style={styles.emptyShopReviewsBox}>
+            <Text style={styles.emptyShopReviewsTitle}>
+              🧶 Chưa có đánh giá nào từ khách hàng
+            </Text>
+            <Text style={styles.emptyShopReviewsSub}>
+              Hãy bấm &quot;Viết đánh giá Shop&quot; hoặc đánh giá sau khi nhận đơn hàng để chia sẻ cảm nhận thực tế cùng Tiệm Cuộn Len nhé!
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.shopReviewsGrid, isMobile && styles.shopReviewsGridMobile]}>
+            {shopReviews.slice(0, 12).map((rev) => {
+              const isReplyingThis = replyingReviewId === rev.id;
+              return (
+                <View
+                  key={rev.id}
+                  style={[
+                    styles.shopReviewItem,
+                    !isMobile && styles.shopReviewItemDesktop,
+                  ]}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 6,
+                      gap: 8,
+                    }}>
+                    <Text style={styles.shopReviewerName} numberOfLines={1}>
+                      {rev.userName}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 2 }}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          size={12}
+                          color="#F59E0B"
+                          fill={s <= rev.rating ? '#F59E0B' : 'transparent'}
+                        />
+                      ))}
+                    </View>
+                  </View>
+
+                  <Text style={styles.shopReviewComment}>{rev.comment}</Text>
+
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      marginTop: 7,
+                    }}>
+                    <Text style={styles.shopReviewDate}>
+                      ✓ Khách hàng Tiệm Cuộn Len • {formatReviewDate(rev.date)}
+                    </Text>
+
+                    {isAdmin && (
+                      <View style={styles.adminReviewActionsRow}>
+                        <TouchableOpacity
+                          style={styles.adminReplyTriggerBtn}
+                          onPress={() => {
+                            if (isReplyingThis) {
+                              setReplyingReviewId(null);
+                              setReplyDraftText('');
+                            } else {
+                              setReplyingReviewId(rev.id);
+                              setReplyDraftText(rev.adminReply || '');
+                            }
+                          }}
+                          activeOpacity={0.8}>
+                          <Edit3 size={11} color="#3D2B1F" />
+                          <Text style={styles.adminReplyTriggerText}>
+                            {rev.adminReply ? 'Sửa phản hồi' : 'Trả lời'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.adminDeleteReviewBtn}
+                          onPress={() => handleDeleteShopReview(rev.id)}
+                          activeOpacity={0.8}>
+                          <Trash2 size={11} color="#B91C1C" />
+                          <Text style={styles.adminDeleteReviewText}>Xoá</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Display Shop's Reply if present */}
+                  {rev.adminReply ? (
+                    <View style={styles.adminReplyDisplayBox}>
+                      <View style={styles.adminReplyHeaderRow}>
+                        <CornerDownRight size={12} color="#7A5230" />
+                        <Text style={styles.adminReplyBadgeText}>
+                          🧶 Phản hồi từ Tiệm Cuộn Len
+                        </Text>
+                        {rev.adminReplyDate ? (
+                          <Text style={styles.adminReplyDateText}>
+                            • {formatReviewDate(rev.adminReplyDate)}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text style={styles.adminReplyBodyText}>
+                        {rev.adminReply}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Inline Admin Reply Editor */}
+                  {isAdmin && isReplyingThis && (
+                    <View style={styles.adminReplyEditorBox}>
+                      <TextInput
+                        style={styles.adminReplyInput}
+                        value={replyDraftText}
+                        onChangeText={setReplyDraftText}
+                        placeholder={`Nhập lời cảm ơn hoặc phản hồi gửi tới ${rev.userName}...`}
+                        placeholderTextColor={COLORS.lightText}
+                        multiline
+                      />
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'flex-end',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}>
+                        {rev.adminReply ? (
+                          <TouchableOpacity
+                            style={styles.adminDeleteReviewBtn}
+                            onPress={() => {
+                              replyToShopReview(rev.id, '');
+                              setReplyingReviewId(null);
+                              setReplyDraftText('');
+                            }}
+                            activeOpacity={0.8}>
+                            <Text style={styles.adminDeleteReviewText}>
+                              Xoá phản hồi
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        <TouchableOpacity
+                          style={styles.shopCancelBtn}
+                          onPress={() => {
+                            setReplyingReviewId(null);
+                            setReplyDraftText('');
+                          }}
+                          activeOpacity={0.8}>
+                          <Text style={styles.shopCancelBtnText}>Huỷ</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.shopSubmitBtn}
+                          onPress={() => handleSaveAdminReply(rev.id)}
+                          activeOpacity={0.8}>
+                          <Text style={styles.shopSubmitBtnText}>
+                            Gửi phản hồi
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                 </View>
-              </View>
-              <Text style={styles.shopReviewComment}>{rev.comment}</Text>
-              <Text style={styles.shopReviewDate}>
-                ✓ Đã mua hàng tại Tiệm • {new Date(rev.date).toLocaleDateString('vi-VN')}
-              </Text>
-            </View>
-          ))}
-        </View>
+              );
+            })}
+          </View>
+        )}
       </View>
 
       {/* 2. Minimalist Boutique Footer Card */}
@@ -377,7 +582,9 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
             <TouchableOpacity
               style={styles.footerLinkBtn}
               onPress={() => handleCategoryPress('All')}>
-              <Text style={styles.footerLinkText}>✨ Tất cả sản phẩm (25 mẫu)</Text>
+              <Text style={styles.footerLinkText}>
+                ✨ Tất cả sản phẩm ({uniqueProductCount} mẫu)
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.footerLinkBtn}
@@ -763,6 +970,30 @@ const styles = StyleSheet.create({
     borderColor: '#D8C3AD',
     gap: 10,
   },
+  reviewStatusBanner: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  reviewStatusBannerText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  shopReviewerNameInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#2C1E14',
+    minWidth: 0,
+  },
   shopReviewInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -773,6 +1004,117 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#2C1E14',
     minHeight: 64,
+    textAlignVertical: 'top',
+  },
+  emptyShopReviewsBox: {
+    backgroundColor: '#FFFDF9',
+    borderRadius: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E6D9C8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  emptyShopReviewsTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#3D2B1F',
+    textAlign: 'center',
+  },
+  emptyShopReviewsSub: {
+    fontSize: 12,
+    color: '#6E5239',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  adminReviewActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  adminReplyTriggerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFE6DA',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
+  },
+  adminReplyTriggerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3D2B1F',
+  },
+  adminDeleteReviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  adminDeleteReviewText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  adminReplyDisplayBox: {
+    marginTop: 10,
+    backgroundColor: '#FAF5EE',
+    borderRadius: 10,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#8B5E3C',
+    gap: 4,
+  },
+  adminReplyHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexWrap: 'wrap',
+  },
+  adminReplyBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#5C3D28',
+  },
+  adminReplyDateText: {
+    fontSize: 11,
+    color: '#8C7A6B',
+  },
+  adminReplyBodyText: {
+    fontSize: 12.5,
+    color: '#3D2B1F',
+    lineHeight: 18,
+  },
+  adminReplyEditorBox: {
+    marginTop: 10,
+    backgroundColor: '#FAF6F0',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#D8C3AD',
+    gap: 8,
+  },
+  adminReplyInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2D2C0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12.5,
+    color: '#2C1E14',
+    minHeight: 54,
     textAlignVertical: 'top',
   },
   shopCancelBtn: {

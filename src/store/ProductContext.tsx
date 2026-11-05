@@ -855,57 +855,113 @@ interface ProductContextType {
   removeProduct: (id: string) => void;
   addReview: (productId: string, review: Review) => void;
   addShopReview: (review: Review) => void;
+  removeShopReview: (reviewId: string) => void;
+  replyToShopReview: (reviewId: string, replyText: string) => void;
   refetchProducts: () => Promise<void>;
 }
 
-const SHOP_REVIEWS_CACHE_KEY = 'tcl_shop_reviews_v1';
-const SHOP_REVIEWS_ROW_ID = 'tcl_shop_reviews_v1';
-const SHOP_REVIEWS_PARTITION = '__TCL_SHOP_REVIEWS_V1__';
+const SHOP_REVIEWS_CACHE_KEY = 'tcl_shop_reviews_v2';
+const LEGACY_SHOP_REVIEWS_CACHE_KEY = 'tcl_shop_reviews_v1';
+const SHOP_REVIEWS_ROW_ID = 'tcl_shop_reviews_v2';
+const SHOP_REVIEWS_PARTITION = '__TCL_CHAT_MSG_V1__';
 const SHOP_REVIEWS_HOLDER_USER = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
+const FAKE_SHOP_REVIEW_IDS = new Set(['shop_rev_1', 'shop_rev_2']);
 
-const DEFAULT_SHOP_REVIEWS: Review[] = [
-  {
-    id: 'shop_rev_1',
-    userId: 'khach_1',
-    userName: 'Ngọc Anh',
-    rating: 5,
-    comment: 'Móc khóa thỏ len ở ngoài xinh hơn trong hình nhiều, đóng gói hộp quà rất chỉn chu và thơm!',
-    date: '2026-10-28T10:00:00.000Z',
-  },
-  {
-    id: 'shop_rev_2',
-    userId: 'khach_2',
-    userName: 'Minh Thư',
-    rating: 5,
-    comment: 'Shop tư vấn màu nhiệt tình, đan cực kỳ chắc tay, giao hàng đúng hẹn 10 điểm ạ.',
-    date: '2026-10-30T14:30:00.000Z',
-  },
-];
+function filterRealShopReviews(list: unknown): Review[] {
+  if (!Array.isArray(list)) return [];
+  return (list as Review[]).filter(
+    (r) =>
+      r &&
+      typeof r.id === 'string' &&
+      !FAKE_SHOP_REVIEW_IDS.has(r.id) &&
+      typeof r.comment === 'string' &&
+      r.comment.trim().length > 0
+  );
+}
 
 function loadCachedShopReviews(): Review[] {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.removeItem(LEGACY_SHOP_REVIEWS_CACHE_KEY);
+      } catch {
+        // ignore
+      }
       const raw = window.localStorage.getItem(SHOP_REVIEWS_CACHE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed as Review[];
-        }
+        return filterRealShopReviews(parsed);
       }
     }
   } catch {
     // ignore
   }
-  return DEFAULT_SHOP_REVIEWS;
+  return [];
 }
 
 function saveCachedShopReviews(list: Review[]) {
+  const cleaned = filterRealShopReviews(list);
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(SHOP_REVIEWS_CACHE_KEY, JSON.stringify(list));
+      window.localStorage.setItem(SHOP_REVIEWS_CACHE_KEY, JSON.stringify(cleaned));
     }
   } catch {
     // ignore
+  }
+}
+
+async function syncShopReviewsToSupabase(list: Review[]): Promise<void> {
+  if (!supabaseUrl || !supabaseAnonKey) return;
+  const cleaned = filterRealShopReviews(list);
+  const payload = {
+    id: SHOP_REVIEWS_ROW_ID,
+    userId: SHOP_REVIEWS_HOLDER_USER,
+    fullName: SHOP_REVIEWS_PARTITION,
+    phone: '__TCL_SHOP_REVIEWS_V2__',
+    city: 'HCM',
+    district: 'Q8',
+    ward: '1',
+    detailAddress: JSON.stringify(cleaned),
+    isDefault: false,
+  };
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function fetchRemoteShopReviews(): Promise<Review[] | null> {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/addresses?id=eq.${SHOP_REVIEWS_ROW_ID}&select=detailAddress`,
+      {
+        cache: 'no-store',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+      }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0 && rows[0]?.detailAddress) {
+      const parsed = JSON.parse(rows[0].detailAddress);
+      return filterRealShopReviews(parsed);
+    }
+    return [];
+  } catch {
+    return null;
   }
 }
 
@@ -959,27 +1015,15 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   // Sync shop reviews from Supabase partition
   useEffect(() => {
-    supabase
-      .from('addresses')
-      .select('detailAddress')
-      .eq('fullName', SHOP_REVIEWS_PARTITION)
-      .limit(1)
-      .then(
-        ({ data }) => {
-          if (data && data.length > 0 && data[0].detailAddress) {
-            try {
-              const parsed = JSON.parse(data[0].detailAddress);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                setShopReviews(parsed);
-                saveCachedShopReviews(parsed);
-              }
-            } catch {
-              // ignore
-            }
-          }
-        },
-        () => {}
-      );
+    let mounted = true;
+    fetchRemoteShopReviews().then((remoteReviews) => {
+      if (!mounted || remoteReviews === null) return;
+      setShopReviews(remoteReviews);
+      saveCachedShopReviews(remoteReviews);
+    });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const hydrateMissingProductMedia = useCallback(
@@ -1298,31 +1342,53 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     if (!validated.success || !validated.data) return;
     const sanitized: Review = {
       id: sanitizeText(review.id || `shop_rev_${Date.now()}`, 60),
+      userId: sanitizeText(review.userId || 'customer', 80),
       userName: validated.data.userName,
       rating: validated.data.rating,
       comment: validated.data.comment,
-      date: sanitizeText(review.date || new Date().toLocaleDateString('vi-VN'), 30),
+      date: sanitizeText(review.date || new Date().toISOString(), 40),
     };
     setShopReviews((prev) => {
-      const next = [sanitized, ...prev].slice(0, 50);
+      const next = [sanitized, ...filterRealShopReviews(prev)].slice(0, 60);
       saveCachedShopReviews(next);
-      supabase
-        .from('addresses')
-        .upsert({
-          id: SHOP_REVIEWS_ROW_ID,
-          userId: SHOP_REVIEWS_HOLDER_USER,
-          fullName: SHOP_REVIEWS_PARTITION,
-          phone: 'shop_reviews',
-          city: 'HCM',
-          district: 'Q8',
-          ward: '1',
-          detailAddress: JSON.stringify(next),
-          isDefault: false,
-        })
-        .then(() => {}, () => {});
+      syncShopReviewsToSupabase(next).catch(() => {});
       return next;
     });
   }, []);
+
+  const removeShopReview = useCallback(
+    (reviewId: string) => {
+      if (role !== 'admin') return;
+      setShopReviews((prev) => {
+        const next = filterRealShopReviews(prev).filter((r) => r.id !== reviewId);
+        saveCachedShopReviews(next);
+        syncShopReviewsToSupabase(next).catch(() => {});
+        return next;
+      });
+    },
+    [role]
+  );
+
+  const replyToShopReview = useCallback(
+    (reviewId: string, replyText: string) => {
+      if (role !== 'admin') return;
+      const cleanReply = sanitizeMultilineText(replyText || '', 600);
+      setShopReviews((prev) => {
+        const next = filterRealShopReviews(prev).map((r) => {
+          if (r.id !== reviewId) return r;
+          return {
+            ...r,
+            adminReply: cleanReply || undefined,
+            adminReplyDate: cleanReply ? new Date().toISOString() : undefined,
+          };
+        });
+        saveCachedShopReviews(next);
+        syncShopReviewsToSupabase(next).catch(() => {});
+        return next;
+      });
+    },
+    [role]
+  );
 
   const contextValue = useMemo(
     () => ({
@@ -1336,6 +1402,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       removeProduct,
       addReview,
       addShopReview,
+      removeShopReview,
+      replyToShopReview,
       refetchProducts,
     }),
     [
@@ -1349,6 +1417,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       removeProduct,
       addReview,
       addShopReview,
+      removeShopReview,
+      replyToShopReview,
       refetchProducts,
     ]
   );
