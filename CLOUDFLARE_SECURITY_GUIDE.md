@@ -37,15 +37,16 @@ Vào mục **SSL/TLS**:
 
 ---
 
-## 3. Cấu Hình Chống Bot & AI Scraper (Security → Bots)
+## 3. Cấu Hình Chống Bot & Đảm Bảo Google Search Console Hoạt Động 100% (Security → Bots)
 
-Vào mục **Security** → **Bots**:
+Vào mục **Security** → **Bots** (hoặc **Configure Super Bot Fight Mode**):
 
-| Thông số | Giá trị khuyến nghị | Tác dụng |
+| Thông số | Giá trị bắt buộc | Lý do |
 | :--- | :--- | :--- |
-| **Bot Fight Mode** | **ON** | Tự động phát hiện và chặn các Bot tự động đầu bảng / Headless Browser độc hại |
-| **Block AI Bots** | **ON** | Chặn các bot thu thập dữ liệu huấn luyện hoặc quét tự động bằng AI không được phép |
-| **JavaScript Detections** | **ON** | Kiểm tra trình duyệt thật thông qua thử thách JS nhẹ (vô hình với khách hàng thật) |
+| **Bot Fight Mode** | **OFF (Tắt)** | Trên gói Free, `Bot Fight Mode` không thể bị bỏ qua bởi Custom WAF Rules và sẽ chặn công cụ **Kiểm tra URL / Yêu cầu lập chỉ mục** cũng như trình nạp `sitemap.xml` của Google Search Console |
+| **Block AI Bots** | **OFF (Tắt)** | Nếu bật, Cloudflare sẽ chặn luôn `GoogleOther` / `Google-InspectionTool` của Google |
+| **Instruct AI bot traffic with robots.txt (Managed robots.txt)** | **OFF (Tắt)** | Nếu bật, Cloudflare tự động chèn `User-agent: GoogleOther Disallow: /` và dòng `Content-Signal:` không chuẩn vào đầu file `/robots.txt`, làm Google Search Console báo lỗi `Không thể tìm nạp` `sitemap.xml` |
+| **JavaScript Detections** | **OFF (Tắt)** | Tránh chặn trình thu thập dữ liệu không chạy JS đầy đủ |
 
 ---
 
