@@ -175,8 +175,9 @@ function persistCustomAdminProduct(product: Product) {
 }
 
 function removeCustomAdminProduct(id: string) {
-  customAdminProductsMemory.delete(id);
+  const hadCustom = customAdminProductsMemory.delete(id);
   hydratedMediaMemory.delete(id);
+  if (!hadCustom) return;
   const all = [...customAdminProductsMemory.values()];
   saveCustomProductsToIdb(all);
   try {
@@ -874,6 +875,205 @@ interface ProductContextType {
   removeShopReview: (reviewId: string) => void;
   replyToShopReview: (reviewId: string, replyText: string) => void;
   refetchProducts: () => Promise<void>;
+  importProductsFromRawData: (rawText: string) => Promise<number>;
+}
+
+const RESCUE_PRODUCT_PHONE_TAG = '__TCL_RESCUE_PROD_V1__';
+
+async function pushRescuedProductToSupabase(product: Product): Promise<void> {
+  if (!supabaseUrl || !supabaseAnonKey || !product?.id) return;
+  const dbProd = toDbProduct(product);
+  const payload = {
+    id: `tcl_rescue_${product.id}`,
+    userId: SHOP_REVIEWS_HOLDER_USER,
+    fullName: SHOP_REVIEWS_PARTITION,
+    phone: RESCUE_PRODUCT_PHONE_TAG,
+    city: 'HCM',
+    district: 'Q8',
+    ward: '1',
+    detailAddress: JSON.stringify(dbProd),
+    isDefault: false,
+  };
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function fetchRemoteRescuedProducts(): Promise<Product[]> {
+  if (!supabaseUrl || !supabaseAnonKey) return [];
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/addresses?phone=eq.${RESCUE_PRODUCT_PHONE_TAG}&select=id,detailAddress`,
+      {
+        cache: 'no-store',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+      }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return [];
+    const rescued: Product[] = [];
+    for (const row of rows) {
+      if (row?.detailAddress) {
+        try {
+          const parsed = JSON.parse(row.detailAddress);
+          if (parsed && parsed.id && parsed.name) {
+            rescued.push(hydrateDbProduct(parsed as Product));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return rescued;
+  } catch {
+    return [];
+  }
+}
+
+function parseRfc4180Csv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field);
+      field = '';
+      if (row.some((cell) => cell.length > 0)) {
+        rows.push(row);
+      }
+      row = [];
+    } else {
+      field += ch;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    if (row.some((cell) => cell.length > 0)) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function parseImportedProductsRaw(rawText: string): Product[] {
+  const trimmed = (rawText || '').trim();
+  if (!trimmed) return [];
+  const results: Product[] = [];
+
+  const pushRawObj = (obj: Record<string, any>) => {
+    if (!obj || typeof obj !== 'object') return;
+    const id = String(obj.id || '').trim();
+    const name = String(obj.name || '').trim();
+    if (!id || !name || RETIRED_PRODUCT_IDS.has(id)) return;
+    let parsedTags: string[] = [];
+    if (Array.isArray(obj.tags)) {
+      parsedTags = obj.tags;
+    } else if (typeof obj.tags === 'string' && obj.tags.trim()) {
+      const tStr = obj.tags.trim();
+      try {
+        const j = JSON.parse(tStr);
+        if (Array.isArray(j)) parsedTags = j;
+      } catch {
+        // Handle Postgres array literal {"a","b"} if exported in Postgres format
+        if (tStr.startsWith('{') && tStr.endsWith('}')) {
+          const inner = tStr.slice(1, -1);
+          const cells = parseRfc4180Csv(inner);
+          if (cells[0]) parsedTags = cells[0];
+        }
+      }
+    }
+    let parsedReviews: Review[] = [];
+    if (Array.isArray(obj.reviews)) {
+      parsedReviews = obj.reviews;
+    } else if (typeof obj.reviews === 'string' && obj.reviews.trim()) {
+      try {
+        const r = JSON.parse(obj.reviews.trim());
+        if (Array.isArray(r)) parsedReviews = r;
+      } catch {
+        // ignore
+      }
+    }
+    const rawProd: Product = {
+      id,
+      name,
+      description: String(obj.description || ''),
+      price: Number(obj.price || 0),
+      image: obj.image || null,
+      category: (obj.category || 'Keychains') as Product['category'],
+      material: String(obj.material || 'Len milk cotton'),
+      color: String(obj.color || 'Nhiều màu'),
+      quantity: Number(obj.quantity ?? 10),
+      rating: Number(obj.rating ?? 5),
+      reviews: parsedReviews,
+      tags: parsedTags,
+      colorOptions: Array.isArray(obj.colorOptions) ? obj.colorOptions : undefined,
+      accessoryOptions: Array.isArray(obj.accessoryOptions) ? obj.accessoryOptions : undefined,
+      gallery: Array.isArray(obj.gallery) ? obj.gallery : undefined,
+      isMadeToOrder: typeof obj.isMadeToOrder === 'boolean' ? obj.isMadeToOrder : undefined,
+      createdAt: String(obj.createdAt || obj.created_at || new Date().toISOString()),
+    };
+    results.push(hydrateDbProduct(rawProd));
+  };
+
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const arr = Array.isArray(parsed) ? parsed : Array.isArray(parsed.data) ? parsed.data : [parsed];
+      for (const item of arr) {
+        pushRawObj(item);
+      }
+      return results;
+    } catch {
+      // fall through to CSV parser
+    }
+  }
+
+  const csvRows = parseRfc4180Csv(trimmed);
+  if (csvRows.length < 2) return results;
+  const headers = csvRows[0].map((h) => h.trim().replace(/^\uFEFF/, ''));
+  for (let r = 1; r < csvRows.length; r++) {
+    const cells = csvRows[r];
+    const obj: Record<string, any> = {};
+    for (let c = 0; c < headers.length; c++) {
+      obj[headers[c]] = cells[c] ?? '';
+    }
+    pushRawObj(obj);
+  }
+  return results;
 }
 
 const SHOP_REVIEWS_CACHE_KEY = 'tcl_shop_reviews_v2';
@@ -1010,19 +1210,42 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           saveDeletedIds(mergedDeleted);
         }
         const deleted = getDeletedIds();
+        let rescuedFromCache = false;
         if (cachedAll.length > 0) {
           for (const item of cachedAll) {
-            if (item && item.id && !deleted.has(item.id)) {
+            if (
+              item &&
+              item.id &&
+              !deleted.has(item.id) &&
+              !RETIRED_PRODUCT_IDS.has(item.id)
+            ) {
               cacheProductMediaInMemory(item, {
                 coverChecked: Boolean(item.image),
                 tagsChecked: true,
               });
+              // Rescue any custom user_ product from cached_all_products into customAdminProductsMemory
+              if (
+                typeof item.id === 'string' &&
+                item.id.startsWith('user_') &&
+                item.id !== 'user_bunny_keychain_01'
+              ) {
+                const existing = customAdminProductsMemory.get(item.id);
+                if (!existing || (!existing.image && item.image)) {
+                  customAdminProductsMemory.set(item.id, item);
+                  rescuedFromCache = true;
+                }
+              }
             }
           }
         }
         if (idbCustom.length > 0) {
           for (const item of idbCustom) {
-            if (item && item.id && !deleted.has(item.id)) {
+            if (
+              item &&
+              item.id &&
+              !deleted.has(item.id) &&
+              !RETIRED_PRODUCT_IDS.has(item.id)
+            ) {
               customAdminProductsMemory.set(item.id, item);
               cacheProductMediaInMemory(item, {
                 coverChecked: Boolean(item.image),
@@ -1030,6 +1253,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               });
             }
           }
+        }
+        if (rescuedFromCache && customAdminProductsMemory.size > 0) {
+          saveCustomProductsToIdb([...customAdminProductsMemory.values()]);
         }
         setProducts((prev) =>
           mergeWithMockProducts(cachedAll.length > 0 ? cachedAll : prev)
@@ -1260,64 +1486,123 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const syncProducts = () => {
+    const syncProducts = async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return;
       }
-      Promise.all([fetchProducts(0), fetchRemoteDeletedIds()])
-        .then(([data, remoteDeletedList]) => {
-          if (cancelled) return;
-          const currentDeleted = getDeletedIds();
-          let hasNewLocalDeletesToPush = false;
-          const remoteDeletedSet = new Set(remoteDeletedList);
-          for (const rId of remoteDeletedList) {
-            if (!currentDeleted.has(rId)) {
-              currentDeleted.add(rId);
-              removeCustomAdminProduct(rId);
-            }
-          }
-          for (const lId of currentDeleted) {
-            if (!remoteDeletedSet.has(lId)) {
-              hasNewLocalDeletesToPush = true;
-            }
-          }
-          if (currentDeleted.size > 0) {
-            saveDeletedIds(currentDeleted);
-          }
-          if (role === 'admin' && hasNewLocalDeletesToPush && currentDeleted.size > 0) {
-            syncDeletedIdsToSupabase(currentDeleted).catch(() => {});
-          }
+      // Wait for IndexedDB hydration so customAdminProductsMemory and cached_all_products are NEVER overwritten prematurely
+      if (idbHydrationPromiseRef.current) {
+        try {
+          await idbHydrationPromiseRef.current;
+        } catch {
+          // ignore
+        }
+      }
+      if (cancelled) return;
 
-          if (data) {
-            // If Admin has local custom products in memory/IndexedDB/localStorage that aren't in Supabase yet, push them automatically
-            if (role === 'admin') {
-              const remoteIds = new Set(data.map((r) => r.id));
-              const deleted = getDeletedIds();
-              const localCustoms = loadCustomAdminProductsSync();
+      try {
+        const [data, remoteDeletedList, remoteRescuedList] = await Promise.all([
+          fetchProducts(0),
+          fetchRemoteDeletedIds(),
+          fetchRemoteRescuedProducts(),
+        ]);
+        if (cancelled) return;
+
+        const currentDeleted = getDeletedIds();
+        let hasNewLocalDeletesToPush = false;
+        const remoteDeletedSet = new Set(remoteDeletedList);
+        for (const rId of remoteDeletedList) {
+          if (!currentDeleted.has(rId)) {
+            currentDeleted.add(rId);
+            removeCustomAdminProduct(rId);
+          }
+        }
+        for (const lId of currentDeleted) {
+          if (!remoteDeletedSet.has(lId)) {
+            hasNewLocalDeletesToPush = true;
+          }
+        }
+        if (currentDeleted.size > 0) {
+          saveDeletedIds(currentDeleted);
+        }
+        if (role === 'admin' && hasNewLocalDeletesToPush && currentDeleted.size > 0) {
+          syncDeletedIdsToSupabase(currentDeleted).catch(() => {});
+        }
+
+        // Merge any products rescued via cross-device bridge
+        if (remoteRescuedList.length > 0) {
+          for (const rp of remoteRescuedList) {
+            if (rp && rp.id && !currentDeleted.has(rp.id) && !RETIRED_PRODUCT_IDS.has(rp.id)) {
+              customAdminProductsMemory.set(rp.id, rp);
+              cacheProductMediaInMemory(rp, {
+                coverChecked: Boolean(rp.image),
+                tagsChecked: true,
+              });
+            }
+          }
+          saveCustomProductsToIdb([...customAdminProductsMemory.values()]);
+        }
+
+        if (data) {
+          const remoteIds = new Set(data.map((r) => r.id));
+          const deleted = getDeletedIds();
+          const localCustoms = loadCustomAdminProductsSync();
+
+          if (role === 'admin') {
+            // Upload missing custom products sequentially so multi-MB Base64 payloads never collide or drop
+            void (async () => {
               for (const lp of localCustoms) {
-                if (lp && lp.id && !remoteIds.has(lp.id) && !deleted.has(lp.id)) {
-                  upsertProductToSupabase(toDbProduct(lp)).catch(() => {});
+                if (
+                  lp &&
+                  lp.id &&
+                  !remoteIds.has(lp.id) &&
+                  !deleted.has(lp.id) &&
+                  !RETIRED_PRODUCT_IDS.has(lp.id)
+                ) {
+                  await upsertProductToSupabase(toDbProduct(lp)).catch(() => false);
                 }
               }
-            }
-            const merged = mergeWithMockProducts(data);
-            setProducts((prev) => {
-              if (productsSignature(merged) === productsSignature(prev)) {
-                return prev;
+            })();
+          } else {
+            // If a customer device (e.g. phone with IndexedDB cache) has custom user_ products missing from the new DB, push them to the rescue bridge
+            const rescuedIds = new Set(remoteRescuedList.map((r) => r.id));
+            void (async () => {
+              for (const lp of localCustoms) {
+                if (
+                  lp &&
+                  typeof lp.id === 'string' &&
+                  lp.id.startsWith('user_') &&
+                  lp.id !== 'user_bunny_keychain_01' &&
+                  !remoteIds.has(lp.id) &&
+                  !rescuedIds.has(lp.id) &&
+                  !deleted.has(lp.id) &&
+                  !RETIRED_PRODUCT_IDS.has(lp.id) &&
+                  typeof lp.image === 'string' &&
+                  lp.image.length > 100
+                ) {
+                  await pushRescuedProductToSupabase(lp);
+                }
               }
-              saveCachedProducts(merged);
-              return merged;
-            });
-          } else if (remoteDeletedList.length > 0) {
-            setProducts((prev) =>
-              prev.filter((p) => !currentDeleted.has(p.id))
-            );
+            })();
           }
-          setLoaded(true);
-        })
-        .catch(() => {
-          if (!cancelled) setLoaded(true);
-        });
+
+          const merged = mergeWithMockProducts([...remoteRescuedList, ...data]);
+          setProducts((prev) => {
+            if (productsSignature(merged) === productsSignature(prev)) {
+              return prev;
+            }
+            saveCachedProducts(merged);
+            return merged;
+          });
+        } else if (remoteDeletedList.length > 0) {
+          setProducts((prev) =>
+            prev.filter((p) => !currentDeleted.has(p.id))
+          );
+        }
+        setLoaded(true);
+      } catch {
+        if (!cancelled) setLoaded(true);
+      }
     };
 
     let lastSyncTs = Date.now();
@@ -1506,6 +1791,42 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     [role]
   );
 
+  const importProductsFromRawData = useCallback(
+    async (rawText: string): Promise<number> => {
+      if (role !== 'admin') return 0;
+      const imported = parseImportedProductsRaw(rawText);
+      if (imported.length === 0) return 0;
+      const deleted = getDeletedIds();
+      let count = 0;
+      for (const item of imported) {
+        if (!item || !item.id || deleted.has(item.id) || RETIRED_PRODUCT_IDS.has(item.id)) {
+          continue;
+        }
+        persistCustomAdminProduct(item);
+        cacheProductMediaInMemory(item, {
+          coverChecked: Boolean(item.image),
+          tagsChecked: true,
+        });
+        count++;
+      }
+      if (count > 0) {
+        setProducts((prev) => {
+          const merged = mergeWithMockProducts([...imported, ...prev]);
+          saveCachedProducts(merged);
+          return merged;
+        });
+        for (const item of imported) {
+          if (!item || !item.id || deleted.has(item.id) || RETIRED_PRODUCT_IDS.has(item.id)) {
+            continue;
+          }
+          await upsertProductToSupabase(toDbProduct(item)).catch(() => false);
+        }
+      }
+      return count;
+    },
+    [role]
+  );
+
   const contextValue = useMemo(
     () => ({
       products,
@@ -1521,6 +1842,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       removeShopReview,
       replyToShopReview,
       refetchProducts,
+      importProductsFromRawData,
     }),
     [
       products,
@@ -1536,6 +1858,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       removeShopReview,
       replyToShopReview,
       refetchProducts,
+      importProductsFromRawData,
     ]
   );
 

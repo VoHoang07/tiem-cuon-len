@@ -27,6 +27,7 @@ import {
   FileText,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
+import { useProducts } from '@/store/ProductContext';
 import { useAuth } from '@/store/AuthContext';
 import { CategoryChips } from '@/components/CategoryChips';
 import { COLORS, SPACING, SHADOWS, CATEGORIES } from '@/constants/theme';
@@ -42,6 +43,7 @@ import {
 export default function ManageProductsScreen() {
   const router = useRouter();
   const { products, removeProduct } = useShop();
+  const { importProductsFromRawData } = useProducts();
   const { role, isLoading } = useAuth();
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
@@ -49,6 +51,47 @@ export default function ManageProductsScreen() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [drafts, setDrafts] = useState<AdminProductDraft[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  const handleImportFile = useCallback(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.json,text/csv,application/json';
+    input.onchange = async (e: any) => {
+      const file = e?.target?.files?.[0];
+      if (!file) return;
+      setIsImporting(true);
+      setImportMessage(null);
+      try {
+        const text = await file.text();
+        const count = await importProductsFromRawData(text);
+        if (count > 0) {
+          setImportMessage({
+            type: 'success',
+            text: `Đã khôi phục và đồng bộ thành công ${count} sản phẩm lên hệ thống mới!`,
+          });
+        } else {
+          setImportMessage({
+            type: 'error',
+            text: 'Không tìm thấy sản phẩm hợp lệ trong file CSV/JSON vừa chọn.',
+          });
+        }
+      } catch {
+        setImportMessage({
+          type: 'error',
+          text: 'Lỗi đọc file CSV/JSON. Vui lòng thử lại.',
+        });
+      } finally {
+        setIsImporting(false);
+      }
+    };
+    input.click();
+  }, [importProductsFromRawData]);
 
   const refreshDrafts = useCallback(async () => {
     const list = await loadAdminDrafts();
@@ -241,14 +284,46 @@ export default function ManageProductsScreen() {
         </View>
       </View>
 
-      {/* Add Product Button */}
-      <TouchableOpacity
-        style={[styles.addBtn, isMobile && styles.addBtnMobile]}
-        onPress={() => router.push('/add-product')}
-        activeOpacity={0.85}>
-        <Plus size={20} color="#3D2B1F" />
-        <Text style={styles.addBtnText}>Thêm sản phẩm thủ công mới</Text>
-      </TouchableOpacity>
+      {/* Add Product & CSV Restore Buttons */}
+      <View style={[styles.actionRowWrap, isMobile && styles.actionRowWrapMobile]}>
+        <TouchableOpacity
+          style={[styles.addBtn, styles.actionBtnFlex]}
+          onPress={() => router.push('/add-product')}
+          activeOpacity={0.85}>
+          <Plus size={20} color="#3D2B1F" />
+          <Text style={styles.addBtnText}>Thêm sản phẩm thủ công mới</Text>
+        </TouchableOpacity>
+
+        {Platform.OS === 'web' && (
+          <TouchableOpacity
+            style={[styles.importCsvBtn, isImporting && { opacity: 0.65 }]}
+            onPress={handleImportFile}
+            disabled={isImporting}
+            activeOpacity={0.85}>
+            <FileText size={18} color="#5C4332" />
+            <Text style={styles.importCsvBtnText}>
+              {isImporting ? 'Đang khôi phục & đồng bộ...' : 'Nhập CSV / JSON khôi phục'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {importMessage && (
+        <View
+          style={[
+            styles.importFeedbackBanner,
+            isMobile && styles.addBtnMobile,
+            importMessage.type === 'error' && styles.importFeedbackBannerError,
+          ]}>
+          <Text
+            style={[
+              styles.importFeedbackText,
+              importMessage.type === 'error' && styles.importFeedbackTextError,
+            ]}>
+            {importMessage.text}
+          </Text>
+        </View>
+      )}
 
       {/* Admin Saved Drafts Section (Only visible to Admin) */}
       {drafts.length > 0 && (
@@ -501,6 +576,63 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  actionRowWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  actionRowWrapMobile: {
+    marginHorizontal: 12,
+  },
+  actionBtnFlex: {
+    flex: 1,
+    minWidth: 220,
+    marginHorizontal: 0,
+    marginBottom: 0,
+  },
+  importCsvBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFDF9',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: '#C4AA90',
+    ...SHADOWS.small,
+  },
+  importCsvBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#5C4332',
+  },
+  importFeedbackBanner: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  importFeedbackBannerError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  importFeedbackText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#065F46',
+    textAlign: 'center',
+  },
+  importFeedbackTextError: {
+    color: '#991B1B',
   },
   addBtn: {
     flexDirection: 'row',
