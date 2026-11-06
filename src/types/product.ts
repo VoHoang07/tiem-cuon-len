@@ -79,7 +79,15 @@ export type Category =
   | 'Crochet'
   | 'Bags'
   | 'Dolls'
-  | 'Accessories';
+  | 'Accessories'
+  | (string & {});
+
+export interface ShopCategoryItem {
+  id: string;
+  label: string;
+  emoji: string;
+  craftLine: 'len' | 'kem_nhung';
+}
 
 export interface CartItem {
   product: Product;

@@ -8,10 +8,14 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { Product, Review } from '@/types/product';
+import { Product, Review, ShopCategoryItem } from '@/types/product';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
 import { useAuth } from '@/store/AuthContext';
+import {
+  DEFAULT_SHOP_CATEGORIES,
+  setDynamicCategoriesRegistry,
+} from '@/utils/getCategoryEmoji';
 import {
   sanitizeText,
   sanitizeMultilineText,
@@ -864,6 +868,7 @@ async function deleteProductFromSupabase(id: string): Promise<void> {
 interface ProductContextType {
   products: Product[];
   shopReviews: Review[];
+  shopCategories: ShopCategoryItem[];
   isLoading: boolean;
   hasMore: boolean;
   loadMore: () => Promise<void>;
@@ -874,8 +879,139 @@ interface ProductContextType {
   addShopReview: (review: Review) => void;
   removeShopReview: (reviewId: string) => void;
   replyToShopReview: (reviewId: string, replyText: string) => void;
+  addShopCategory: (input: {
+    label: string;
+    emoji?: string;
+    craftLine: 'len' | 'kem_nhung';
+  }) => ShopCategoryItem | null;
+  removeShopCategory: (categoryId: string) => void;
+  resetShopCategories: () => void;
   refetchProducts: () => Promise<void>;
   importProductsFromRawData: (rawText: string) => Promise<number>;
+}
+
+const SHOP_CATEGORIES_CACHE_KEY = 'tcl_shop_categories_v1';
+const SHOP_CATEGORIES_ROW_ID = 'tcl_shop_categories_v1';
+
+function normalizeShopCategories(raw: unknown): ShopCategoryItem[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_SHOP_CATEGORIES];
+  const out: ShopCategoryItem[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown>;
+    const id = String(obj.id || '').trim();
+    const label = sanitizeText(obj.label, 40);
+    const emoji = sanitizeText(obj.emoji || '🧶', 8) || '🧶';
+    const craftLine = obj.craftLine === 'kem_nhung' ? 'kem_nhung' : 'len';
+    if (!id || !label || id === 'All' || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, label, emoji, craftLine });
+  }
+  if (out.length === 0) return [...DEFAULT_SHOP_CATEGORIES];
+  setDynamicCategoriesRegistry(out);
+  return out;
+}
+
+function loadCachedShopCategories(): ShopCategoryItem[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(SHOP_CATEGORIES_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return normalizeShopCategories(parsed);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  setDynamicCategoriesRegistry(DEFAULT_SHOP_CATEGORIES);
+  return [...DEFAULT_SHOP_CATEGORIES];
+}
+
+function saveCachedShopCategories(list: ShopCategoryItem[]) {
+  const cleaned = normalizeShopCategories(list);
+  saveToIdb('shop_categories', cleaned);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(SHOP_CATEGORIES_CACHE_KEY, JSON.stringify(cleaned));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function syncShopCategoriesToSupabase(list: ShopCategoryItem[]): Promise<void> {
+  if (!supabaseUrl || !supabaseAnonKey) return;
+  const cleaned = normalizeShopCategories(list);
+  const payload = {
+    id: SHOP_CATEGORIES_ROW_ID,
+    userId: SHOP_REVIEWS_HOLDER_USER,
+    fullName: SHOP_REVIEWS_PARTITION,
+    phone: '__TCL_SHOP_CATEGORIES_V1__',
+    city: 'HCM',
+    district: 'Q8',
+    ward: '1',
+    detailAddress: JSON.stringify(cleaned),
+    isDefault: false,
+  };
+  try {
+    const bearer = await getSupabaseAuthBearer();
+    const res = await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${bearer}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) return;
+  } catch {
+    // fall through
+  }
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function fetchRemoteShopCategories(): Promise<ShopCategoryItem[] | null> {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/addresses?id=eq.${SHOP_CATEGORIES_ROW_ID}&select=detailAddress`,
+      {
+        cache: 'no-store',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+      }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0 && rows[0]?.detailAddress) {
+      const parsed = JSON.parse(rows[0].detailAddress);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return normalizeShopCategories(parsed);
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 const RESCUE_PRODUCT_PHONE_TAG = '__TCL_RESCUE_PROD_V1__';
@@ -1187,10 +1323,33 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth();
   const [products, setProducts] = useState<Product[]>(() => loadCachedProducts());
   const [shopReviews, setShopReviews] = useState<Review[]>(() => loadCachedShopReviews());
+  const [shopCategories, setShopCategories] = useState<ShopCategoryItem[]>(() =>
+    loadCachedShopCategories()
+  );
   const [loaded, setLoaded] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
   const idbHydrationPromiseRef = useRef<Promise<void> | null>(null);
+
+  // Sync shop categories from IndexedDB & Supabase partition
+  useEffect(() => {
+    let mounted = true;
+    loadFromIdb('shop_categories')
+      .then((idbCats) => {
+        if (!mounted || !Array.isArray(idbCats) || idbCats.length === 0) return;
+        const normalized = normalizeShopCategories(idbCats);
+        setShopCategories(normalized);
+      })
+      .catch(() => {});
+    fetchRemoteShopCategories().then((remoteCats) => {
+      if (!mounted || !remoteCats) return;
+      setShopCategories(remoteCats);
+      saveCachedShopCategories(remoteCats);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Hydrate cached, custom admin products, and deleted IDs from IndexedDB on mount
   useEffect(() => {
@@ -1827,10 +1986,74 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     [role]
   );
 
+  const addShopCategory = useCallback(
+    (input: {
+      label: string;
+      emoji?: string;
+      craftLine: 'len' | 'kem_nhung';
+    }): ShopCategoryItem | null => {
+      if (role !== 'admin') return null;
+      const cleanLabel = sanitizeText(input.label, 40);
+      if (!cleanLabel) return null;
+      const cleanEmoji = sanitizeText(input.emoji || '🧶', 8) || '🧶';
+      const craftLine = input.craftLine === 'kem_nhung' ? 'kem_nhung' : 'len';
+
+      // Reuse built-in ID if label matches a default category (in case Admin re-adds a previously removed default category)
+      const matchedDefault = DEFAULT_SHOP_CATEGORIES.find(
+        (d) => d.label.toLowerCase() === cleanLabel.toLowerCase()
+      );
+      const id = matchedDefault ? matchedDefault.id : `cat_${Date.now()}`;
+      const newItem: ShopCategoryItem = {
+        id,
+        label: cleanLabel,
+        emoji: cleanEmoji,
+        craftLine,
+      };
+      setDynamicCategoriesRegistry([newItem]);
+      setShopCategories((prev) => {
+        const exists = prev.find(
+          (c) => c.id === id || c.label.toLowerCase() === cleanLabel.toLowerCase()
+        );
+        const next = exists
+          ? prev.map((c) => (c.id === exists.id ? { ...c, emoji: cleanEmoji, craftLine } : c))
+          : [...prev, newItem];
+        saveCachedShopCategories(next);
+        syncShopCategoriesToSupabase(next).catch(() => {});
+        return next;
+      });
+      return newItem;
+    },
+    [role]
+  );
+
+  const removeShopCategory = useCallback(
+    (categoryId: string) => {
+      if (role !== 'admin') return;
+      setShopCategories((prev) => {
+        const next = prev.filter((c) => c.id !== categoryId);
+        if (next.length === 0) return prev;
+        saveCachedShopCategories(next);
+        syncShopCategoriesToSupabase(next).catch(() => {});
+        return next;
+      });
+    },
+    [role]
+  );
+
+  const resetShopCategories = useCallback(() => {
+    if (role !== 'admin') return;
+    const defaults = [...DEFAULT_SHOP_CATEGORIES];
+    setDynamicCategoriesRegistry(defaults);
+    setShopCategories(defaults);
+    saveCachedShopCategories(defaults);
+    syncShopCategoriesToSupabase(defaults).catch(() => {});
+  }, [role]);
+
   const contextValue = useMemo(
     () => ({
       products,
       shopReviews,
+      shopCategories,
       isLoading: !loaded,
       hasMore,
       loadMore,
@@ -1841,12 +2064,16 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       addShopReview,
       removeShopReview,
       replyToShopReview,
+      addShopCategory,
+      removeShopCategory,
+      resetShopCategories,
       refetchProducts,
       importProductsFromRawData,
     }),
     [
       products,
       shopReviews,
+      shopCategories,
       loaded,
       hasMore,
       loadMore,
@@ -1857,6 +2084,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       addShopReview,
       removeShopReview,
       replyToShopReview,
+      addShopCategory,
+      removeShopCategory,
+      resetShopCategories,
       refetchProducts,
       importProductsFromRawData,
     ]

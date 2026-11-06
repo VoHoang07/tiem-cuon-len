@@ -32,6 +32,7 @@ import {
   Share2,
 } from 'lucide-react-native';
 import { useShop } from '@/store/ShopContext';
+import { useProducts } from '@/store/ProductContext';
 import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { ProductCard } from '@/components/ProductCard';
@@ -60,7 +61,7 @@ import {
 import { BrandTitle, BrandAvatar } from '@/components/BrandTitle';
 import { HomeSkeleton } from '@/components/Skeleton';
 import { BoutiqueFooter } from '@/components/BoutiqueFooter';
-import { getCategoryLabel } from '@/utils/getCategoryEmoji';
+import { getCategoryLabel, getCategoryCraftLine } from '@/utils/getCategoryEmoji';
 
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
@@ -79,6 +80,9 @@ const KEM_NHUNG_CAT_SET = new Set<string>([
 function isVelvetWireProduct(p: Product): boolean {
   if (p.craftLine === 'kem_nhung') return true;
   if (p.craftLine === 'len') return false;
+  const catLine = getCategoryCraftLine(p.category);
+  if (catLine === 'kem_nhung') return true;
+  if (catLine === 'len') return false;
   if (KEM_NHUNG_CAT_SET.has(p.category)) return true;
   const name = (p.name || '').toLowerCase();
   if (name.includes('len')) return false;
@@ -103,6 +107,7 @@ export default function HomeScreen() {
     cartCount,
     favorites,
   } = useShop();
+  const { shopCategories } = useProducts();
   const { user, role, isAuthenticated } = useAuth();
   const { orders } = useOrders();
   const isAdmin = role === 'admin';
@@ -710,10 +715,15 @@ export default function HomeScreen() {
         <CategoryChips
           categories={
             selectedMainLine === 'len'
-              ? [...LEN_CATEGORIES]
+              ? ['All', ...shopCategories.filter((c) => c.craftLine === 'len').map((c) => c.id)]
               : selectedMainLine === 'kem_nhung'
-                ? [...KEM_NHUNG_CATEGORIES]
-                : [...CATEGORIES]
+                ? [
+                    'All',
+                    ...shopCategories
+                      .filter((c) => c.craftLine === 'kem_nhung')
+                      .map((c) => c.id),
+                  ]
+                : ['All', ...shopCategories.map((c) => c.id)]
           }
           selected={selectedCategory}
           onSelect={(cat) => {

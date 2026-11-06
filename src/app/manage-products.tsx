@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -43,7 +44,13 @@ import {
 export default function ManageProductsScreen() {
   const router = useRouter();
   const { products, removeProduct } = useShop();
-  const { importProductsFromRawData } = useProducts();
+  const {
+    importProductsFromRawData,
+    shopCategories,
+    addShopCategory,
+    removeShopCategory,
+    resetShopCategories,
+  } = useProducts();
   const { role, isLoading } = useAuth();
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
@@ -56,6 +63,10 @@ export default function ManageProductsScreen() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [showCatManager, setShowCatManager] = useState(false);
+  const [newCatLabel, setNewCatLabel] = useState('');
+  const [newCatEmoji, setNewCatEmoji] = useState('🧢');
+  const [newCatLine, setNewCatLine] = useState<'len' | 'kem_nhung'>('len');
 
   const handleImportFile = useCallback(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -435,8 +446,249 @@ export default function ManageProductsScreen() {
         )}
       </View>
 
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: isMobile ? 12 : SPACING.lg,
+          marginTop: 4,
+        }}>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: '#5C4332' }}>
+          Danh mục ({shopCategories.length})
+        </Text>
+        <TouchableOpacity
+          onPress={() => setShowCatManager((v) => !v)}
+          activeOpacity={0.75}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            backgroundColor: '#EFE3D6',
+            paddingHorizontal: 11,
+            paddingVertical: 6,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: '#D8C3AD',
+          }}>
+          <Plus size={13} color="#3D2B1F" />
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#3D2B1F' }}>
+            {showCatManager ? 'Đóng tuỳ chỉnh danh mục' : 'Thêm / Xoá danh mục'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {showCatManager && (
+        <View
+          style={{
+            marginHorizontal: isMobile ? 12 : SPACING.lg,
+            marginTop: 8,
+            backgroundColor: '#FFFDF9',
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: '#D8C3AD',
+            padding: 12,
+            gap: 10,
+            ...SHADOWS.small,
+          }}>
+          <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#3D2B1F' }}>
+            Bấm dấu × trên danh mục để xoá bớt, hoặc nhập tên bên dưới để thêm danh mục mới:
+          </Text>
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+            {shopCategories.map((catItem) => (
+              <View
+                key={catItem.id}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  backgroundColor: '#F3ECE2',
+                  borderRadius: 999,
+                  paddingHorizontal: 11,
+                  paddingVertical: 6,
+                  borderWidth: 1,
+                  borderColor: '#E2D2C0',
+                }}>
+                <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#3D2B1F' }}>
+                  {catItem.emoji} {catItem.label}
+                </Text>
+                {shopCategories.length > 1 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      removeShopCategory(catItem.id);
+                      if (selectedCategory === catItem.id) {
+                        setSelectedCategory('All');
+                      }
+                    }}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      backgroundColor: '#FDF0ED',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 1,
+                      borderColor: '#F5C9C0',
+                    }}>
+                    <X size={11} color={COLORS.error} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </View>
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => setNewCatLine('len')}
+              style={{
+                paddingHorizontal: 11,
+                paddingVertical: 6,
+                borderRadius: 10,
+                backgroundColor: newCatLine === 'len' ? '#5C4033' : '#FAF6F0',
+                borderWidth: 1,
+                borderColor: newCatLine === 'len' ? '#5C4033' : '#E2D4C4',
+              }}>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: newCatLine === 'len' ? '#FFFDF9' : '#5C4738',
+                }}>
+                🧶 Thuộc dòng Len
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setNewCatLine('kem_nhung')}
+              style={{
+                paddingHorizontal: 11,
+                paddingVertical: 6,
+                borderRadius: 10,
+                backgroundColor: newCatLine === 'kem_nhung' ? '#5C4033' : '#FAF6F0',
+                borderWidth: 1,
+                borderColor: newCatLine === 'kem_nhung' ? '#5C4033' : '#E2D4C4',
+              }}>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: newCatLine === 'kem_nhung' ? '#FFFDF9' : '#5C4738',
+                }}>
+                🌸 Thuộc dòng Kẽm nhung
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6 }}>
+            {[
+              '🧢',
+              '🔑',
+              '🧶',
+              '🌻',
+              '👜',
+              '🧸',
+              '🧣',
+              '🎀',
+              '💐',
+              '🪴',
+              '🌸',
+              '🎁',
+              '✨',
+            ].map((emo) => (
+              <TouchableOpacity
+                key={emo}
+                onPress={() => setNewCatEmoji(emo)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: newCatEmoji === emo ? '#D8C3AD' : '#FAF6F0',
+                  borderWidth: 1.5,
+                  borderColor: newCatEmoji === emo ? '#8C684C' : '#E5D6C5',
+                }}>
+                <Text style={{ fontSize: 16 }}>{emo}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+            <TextInput
+              style={{
+                flex: 1,
+                minWidth: 160,
+                height: 40,
+                backgroundColor: '#FAF6F0',
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: '#E2D4C4',
+                paddingHorizontal: 12,
+                fontSize: 13.5,
+                color: COLORS.darkText,
+              }}
+              value={newCatLabel}
+              onChangeText={setNewCatLabel}
+              placeholder="Tên danh mục mới (VD: Mũ len, Hoa tốt nghiệp...)"
+              placeholderTextColor={COLORS.lightText}
+            />
+            <TouchableOpacity
+              onPress={() => {
+                if (!newCatLabel.trim()) return;
+                const added = addShopCategory({
+                  label: newCatLabel.trim(),
+                  emoji: newCatEmoji,
+                  craftLine: newCatLine,
+                });
+                if (added) {
+                  setNewCatLabel('');
+                }
+              }}
+              style={{
+                backgroundColor: '#5C4033',
+                paddingHorizontal: 14,
+                height: 40,
+                borderRadius: 10,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+              }}>
+              <Plus size={15} color="#FFFDF9" />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFDF9' }}>
+                Thêm danh mục
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={resetShopCategories}
+              style={{
+                backgroundColor: '#F3ECE2',
+                paddingHorizontal: 12,
+                height: 40,
+                borderRadius: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: '#D8C3AD',
+              }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#5C4738' }}>
+                Khôi phục mặc định
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <CategoryChips
-        categories={[...CATEGORIES]}
+        categories={['All', ...shopCategories.map((c) => c.id)]}
         selected={selectedCategory}
         onSelect={setSelectedCategory}
       />

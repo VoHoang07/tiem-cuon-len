@@ -1,4 +1,5 @@
 import { CATEGORIES, COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import { useProducts } from '@/store/ProductContext';
 import {
     Category,
     Product,
@@ -551,6 +552,12 @@ export function ProductStudioForm({
   onBack,
   onSubmitProduct,
 }: ProductStudioFormProps) {
+  const {
+    shopCategories,
+    addShopCategory,
+    removeShopCategory,
+    resetShopCategories,
+  } = useProducts();
   const { width: rawWindowWidth } = useWindowDimensions();
   const windowWidth =
     rawWindowWidth > 0
@@ -568,6 +575,10 @@ export function ProductStudioForm({
   const [category, setCategory] = useState<Category>(
     initialProduct?.category ?? 'Crochet'
   );
+  const [showCatManager, setShowCatManager] = useState(false);
+  const [newCatLabel, setNewCatLabel] = useState('');
+  const [newCatEmoji, setNewCatEmoji] = useState('🧢');
+  const [newCatLine, setNewCatLine] = useState<'len' | 'kem_nhung'>('len');
   const [material, setMaterial] = useState(
     initialProduct?.material ?? 'Len Cotton Milk'
   );
@@ -1677,32 +1688,260 @@ export function ProductStudioForm({
           <View style={[styles.infoCol, isDesktop && styles.infoColDesktop]}>
             {/* Category Selector */}
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>Danh mục</Text>
+              <View style={styles.labelWithActionRow}>
+                <Text style={styles.fieldLabel}>Danh mục</Text>
+                <TouchableOpacity
+                  style={styles.sparkleMiniBtn}
+                  onPress={() => setShowCatManager((v) => !v)}
+                  activeOpacity={0.75}>
+                  <Plus size={12} color="#4A3728" />
+                  <Text style={styles.sparkleMiniBtnText}>
+                    {showCatManager ? 'Đóng tuỳ chỉnh' : 'Thêm / Xoá danh mục'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.categoryChipsRow}>
-                {CATEGORIES.filter((c) => c !== 'All').map((cat) => {
+                {shopCategories.map((catItem) => {
+                  const cat = catItem.id;
                   const active = category === cat;
                   return (
-                    <TouchableOpacity
+                    <View
                       key={cat}
                       style={[
                         styles.catChip,
                         active && styles.catChipActive,
-                      ]}
-                      onPress={() => setCategory(cat)}>
-                      <Text
-                        style={[
-                          styles.catChipText,
-                          active && styles.catChipTextActive,
-                        ]}>
-                        {getCategoryEmoji(cat)} {getCategoryLabel(cat)}
-                      </Text>
-                    </TouchableOpacity>
+                        { flexDirection: 'row', alignItems: 'center', gap: 6 },
+                      ]}>
+                      <TouchableOpacity
+                        onPress={() => setCategory(cat)}
+                        activeOpacity={0.75}>
+                        <Text
+                          style={[
+                            styles.catChipText,
+                            active && styles.catChipTextActive,
+                          ]}>
+                          {catItem.emoji || getCategoryEmoji(cat)}{' '}
+                          {catItem.label || getCategoryLabel(cat)}
+                        </Text>
+                      </TouchableOpacity>
+                      {showCatManager && shopCategories.length > 1 && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            removeShopCategory(cat);
+                            if (category === cat) {
+                              const fallback = shopCategories.find(
+                                (c) => c.id !== cat
+                              );
+                              if (fallback) setCategory(fallback.id);
+                            }
+                          }}
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            backgroundColor: active
+                              ? 'rgba(255,255,255,0.22)'
+                              : '#EFE3D6',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                          <X
+                            size={11}
+                            color={active ? '#FFFDF9' : '#7A5C45'}
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   );
                 })}
               </ScrollView>
+
+              {showCatManager && (
+                <View
+                  style={{
+                    backgroundColor: '#FAF6F0',
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: '#E2D4C4',
+                    padding: 12,
+                    gap: 10,
+                    marginTop: 4,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: '#4A3728',
+                    }}>
+                    Tạo danh mục mới (hoặc bấm dấu × trên thẻ ở trên để xoá bớt)
+                  </Text>
+
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                    }}>
+                    <TouchableOpacity
+                      onPress={() => setNewCatLine('len')}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 10,
+                        backgroundColor:
+                          newCatLine === 'len' ? '#5C4033' : '#FFFDF9',
+                        borderWidth: 1,
+                        borderColor:
+                          newCatLine === 'len' ? '#5C4033' : '#DFD3C3',
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: newCatLine === 'len' ? '#FFFDF9' : '#5C4738',
+                        }}>
+                        🧶 Thuộc dòng Len
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setNewCatLine('kem_nhung')}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 10,
+                        backgroundColor:
+                          newCatLine === 'kem_nhung' ? '#5C4033' : '#FFFDF9',
+                        borderWidth: 1,
+                        borderColor:
+                          newCatLine === 'kem_nhung' ? '#5C4033' : '#DFD3C3',
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color:
+                            newCatLine === 'kem_nhung' ? '#FFFDF9' : '#5C4738',
+                        }}>
+                        🌸 Thuộc dòng Kẽm nhung
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 6 }}>
+                    {[
+                      '🧢',
+                      '🔑',
+                      '🧶',
+                      '🌻',
+                      '👜',
+                      '🧸',
+                      '🧣',
+                      '🎀',
+                      '💐',
+                      '🪴',
+                      '🌸',
+                      '🎁',
+                      '✨',
+                    ].map((emo) => (
+                      <TouchableOpacity
+                        key={emo}
+                        onPress={() => setNewCatEmoji(emo)}
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor:
+                            newCatEmoji === emo ? '#D8C3AD' : '#FFFDF9',
+                          borderWidth: 1.5,
+                          borderColor:
+                            newCatEmoji === emo ? '#8C684C' : '#E5D6C5',
+                        }}>
+                        <Text style={{ fontSize: 16 }}>{emo}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                    }}>
+                    <TextInput
+                      style={[
+                        styles.stdInput,
+                        { flex: 1, minWidth: 160, height: 38, paddingVertical: 6 },
+                      ]}
+                      value={newCatLabel}
+                      onChangeText={setNewCatLabel}
+                      placeholder="Tên danh mục (VD: Mũ len, Hoa tốt nghiệp...)"
+                      placeholderTextColor={COLORS.lightText}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!newCatLabel.trim()) return;
+                        const added = addShopCategory({
+                          label: newCatLabel.trim(),
+                          emoji: newCatEmoji,
+                          craftLine: newCatLine,
+                        });
+                        if (added) {
+                          setCategory(added.id);
+                          setNewCatLabel('');
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#5C4033',
+                        paddingHorizontal: 14,
+                        height: 38,
+                        borderRadius: 10,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 5,
+                      }}>
+                      <Plus size={14} color="#FFFDF9" />
+                      <Text
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: '700',
+                          color: '#FFFDF9',
+                        }}>
+                        Thêm
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={resetShopCategories}
+                      style={{
+                        backgroundColor: '#EFE3D6',
+                        paddingHorizontal: 10,
+                        height: 38,
+                        borderRadius: 10,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: '#D8C3AD',
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: '700',
+                          color: '#5C4738',
+                        }}>
+                        Khôi phục mặc định
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Product Name */}

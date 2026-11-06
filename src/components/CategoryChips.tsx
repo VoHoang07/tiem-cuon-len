@@ -2,28 +2,13 @@ import React, { useRef } from 'react';
 import { ScrollView, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
 import { Category } from '@/types/product';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
-import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
+import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 
 interface CategoryChipsProps {
   categories: Category[];
   selected: Category;
   onSelect: (category: Category) => void;
 }
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  All: 'Tất cả',
-  VelvetWire: 'Kẽm nhung',
-  VelvetPots: 'Chậu hoa',
-  VelvetFlowers: 'Hoa',
-  VelvetAccessories: 'Phụ kiện kẽm nhung',
-  VelvetStems: 'Sợi kẽm nhung',
-  Keychains: 'Móc khoá',
-  Yarn: 'Len cuộn',
-  Crochet: 'Móc len',
-  Bags: 'Túi len',
-  Dolls: 'Thú bông',
-  Accessories: 'Phụ kiện',
-};
 
 export function CategoryChips({ categories, selected, onSelect }: CategoryChipsProps) {
   const scrollRef = useRef<ScrollView | null>(null);
@@ -56,7 +41,7 @@ export function CategoryChips({ categories, selected, onSelect }: CategoryChipsP
             activeOpacity={0.75}>
             <Text style={styles.emoji}>{emoji}</Text>
             <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-              {CATEGORY_LABELS[cat] ?? cat}
+              {getCategoryLabel(cat)}
             </Text>
           </TouchableOpacity>
         );

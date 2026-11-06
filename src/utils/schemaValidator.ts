@@ -284,7 +284,12 @@ export interface ValidatedProductFormInput {
 
 const ALLOWED_CATEGORIES = new Set([
   'VelvetWire',
+  'VelvetPots',
+  'VelvetFlowers',
+  'VelvetAccessories',
+  'VelvetStems',
   'Keychain',
+  'Keychains',
   'Yarn',
   'Crochet',
   'Bags',
@@ -310,8 +315,11 @@ export function validateProductFormSchema(
   const name = sanitizeText(clean.name, 140);
   const description = sanitizeMultilineText(clean.description, 4000);
   const price = Math.round(Number(clean.price) || 0);
-  const categoryRaw = sanitizeText(clean.category, 40);
-  const category = ALLOWED_CATEGORIES.has(categoryRaw) ? categoryRaw : 'Crochet';
+  const categoryRaw = sanitizeText(clean.category, 48).replace(/[^a-zA-Z0-9_-]/g, '');
+  const category =
+    ALLOWED_CATEGORIES.has(categoryRaw) || categoryRaw.startsWith('cat_')
+      ? categoryRaw
+      : 'Crochet';
   const material = sanitizeText(clean.material, 120);
   const color = sanitizeText(clean.color, 120);
   const quantity = Math.max(0, Math.min(10000, Math.round(Number(clean.quantity) || 1)));
