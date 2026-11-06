@@ -215,7 +215,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     setError('');
 
-    const botCheck = validateHiddenBotField(botTrap, formMountedAtRef.current, 500);
+    const botCheck = validateHiddenBotField(botTrap, formMountedAtRef.current, 80);
     if (!botCheck.valid) {
       recordSecurityAudit({
         eventType: 'BOT_TRAP_TRIGGERED',
@@ -245,7 +245,7 @@ export default function LoginScreen() {
       return;
     }
 
-    const rate = checkRateLimit('auth_login', 6, 60_000, 60_000);
+    const rate = checkRateLimit('auth_login', 20, 60_000, 30_000);
     if (!rate.allowed) {
       recordSecurityAudit({
         eventType: 'RATE_LIMIT_TRIGGERED',

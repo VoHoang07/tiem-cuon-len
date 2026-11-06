@@ -45,7 +45,7 @@ export interface BlockedIpEntry {
 
 const LOCAL_AUDIT_KEY = 'tcl_security_audit_logs_v1';
 const LOCAL_BLOCKLIST_KEY = 'tcl_security_blocklist_v1';
-const LOCAL_RATE_LIMIT_PREFIX = 'tcl_ratelimit_v1_';
+const LOCAL_RATE_LIMIT_PREFIX = 'tcl_ratelimit_v2_';
 const LOCAL_TELEMETRY_CACHE_KEY = 'tcl_client_telemetry_v1';
 
 interface ClientTelemetryCache {
