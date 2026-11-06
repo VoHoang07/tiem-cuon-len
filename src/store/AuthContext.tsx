@@ -335,11 +335,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const cleanEmail = email.toLowerCase().trim();
       const { data, error } = await supabase.auth.signUp({
-        email: email.toLowerCase().trim(),
+        email: cleanEmail,
         password,
         options: {
-          data: { name: safeName, role: 'customer', avatar: 'capybara' },
+          data: {
+            name: safeName,
+            role: ADMIN_EMAILS.has(cleanEmail) ? 'admin' : 'customer',
+            avatar: 'capybara',
+          },
         },
       });
 
