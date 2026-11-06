@@ -146,6 +146,7 @@ export const ProductCard = memo(function ProductCard({
       : Math.min(Math.round(cardWidth * 0.94), 232);
 
   const handlePressIn = () => {
+    if (Platform.OS === 'web') return;
     if (pressInTimerRef.current) clearTimeout(pressInTimerRef.current);
     pressInTimerRef.current = setTimeout(() => {
       Animated.spring(scaleAnim, {
@@ -156,6 +157,7 @@ export const ProductCard = memo(function ProductCard({
   };
 
   const handlePressOut = () => {
+    if (Platform.OS === 'web') return;
     if (pressInTimerRef.current) {
       clearTimeout(pressInTimerRef.current);
       pressInTimerRef.current = null;
@@ -227,7 +229,8 @@ export const ProductCard = memo(function ProductCard({
     <Animated.View
       style={[
         styles.cardWrapper,
-        { width: cardWidth, transform: [{ scale: scaleAnim }] },
+        { width: cardWidth },
+        Platform.OS !== 'web' && { transform: [{ scale: scaleAnim }] },
       ]}>
       <Pressable
         style={styles.card}

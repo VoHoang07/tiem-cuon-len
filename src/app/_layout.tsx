@@ -170,6 +170,7 @@ export default function RootLayout() {
       const scrollable = findHorizontalScrollable(e.target);
       if (!scrollable) return;
       stopInertia();
+      scrollable.style.scrollBehavior = 'auto';
       activeEl = scrollable;
       isDown = true;
       hasDragged = false;

@@ -200,9 +200,9 @@ export default function HomeScreen() {
   const featuredProducts = useMemo(
     () =>
       [...uniqueProducts]
-        .filter((p) => p.rating >= 4.8)
+        .filter((p) => p.rating >= 4.5)
         .sort((a, b) => b.rating - a.rating)
-        .slice(0, 5),
+        .slice(0, 10),
     [uniqueProducts]
   );
 
@@ -234,17 +234,6 @@ export default function HomeScreen() {
       />
     ),
     [numColumns, handleCardPress]
-  );
-
-  const renderFeaturedItem = useCallback(
-    ({ item }: { item: Product }) => (
-      <ProductCard
-        product={item}
-        variant="carousel"
-        onPress={handleCardPress}
-      />
-    ),
-    [handleCardPress]
   );
 
   const showHeroAndFeatured =
@@ -573,29 +562,38 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Curated Featured Row (Single clean carousel, no duplicate second carousel) */}
+      {/* Curated Featured Row (Pure horizontal ScrollView for zero VirtualizedList scroll jank) */}
       {showHeroAndFeatured && featuredProducts.length > 0 && (
         <View style={styles.featuredSection}>
           <SectionHeader
             title={HOME_FEATURED}
             subtitle="Những mẫu len thủ công được yêu thích nhất tại tiệm"
           />
-          <FlatList
+          <ScrollView
             horizontal
-            data={featuredProducts}
-            keyExtractor={(item) => `featured-${item.id}`}
             showsHorizontalScrollIndicator={false}
-            initialNumToRender={5}
-            maxToRenderPerBatch={5}
-            decelerationRate="fast"
-            scrollEventThrottle={16}
-            style={Platform.OS === 'web' ? ({ cursor: 'grab', userSelect: 'none' } as any) : undefined}
+            style={
+              Platform.OS === 'web'
+                ? ({
+                    cursor: 'grab',
+                    userSelect: 'none',
+                    WebkitOverflowScrolling: 'touch',
+                  } as any)
+                : undefined
+            }
             contentContainerStyle={[
               styles.featuredRow,
               isMobile && styles.featuredRowMobile,
-            ]}
-            renderItem={renderFeaturedItem}
-          />
+            ]}>
+            {featuredProducts.map((item) => (
+              <ProductCard
+                key={`featured-${item.id}`}
+                product={item}
+                variant="carousel"
+                onPress={handleCardPress}
+              />
+            ))}
+          </ScrollView>
         </View>
       )}
 
