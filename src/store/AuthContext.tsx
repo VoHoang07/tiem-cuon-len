@@ -86,13 +86,19 @@ const AuthContext = createContext<AuthContextType | null>(null);
 function toAuthUser(session: Session | null, localAvatar?: string | null): AuthUser | null {
   if (!session?.user) return null;
   const meta = session.user.user_metadata || {};
-  const rawEmail = (meta.canonicalEmail as string) || session.user.email || '';
-  const email = rawEmail.toLowerCase().trim().replace(/\+tcl@/, '@');
-  const isVerifiedAdmin = ADMIN_EMAILS.has(email) && (meta.role === 'admin' || email === 'vohoang1327@gmail.com' || email === 'khanhly30072007@gmail.com');
+  const email = (session.user.email ?? '').toLowerCase().trim();
+  const isVerifiedAdmin =
+    ADMIN_EMAILS.has(email) &&
+    (meta.role === 'admin' ||
+      email === 'vohoang1327@gmail.com' ||
+      email === 'khanhly30072007@gmail.com');
   return {
     id: session.user.id,
-    email,
-    name: sanitizeInput((meta.name as string) ?? (isVerifiedAdmin ? 'Quản trị viên' : email.split('@')[0] || 'Khách hàng')),
+    email: session.user.email ?? '',
+    name: sanitizeInput(
+      (meta.name as string) ??
+        (isVerifiedAdmin ? 'Quản trị viên' : email.split('@')[0] || 'Khách hàng')
+    ),
     role: isVerifiedAdmin ? 'admin' : 'customer',
     avatar: localAvatar || (meta.avatar as string) || undefined,
   };
@@ -250,15 +256,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         if (__DEV__) console.log('[LOGIN ERROR]', error);
+        const errMsg = String(error.message || '').toLowerCase();
         const cleanEmail = email.toLowerCase().trim();
 
-        if (password.length >= 6) {
+        // If the account has not been created on the new Supabase project yet,
+        // `signUp` will succeed ONCE and register the user with their password.
+        // If the account ALREADY exists in `auth.users`, `signUp` returns "User already registered"
+        // and we strictly reject the wrong password.
+        if (errMsg.includes('invalid login credentials') && password.length >= 6) {
           const isAdminEmail = ADMIN_EMAILS.has(cleanEmail);
           const defaultName = isAdminEmail
             ? 'Quản trị viên'
             : cleanEmail.split('@')[0] || 'Khách hàng';
 
-          // Step 2: Try direct signUp on the new Supabase project if account wasn't created yet
           const { data: migratedData, error: migrateErr } = await supabase.auth.signUp({
             email: cleanEmail,
             password,
@@ -266,7 +276,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               data: {
                 name: defaultName,
                 role: isAdminEmail ? 'admin' : 'customer',
-                canonicalEmail: cleanEmail,
                 avatar: 'capybara',
               },
             },
@@ -281,64 +290,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             saveCachedAuthUser(resolved);
             return { success: true };
           }
-
-          // Step 3: If the email was registered before "Confirm email" was disabled in Supabase (stuck with email_confirmed_at = null),
-          // establish a verified authenticated Supabase JWT session via canonical alias so all RLS policies & APIs work 100%
-          if (cleanEmail.includes('@')) {
-            const aliasEmail = cleanEmail.replace('@', '+tcl@');
-            const { data: aliasSignIn } = await supabase.auth.signInWithPassword({
-              email: aliasEmail,
-              password,
-            });
-            if (aliasSignIn?.session) {
-              setFailedAttempts(0);
-              const localAvatar = await AsyncStorage.getItem(
-                `${AVATAR_STORAGE_PREFIX}${aliasSignIn.session.user.id}`
-              ).catch(() => null);
-              const resolved = toAuthUser(aliasSignIn.session, localAvatar);
-              setUser(resolved);
-              saveCachedAuthUser(resolved);
-              return { success: true };
-            }
-
-            const { data: aliasSignUp } = await supabase.auth.signUp({
-              email: aliasEmail,
-              password,
-              options: {
-                data: {
-                  name: defaultName,
-                  role: isAdminEmail ? 'admin' : 'customer',
-                  canonicalEmail: cleanEmail,
-                  avatar: 'capybara',
-                },
-              },
-            });
-            if (aliasSignUp?.session) {
-              setFailedAttempts(0);
-              const localAvatar = await AsyncStorage.getItem(
-                `${AVATAR_STORAGE_PREFIX}${aliasSignUp.session.user.id}`
-              ).catch(() => null);
-              const resolved = toAuthUser(aliasSignUp.session, localAvatar);
-              setUser(resolved);
-              saveCachedAuthUser(resolved);
-              return { success: true };
-            }
-          }
-
-          // Step 4: Guaranteed local session fallback so login never fails even if Supabase Auth is rate-limited
-          const fallbackUser: AuthUser = {
-            id: isAdminEmail
-              ? '57090d46-4e82-4fa0-93bb-1ff5e46c22c2'
-              : `local_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
-            email: cleanEmail,
-            name: defaultName,
-            role: isAdminEmail ? 'admin' : 'customer',
-            avatar: 'capybara',
-          };
-          setFailedAttempts(0);
-          setUser(fallbackUser);
-          saveCachedAuthUser(fallbackUser);
-          return { success: true };
         }
 
         const nextFailed = failedAttempts + 1;
@@ -347,7 +298,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLockoutUntil(Date.now() + 60000);
           setFailedAttempts(0);
         }
-        return { success: false, error: 'Email hoặc mật khẩu không đúng (tối thiểu 6 ký tự).' };
+        if (errMsg.includes('email not confirmed')) {
+          return {
+            success: false,
+            error:
+              'Tài khoản này được tạo lúc chưa tắt Confirm Email. Hãy chạy lệnh UPDATE auth.users trong SQL Editor hoặc đặt lại mật khẩu.',
+          };
+        }
+        return { success: false, error: 'Email hoặc mật khẩu không đúng.' };
       }
       setFailedAttempts(0);
       if (data.session) {
@@ -359,23 +317,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (err: unknown) {
       if (__DEV__) console.log('[LOGIN ERROR]', err);
-      if (password.length >= 6) {
-        const cleanEmail = email.toLowerCase().trim();
-        const fallbackUser: AuthUser = {
-          id: ADMIN_EMAILS.has(cleanEmail)
-            ? '57090d46-4e82-4fa0-93bb-1ff5e46c22c2'
-            : `local_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
-          email: cleanEmail,
-          name: ADMIN_EMAILS.has(cleanEmail)
-            ? 'Quản trị viên'
-            : cleanEmail.split('@')[0] || 'Khách hàng',
-          role: ADMIN_EMAILS.has(cleanEmail) ? 'admin' : 'customer',
-          avatar: 'capybara',
-        };
-        setUser(fallbackUser);
-        saveCachedAuthUser(fallbackUser);
-        return { success: true };
-      }
       return { success: false, error: NETWORK_ERROR_MSG };
     }
   }, [configError, failedAttempts, lockoutUntil]);

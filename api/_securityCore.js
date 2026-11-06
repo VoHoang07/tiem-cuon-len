@@ -383,15 +383,7 @@ async function verifySupabaseUser(req) {
     const userData = await res.json();
     if (!userData || !userData.id) return null;
 
-    const rawEmail = String(
-      (userData.user_metadata && userData.user_metadata.canonicalEmail) ||
-        userData.email ||
-        ''
-    )
-      .toLowerCase()
-      .trim()
-      .replace(/\+tcl@/, '@');
-    const email = rawEmail;
+    const email = String(userData.email || '').toLowerCase().trim();
     const metaRole = userData.user_metadata && userData.user_metadata.role;
     const isAdmin =
       ADMIN_EMAILS.has(email) && (metaRole === 'admin' || email === 'vohoang1327@gmail.com' || email === 'khanhly30072007@gmail.com');
