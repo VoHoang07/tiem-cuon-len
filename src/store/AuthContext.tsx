@@ -250,12 +250,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         if (__DEV__) console.log('[LOGIN ERROR]', error);
         const errMsg = String(error.message || '').toLowerCase();
+        const cleanEmail = email.toLowerCase().trim();
+
+        // Seamless account migration to the new Supabase project:
+        // If the account existed on the old Supabase project and hasn't been created in the new project's `auth.users` yet,
+        // `signInWithPassword` returns "Invalid login credentials". Trying `signUp` once will either:
+        //   (a) Create & sign in the user on the new Supabase project (if not yet registered there), OR
+        //   (b) Return "User already registered" (proving the user IS registered and the password was wrong).
+        if (errMsg.includes('invalid login credentials') && password.length >= 6) {
+          const isAdminEmail = ADMIN_EMAILS.has(cleanEmail);
+          const defaultName = isAdminEmail
+            ? 'Quản trị viên'
+            : cleanEmail.split('@')[0] || 'Khách hàng';
+          const { data: migratedData, error: migrateErr } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password,
+            options: {
+              data: {
+                name: defaultName,
+                role: isAdminEmail ? 'admin' : 'customer',
+                avatar: 'capybara',
+              },
+            },
+          });
+          if (!migrateErr && migratedData?.session) {
+            setFailedAttempts(0);
+            const localAvatar = await AsyncStorage.getItem(
+              `${AVATAR_STORAGE_PREFIX}${migratedData.session.user.id}`
+            ).catch(() => null);
+            const resolved = toAuthUser(migratedData.session, localAvatar);
+            setUser(resolved);
+            saveCachedAuthUser(resolved);
+            return { success: true };
+          }
+        }
+
         const isInvalidCreds =
           errMsg.includes('invalid login credentials') ||
           errMsg.includes('email not confirmed');
         // If Supabase returns 402 (Egress Exceeded) or network failure, allow local fallback session so shop never goes down
         if (!isInvalidCreds && password.length >= 6) {
-          const cleanEmail = email.toLowerCase().trim();
           const fallbackUser: AuthUser = {
             id: ADMIN_EMAILS.has(cleanEmail)
               ? '57090d46-4e82-4fa0-93bb-1ff5e46c22c2'
