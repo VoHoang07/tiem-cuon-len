@@ -1,13 +1,24 @@
 const crypto = require('crypto');
 
+const rawEnvUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const rawEnvKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const isLegacyRestrictedProject =
+  rawEnvUrl.includes('ljcweaeirwttqoygeoxd') ||
+  rawEnvKey.includes('bGpjd2VhZWlyd3R0cW95Z2VveGQ');
+
 const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  'https://ljcweaeirwttqoygeoxd.supabase.co';
+  !rawEnvUrl || isLegacyRestrictedProject
+    ? 'https://ajxvqewsqvfdpovkqqqw.supabase.co'
+    : rawEnvUrl;
 const SUPABASE_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqY3dlYWVpcnd0dHFveWdlb3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MzA0MjUsImV4cCI6MjA5NTIwNjQyNX0.fa1AsIt3qcv24GvUz6Jzup7G_BUwvB4OKPzhQYYvOes';
+  !rawEnvKey || isLegacyRestrictedProject
+    ? 'sb_publishable_g3xVNQbOj0PyTj9NrCpDyw_6hmDGWab'
+    : rawEnvKey;
+const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY;
+  !rawServiceKey || rawServiceKey.includes('bGpjd2VhZWlyd3R0cW95Z2VveGQ')
+    ? SUPABASE_KEY
+    : rawServiceKey;
 
 const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
 const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
