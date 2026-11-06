@@ -161,10 +161,16 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         String(rawProd.selectedAccessoryName || '')
           .toLowerCase()
           .includes('hộp quà') ||
+        String(rawProd.selectedAccessoryName || '')
+          .toLowerCase()
+          .includes('quà tặng') ||
         String(rawProd.name || '')
           .toLowerCase()
-          .includes('hộp quà');
-      const accessoryDelta = isGiftBoxOption ? 15000 : 0;
+          .includes('hộp quà') ||
+        String(rawProd.name || '')
+          .toLowerCase()
+          .includes('quà tặng');
+      const accessoryDelta = isGiftBoxOption ? 25000 : 0;
       const qty = Math.max(1, Math.min(99, Math.round(Number(it.quantity) || 1)));
 
       // RED TEAM FIX: Never fall back to client-supplied `rawProd.price`!
@@ -218,7 +224,9 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
             ? sanitizeTextServer(rawProd.selectedColorHex, 20)
             : undefined,
           selectedAccessoryId: isGiftBoxOption ? 'gift_box_letter' : 'no_box',
-          selectedAccessoryName: isGiftBoxOption ? 'Hộp quà + Thư tay' : 'Không hộp',
+          selectedAccessoryName: isGiftBoxOption
+            ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
+            : 'Tự dùng / Tiêu chuẩn',
         },
         quantity: qty,
         price: serverUnitPrice,

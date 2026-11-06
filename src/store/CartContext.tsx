@@ -56,10 +56,10 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     parsedAccessoryId === 'gift_box_letter' ||
     accText.includes('hộp quà') ||
     accText.includes('quà tặng');
-  const accessoryDelta = isGiftBox ? 15000 : 0;
+  const accessoryDelta = isGiftBox ? 25000 : 0;
   const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
   const resolvedAccessoryName = isGiftBox
-    ? 'Set Quà Tặng (+15.000₫)'
+    ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
     : 'Tự dùng / Tiêu chuẩn';
   const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
   const resolvedGiftNote = isGiftBox
@@ -469,7 +469,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const colorPart = p.selectedColorId || (parts.length >= 2 ? parts[1] : 'default');
         const nextAccId = enableGiftBox ? 'gift_box_letter' : 'no_box';
         const nextAccName = enableGiftBox
-          ? 'Set Quà Tặng (+15.000₫)'
+          ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
           : 'Tự dùng / Tiêu chuẩn';
         const nextAccEmoji = enableGiftBox ? '🎁' : '🛍️';
         const nextProductId = `${baseId}__${colorPart}__${nextAccId}`;

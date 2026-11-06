@@ -206,7 +206,7 @@ export default function CartScreen() {
                 <View style={styles.variantTagPill}>
                   <Text style={styles.variantTagText} numberOfLines={1}>
                     {isGiftBox
-                      ? '🎁 Set Quà Tặng (+15.000₫)'
+                      ? '🎁 Set Quà Tặng Đặc Biệt (+25.000₫)'
                       : '🛍️ Tự dùng / Tiêu chuẩn'}
                   </Text>
                 </View>
@@ -272,19 +272,22 @@ export default function CartScreen() {
                 flexWrap: 'wrap',
                 gap: 8,
               }}>
-              <Text
-                style={{
-                  fontSize: 12.5,
-                  fontWeight: '600',
-                  color: '#5C4033',
-                  flex: 1,
-                  minWidth: 180,
-                }}>
-                🎁 Bạn mua làm quà tặng?{' '}
-                <Text style={{ fontWeight: '800', color: '#8B5A2B' }}>
-                  Thêm gói hộp quà vintage chỉ 15.000₫
+              <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+                <Text
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: '600',
+                    color: '#5C4033',
+                  }}>
+                  🎁 Bạn mua làm quà tặng?{' '}
+                  <Text style={{ fontWeight: '800', color: '#8B5A2B' }}>
+                    Nâng cấp Set Quà Tặng Đặc Biệt (+25.000₫)
+                  </Text>
                 </Text>
-              </Text>
+                <Text style={{ fontSize: 11, color: '#7A6552' }}>
+                  Hộp nắp gài vintage, rơm thơm, thiệp viết tay + Tặng kèm 1 quà len mini bí mật
+                </Text>
+              </View>
               <View
                 style={{
                   backgroundColor: '#5C4033',
@@ -298,7 +301,7 @@ export default function CartScreen() {
                     fontSize: 11.5,
                     fontWeight: '700',
                   }}>
-                  + Thêm 15.000₫
+                  + Thêm 25.000₫
                 </Text>
               </View>
             </TouchableOpacity>
@@ -329,7 +332,7 @@ export default function CartScreen() {
                     fontWeight: '700',
                     color: '#5C4033',
                   }}>
-                  🎁 Đã chọn Set Quà Tặng (+15.000₫) — Hộp nắp gài, rơm thơm & thiệp viết tay
+                  🎁 Đã chọn Set Quà Tặng Đặc Biệt (+25.000₫)
                 </Text>
                 <TouchableOpacity
                   onPress={() => updateCartItemPackaging(item.product.id, false)}
@@ -345,6 +348,10 @@ export default function CartScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              <Text style={{ fontSize: 11.5, color: '#6E5643', lineHeight: 16 }}>
+                • Hộp carton nắp gài vintage, ruy băng & lót rơm thơm giấy cao cấp{'\n'}
+                • Thiệp viết tay + 🎁 Tặng kèm 1 món quà len mini bí mật bất ngờ từ tiệm
+              </Text>
               <TextInput
                 style={{
                   backgroundColor: '#FFFFFF',

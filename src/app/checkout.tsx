@@ -149,10 +149,10 @@ export default function CheckoutScreen() {
       (selectedAccessory || '').toLowerCase().includes('quà tặng');
     const isGiftBox =
       buyNowGiftOverride !== null ? buyNowGiftOverride : defaultIsGiftBox;
-    const accessoryDelta = isGiftBox ? 15000 : 0;
+    const accessoryDelta = isGiftBox ? 25000 : 0;
     const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
     const resolvedAccessoryName = isGiftBox
-      ? 'Set Quà Tặng (+15.000₫)'
+      ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
       : 'Tự dùng / Tiêu chuẩn';
     const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
 
@@ -674,7 +674,7 @@ export default function CheckoutScreen() {
           accLower.includes('hộp quà') ||
           accLower.includes('quà tặng');
         const boxLabel = isGiftBox
-          ? '🎁 Set Quà Tặng (+15.000₫)'
+          ? '🎁 Set Quà Tặng Đặc Biệt (+25.000₫)'
           : 'Tự dùng / Tiêu chuẩn';
         const suffixParts = [colorLabel, boxLabel].filter(Boolean);
         const suffixStr = suffixParts.join(' • ');
@@ -693,7 +693,7 @@ export default function CheckoutScreen() {
             name: displayName,
             selectedAccessoryId: isGiftBox ? 'gift_box_letter' : 'no_box',
             selectedAccessoryName: isGiftBox
-              ? 'Set Quà Tặng (+15.000₫)'
+              ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
               : 'Tự dùng / Tiêu chuẩn',
             giftCardNote: isGiftBox && itemGiftNote ? itemGiftNote : undefined,
           },
@@ -1237,7 +1237,7 @@ export default function CheckoutScreen() {
                               : ''
                           }${
                             isGiftBox
-                              ? '🎁 Set Quà Tặng (+15.000₫)'
+                              ? '🎁 Set Quà Tặng Đặc Biệt (+25.000₫)'
                               : '🛍️ Tự dùng / Tiêu chuẩn'
                           }`}
                         </Text>
@@ -1277,19 +1277,22 @@ export default function CheckoutScreen() {
                           flexWrap: 'wrap',
                           gap: 6,
                         }}>
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '600',
-                            color: '#5C4033',
-                            flex: 1,
-                            minWidth: 160,
-                          }}>
-                          🎁 Bạn mua làm quà tặng?{' '}
-                          <Text style={{ fontWeight: '800', color: '#8B5A2B' }}>
-                            Thêm gói hộp quà vintage chỉ 15.000₫
+                        <View style={{ flex: 1, minWidth: 160, gap: 2 }}>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '600',
+                              color: '#5C4033',
+                            }}>
+                            🎁 Bạn mua làm quà tặng?{' '}
+                            <Text style={{ fontWeight: '800', color: '#8B5A2B' }}>
+                              Nâng cấp Set Quà Tặng Đặc Biệt (+25.000₫)
+                            </Text>
                           </Text>
-                        </Text>
+                          <Text style={{ fontSize: 11, color: '#7A6552' }}>
+                            Hộp nắp gài vintage, rơm thơm, thiệp viết tay + Tặng kèm 1 quà len mini bí mật
+                          </Text>
+                        </View>
                         <View
                           style={{
                             backgroundColor: '#5C4033',
@@ -1303,7 +1306,7 @@ export default function CheckoutScreen() {
                               fontSize: 11,
                               fontWeight: '700',
                             }}>
-                            + Thêm 15.000₫
+                            + Thêm 25.000₫
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -1332,7 +1335,7 @@ export default function CheckoutScreen() {
                               fontWeight: '700',
                               color: '#5C4033',
                             }}>
-                            🎁 Set Quà Tặng (+15.000₫) — Hộp nắp gài, rơm thơm & thiệp viết tay
+                            🎁 Set Quà Tặng Đặc Biệt (+25.000₫)
                           </Text>
                           <TouchableOpacity
                             onPress={() => {
@@ -1354,6 +1357,10 @@ export default function CheckoutScreen() {
                             </Text>
                           </TouchableOpacity>
                         </View>
+                        <Text style={{ fontSize: 11, color: '#6E5643', lineHeight: 15 }}>
+                          • Hộp carton nắp gài vintage, ruy băng & lót rơm thơm giấy cao cấp{'\n'}
+                          • Thiệp viết tay + 🎁 Tặng kèm 1 món quà len mini bí mật bất ngờ từ tiệm
+                        </Text>
                         <TextInput
                           style={{
                             backgroundColor: '#FFFFFF',

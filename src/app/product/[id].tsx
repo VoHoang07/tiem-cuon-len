@@ -155,11 +155,11 @@ export default function ProductDetailScreen() {
       },
       {
         id: 'gift_box_letter',
-        name: 'Set Quà Tặng',
+        name: 'Set Quà Tặng Đặc Biệt',
         emoji: '🎁',
-        priceDelta: 15000,
+        priceDelta: 25000,
         description:
-          'Hộp quà nắp gài, lót rơm thơm, ruy băng & thiệp viết tay theo yêu cầu.',
+          'Hộp carton nắp gài vintage, lót rơm thơm, thiệp viết tay & tặng kèm 1 quà len mini bí mật.',
       },
     ],
     []
@@ -371,7 +371,7 @@ export default function ProductDetailScreen() {
       selectedColorHex: activeColor?.hex,
       selectedAccessoryId: accId,
       selectedAccessoryName: isGiftSet
-        ? 'Set Quà Tặng (+15.000₫)'
+        ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
         : 'Tự dùng / Tiêu chuẩn',
       selectedAccessoryEmoji: activeAccessory?.emoji,
       giftCardNote: isGiftSet ? giftCardNote.trim() : undefined,
@@ -463,7 +463,7 @@ export default function ProductDetailScreen() {
         selectedColor: activeColor?.name ?? product.color,
         selectedAccessoryId: activeAccessory?.id ?? 'no_box',
         selectedAccessory: isGiftSet
-          ? '🎁 Set Quà Tặng (+15.000₫)'
+          ? '🎁 Set Quà Tặng Đặc Biệt (+25.000₫)'
           : '🛍️ Tự dùng / Tiêu chuẩn',
         giftCardNote: isGiftSet ? giftCardNote.trim() : '',
         unitPrice: String(effectivePrice),
@@ -1007,7 +1007,7 @@ export default function ProductDetailScreen() {
                       fontWeight: '700',
                       color: '#4A3728',
                     }}>
-                    🎁 Gói quà tặng (+15.000₫)
+                    🎁 Nâng cấp Set Quà Tặng Đặc Biệt (+25.000₫)
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1104,15 +1104,53 @@ export default function ProductDetailScreen() {
                             </Text>
                           </View>
                         </View>
-                        {Boolean(acc.description) && (
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: '#7A6552',
-                              lineHeight: 17,
-                            }}>
-                            {acc.description}
-                          </Text>
+                        {acc.id === 'gift_box_letter' ? (
+                          <View style={{ gap: 3, marginTop: 2 }}>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#6E5643',
+                                lineHeight: 17,
+                              }}>
+                              • Hộp carton nắp gài vintage, thắt nơ ruy băng chỉn chu
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#6E5643',
+                                lineHeight: 17,
+                              }}>
+                              • Lót rơm thơm giấy cao cấp
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#6E5643',
+                                lineHeight: 17,
+                              }}>
+                              • Thiệp viết tay theo lời chúc bạn yêu cầu
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#8B4513',
+                                fontWeight: '600',
+                                lineHeight: 17,
+                              }}>
+                              • 🎁 Tặng kèm 1 món quà len mini bí mật bất ngờ từ tiệm (nhẫn len, charm hoa nhí, kẹp tóc len mini...)
+                            </Text>
+                          </View>
+                        ) : (
+                          Boolean(acc.description) && (
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#7A6552',
+                                lineHeight: 17,
+                              }}>
+                              {acc.description}
+                            </Text>
+                          )
                         )}
                       </View>
                     </TouchableOpacity>
