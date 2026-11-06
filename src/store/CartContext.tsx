@@ -23,6 +23,11 @@ interface CartContextType {
   addToCart: (product: Product, quantity: number) => Promise<void>;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
+  updateCartItemPackaging: (
+    productId: string,
+    enableGiftBox: boolean,
+    giftCardNote?: string
+  ) => void;
   clearCart: () => void;
   refetchCart: () => Promise<void>;
 }
@@ -46,15 +51,20 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
   const parsedColorId = p.selectedColorId || (parts.length >= 2 ? parts[1] : undefined);
   const parsedAccessoryId = p.selectedAccessoryId || (parts.length >= 3 ? parts[2] : undefined);
 
+  const accText = (p.selectedAccessoryName || ci.selectedAccessory || '').toLowerCase();
   const isGiftBox =
     parsedAccessoryId === 'gift_box_letter' ||
-    (p.selectedAccessoryName || ci.selectedAccessory || '')
-      .toLowerCase()
-      .includes('hộp quà');
+    accText.includes('hộp quà') ||
+    accText.includes('quà tặng');
   const accessoryDelta = isGiftBox ? 15000 : 0;
   const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
-  const resolvedAccessoryName = isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp';
+  const resolvedAccessoryName = isGiftBox
+    ? 'Set Quà Tặng (+15.000₫)'
+    : 'Tự dùng / Tiêu chuẩn';
   const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
+  const resolvedGiftNote = isGiftBox
+    ? (p.giftCardNote ?? ci.giftCardNote ?? '')
+    : undefined;
 
   const liveProduct = catalogProducts?.find((m) => m.id === baseId);
   const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
@@ -64,12 +74,14 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
       ...ci,
       selectedColor: p.selectedColorName || p.color || ci.selectedColor,
       selectedAccessory: resolvedAccessoryName,
+      giftCardNote: resolvedGiftNote,
       product: {
         ...p,
         baseProductId: baseId,
         selectedAccessoryId: resolvedAccessoryId,
         selectedAccessoryName: resolvedAccessoryName,
         selectedAccessoryEmoji: resolvedAccessoryEmoji,
+        giftCardNote: resolvedGiftNote,
       },
     };
   }
@@ -102,6 +114,7 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     ...ci,
     selectedColor: p.selectedColorName || colorOpt?.name || ci.selectedColor,
     selectedAccessory: resolvedAccessoryName,
+    giftCardNote: resolvedGiftNote,
     product: {
       ...p,
       baseProductId: baseId,
@@ -115,6 +128,7 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
       selectedAccessoryId: resolvedAccessoryId,
       selectedAccessoryName: resolvedAccessoryName,
       selectedAccessoryEmoji: resolvedAccessoryEmoji,
+      giftCardNote: resolvedGiftNote,
     },
   };
 }
@@ -443,6 +457,84 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [persistCart, syncCartToSupabase, removeFromCart]
   );
 
+  const updateCartItemPackaging = useCallback(
+    (productId: string, enableGiftBox: boolean, giftCardNote?: string) => {
+      setCart((prev) => {
+        const target = prev.find((ci) => ci.product.id === productId);
+        if (!target) return prev;
+
+        const p = target.product;
+        const baseId = getBaseProductId(p.id, p.baseProductId);
+        const parts = p.id.split('__');
+        const colorPart = p.selectedColorId || (parts.length >= 2 ? parts[1] : 'default');
+        const nextAccId = enableGiftBox ? 'gift_box_letter' : 'no_box';
+        const nextAccName = enableGiftBox
+          ? 'Set Quà Tặng (+15.000₫)'
+          : 'Tự dùng / Tiêu chuẩn';
+        const nextAccEmoji = enableGiftBox ? '🎁' : '🛍️';
+        const nextProductId = `${baseId}__${colorPart}__${nextAccId}`;
+        const nextNote = enableGiftBox
+          ? giftCardNote !== undefined
+            ? giftCardNote
+            : p.giftCardNote ?? target.giftCardNote ?? ''
+          : undefined;
+
+        const updatedItem = rehydrateCartItem(
+          {
+            ...target,
+            selectedAccessory: nextAccName,
+            giftCardNote: nextNote,
+            product: {
+              ...p,
+              id: nextProductId,
+              baseProductId: baseId,
+              selectedAccessoryId: nextAccId,
+              selectedAccessoryName: nextAccName,
+              selectedAccessoryEmoji: nextAccEmoji,
+              giftCardNote: nextNote,
+            },
+          },
+          catalogProducts
+        );
+
+        let nextCart: CartItem[];
+        if (nextProductId !== productId) {
+          // Check if an item with nextProductId already exists in cart
+          const duplicate = prev.find((ci) => ci.product.id === nextProductId);
+          if (duplicate) {
+            const mergedQty = duplicate.quantity + target.quantity;
+            nextCart = prev
+              .filter((ci) => ci.product.id !== productId)
+              .map((ci) =>
+                ci.product.id === nextProductId
+                  ? {
+                      ...updatedItem,
+                      quantity: mergedQty,
+                    }
+                  : ci
+              );
+            syncCartToSupabase(productId, null);
+            syncCartToSupabase(nextProductId, mergedQty);
+          } else {
+            nextCart = prev.map((ci) =>
+              ci.product.id === productId ? updatedItem : ci
+            );
+            syncCartToSupabase(productId, null);
+            syncCartToSupabase(nextProductId, updatedItem.quantity);
+          }
+        } else {
+          nextCart = prev.map((ci) =>
+            ci.product.id === productId ? updatedItem : ci
+          );
+        }
+
+        persistCart(nextCart);
+        return nextCart;
+      });
+    },
+    [catalogProducts, persistCart, syncCartToSupabase]
+  );
+
   const clearCart = useCallback(() => {
     setCart([]);
     persistCart([]);
@@ -486,6 +578,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addToCart,
       removeFromCart,
       updateCartQuantity,
+      updateCartItemPackaging,
       clearCart,
       refetchCart,
     }),
@@ -497,6 +590,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addToCart,
       removeFromCart,
       updateCartQuantity,
+      updateCartItemPackaging,
       clearCart,
       refetchCart,
     ]

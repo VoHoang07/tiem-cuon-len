@@ -148,6 +148,21 @@ export default function OrdersScreen() {
               <Text style={styles.orderItems} numberOfLines={2}>
                 {item.items.map((i) => `${i.product.name} x${i.quantity}`).join(', ')}
               </Text>
+              {item.items.some((i) => Boolean(i.product.giftCardNote)) && (
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    color: '#7A5230',
+                    fontWeight: '600',
+                    marginTop: 2,
+                  }}
+                  numberOfLines={2}>
+                  {item.items
+                    .filter((i) => Boolean(i.product.giftCardNote))
+                    .map((i) => `💌 Thiệp: "${i.product.giftCardNote}"`)
+                    .join(' • ')}
+                </Text>
+              )}
               <Text style={styles.orderDate}>
                 {new Date(item.createdAt).toLocaleDateString('vi-VN')} • {item.paymentMethod}
               </Text>

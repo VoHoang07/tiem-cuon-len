@@ -75,6 +75,7 @@ export default function CheckoutScreen() {
     selectedColor,
     selectedAccessoryId,
     selectedAccessory,
+    giftCardNote,
     unitPrice,
   } = useLocalSearchParams<{
     mode?: string;
@@ -84,11 +85,12 @@ export default function CheckoutScreen() {
     selectedColor?: string;
     selectedAccessoryId?: string;
     selectedAccessory?: string;
+    giftCardNote?: string;
     unitPrice?: string;
   }>();
   const isBuyNow = mode === 'buyNow' || mode === 'buy_now';
 
-  const { cart, clearCart, products } = useShop();
+  const { cart, clearCart, products, updateCartItemPackaging } = useShop();
   const { user, role } = useAuth();
   const isAdmin = role === 'admin';
   const { addOrder } = useOrders();
@@ -113,6 +115,15 @@ export default function CheckoutScreen() {
   const [draftHcmFee, setDraftHcmFee] = useState(String(shippingConfig.hcmFee));
   const [draftProvFee, setDraftProvFee] = useState(String(shippingConfig.provincialFee));
   const [draftThreshold, setDraftThreshold] = useState(String(shippingConfig.freeshipThreshold));
+  const [buyNowGiftOverride, setBuyNowGiftOverride] = useState<boolean | null>(null);
+  const [buyNowGiftNote, setBuyNowGiftNote] = useState<string>(
+    giftCardNote ? String(giftCardNote) : ''
+  );
+
+  useEffect(() => {
+    setBuyNowGiftOverride(null);
+    setBuyNowGiftNote(giftCardNote ? String(giftCardNote) : '');
+  }, [productId, selectedAccessoryId, giftCardNote]);
 
   useEffect(() => {
     setDraftHcmFee(String(shippingConfig.hcmFee));
@@ -132,12 +143,17 @@ export default function CheckoutScreen() {
       ) ||
       base.colorOptions?.[0];
 
-    const isGiftBox =
+    const defaultIsGiftBox =
       selectedAccessoryId === 'gift_box_letter' ||
-      (selectedAccessory || '').toLowerCase().includes('hộp quà');
+      (selectedAccessory || '').toLowerCase().includes('hộp quà') ||
+      (selectedAccessory || '').toLowerCase().includes('quà tặng');
+    const isGiftBox =
+      buyNowGiftOverride !== null ? buyNowGiftOverride : defaultIsGiftBox;
     const accessoryDelta = isGiftBox ? 15000 : 0;
     const resolvedAccessoryId = isGiftBox ? 'gift_box_letter' : 'no_box';
-    const resolvedAccessoryName = isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp';
+    const resolvedAccessoryName = isGiftBox
+      ? 'Set Quà Tặng (+15.000₫)'
+      : 'Tự dùng / Tiêu chuẩn';
     const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
 
     const baseVariantPrice =
@@ -158,6 +174,7 @@ export default function CheckoutScreen() {
       selectedAccessoryId: resolvedAccessoryId,
       selectedAccessoryName: resolvedAccessoryName,
       selectedAccessoryEmoji: resolvedAccessoryEmoji,
+      giftCardNote: isGiftBox ? buyNowGiftNote : undefined,
       image: matchedColor?.image || base.image,
       price: authoritativePrice,
     };
@@ -169,6 +186,8 @@ export default function CheckoutScreen() {
     selectedColor,
     selectedAccessoryId,
     selectedAccessory,
+    buyNowGiftOverride,
+    buyNowGiftNote,
   ]);
 
   const buyNowQtyNum = Math.max(1, Math.min(99, parseInt(buyNowQty ?? '1', 10) || 1));
@@ -608,6 +627,31 @@ export default function CheckoutScreen() {
     const orderId = `CUONLEN-${orderShortId}`;
     const status = getOrderStatus(selectedPayment.type);
 
+    const giftNotesSummary = checkoutItems
+      .map((ci) => {
+        const accName = (
+          ci.product.selectedAccessoryName ||
+          ci.selectedAccessory ||
+          ''
+        ).toLowerCase();
+        const isGift =
+          ci.product.selectedAccessoryId === 'gift_box_letter' ||
+          accName.includes('hộp quà') ||
+          accName.includes('quà tặng');
+        const noteText = (ci.product.giftCardNote || ci.giftCardNote || '').trim();
+        if (!isGift || !noteText) return null;
+        return `💌 Thiệp (${ci.product.name}): "${noteText}"`;
+      })
+      .filter(Boolean)
+      .join(' | ');
+
+    const combinedAddressNote = [
+      selectedAddress.note?.trim(),
+      giftNotesSummary,
+    ]
+      .filter(Boolean)
+      .join(' — ');
+
     const order = {
       id: orderId,
       userId: user?.id ?? user?.email ?? 'unknown',
@@ -620,24 +664,38 @@ export default function CheckoutScreen() {
           ...compactProd
         } = ci.product;
         const colorLabel = (ci.product.selectedColorName || ci.selectedColor || '').trim();
+        const accLower = (
+          ci.product.selectedAccessoryName ||
+          ci.selectedAccessory ||
+          ''
+        ).toLowerCase();
         const isGiftBox =
           ci.product.selectedAccessoryId === 'gift_box_letter' ||
-          (ci.product.selectedAccessoryName || ci.selectedAccessory || '')
-            .toLowerCase()
-            .includes('hộp quà');
-        const boxLabel = isGiftBox ? '🎁 Hộp quà + Thư tay' : 'Không hộp';
+          accLower.includes('hộp quà') ||
+          accLower.includes('quà tặng');
+        const boxLabel = isGiftBox
+          ? '🎁 Set Quà Tặng (+15.000₫)'
+          : 'Tự dùng / Tiêu chuẩn';
         const suffixParts = [colorLabel, boxLabel].filter(Boolean);
         const suffixStr = suffixParts.join(' • ');
         const displayName =
           suffixStr && !compactProd.name.includes(`(${suffixStr})`)
             ? `${compactProd.name} (${suffixStr})`
             : compactProd.name;
+        const itemGiftNote = (
+          ci.product.giftCardNote ||
+          ci.giftCardNote ||
+          ''
+        ).trim();
         return {
           product: {
             ...compactProd,
             name: displayName,
             selectedAccessoryId: isGiftBox ? 'gift_box_letter' : 'no_box',
-            selectedAccessoryName: isGiftBox ? 'Hộp quà + Thư tay' : 'Không hộp',
+            selectedAccessoryName: isGiftBox
+              ? 'Set Quà Tặng (+15.000₫)'
+              : 'Tự dùng / Tiêu chuẩn',
+            giftCardNote: isGiftBox && itemGiftNote ? itemGiftNote : undefined,
           },
           quantity: ci.quantity,
           price: ci.product.price,
@@ -646,6 +704,7 @@ export default function CheckoutScreen() {
       total: checkoutTotal,
       shippingAddress: {
         ...selectedAddress,
+        note: combinedAddressNote || selectedAddress.note,
         shippingMethod: shippingMethodLabel,
         shippingFee,
       },
@@ -1144,47 +1203,183 @@ export default function CheckoutScreen() {
                 const isItemOrder = liveProd
                   ? liveProd.isMadeToOrder !== false
                   : item.product.isMadeToOrder !== false;
+                const accLower = (item.product.selectedAccessoryName || '').toLowerCase();
+                const isGiftBox =
+                  item.product.selectedAccessoryId === 'gift_box_letter' ||
+                  accLower.includes('hộp quà') ||
+                  accLower.includes('quà tặng');
+                const currentGiftNote = isBuyNow
+                  ? buyNowGiftNote
+                  : item.product.giftCardNote ?? item.giftCardNote ?? '';
+
                 return (
-                  <View key={item.product.id} style={styles.summaryItem}>
-                    {item.product.image ? (
-                      <Image
-                        source={
-                          typeof item.product.image === 'string'
-                            ? { uri: item.product.image }
-                            : (item.product.image as any)
-                        }
-                        style={styles.summaryThumb}
-                        resizeMode="cover"
-                      />
-                    ) : null}
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={styles.itemName} numberOfLines={2}>
-                        {item.product.name}
-                      </Text>
-                      <Text style={styles.summaryVariantText} numberOfLines={1}>
-                        {`${
-                          item.product.selectedColorName
-                            ? `Màu: ${item.product.selectedColorName} • `
-                            : ''
-                        }${
-                          item.product.selectedAccessoryId === 'gift_box_letter' ||
-                          (item.product.selectedAccessoryName || '')
-                            .toLowerCase()
-                            .includes('hộp quà')
-                            ? '🎁 Hộp quà + Thư tay (+15.000₫)'
-                            : '🛍️ Không hộp'
-                        }`}
-                      </Text>
-                      <View style={styles.summaryMetaInline}>
-                        <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
-                        <Text style={styles.summaryStockBadge}>
-                          {isItemOrder ? '• 🧶 Hàng đặt (5–6 ngày)' : '• 📦 Có sẵn'}
+                  <View key={item.product.id} style={{ marginBottom: 10 }}>
+                    <View style={[styles.summaryItem, { marginBottom: 6 }]}>
+                      {item.product.image ? (
+                        <Image
+                          source={
+                            typeof item.product.image === 'string'
+                              ? { uri: item.product.image }
+                              : (item.product.image as any)
+                          }
+                          style={styles.summaryThumb}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={styles.itemName} numberOfLines={2}>
+                          {item.product.name}
                         </Text>
+                        <Text style={styles.summaryVariantText} numberOfLines={1}>
+                          {`${
+                            item.product.selectedColorName
+                              ? `Màu: ${item.product.selectedColorName} • `
+                              : ''
+                          }${
+                            isGiftBox
+                              ? '🎁 Set Quà Tặng (+15.000₫)'
+                              : '🛍️ Tự dùng / Tiêu chuẩn'
+                          }`}
+                        </Text>
+                        <View style={styles.summaryMetaInline}>
+                          <Text style={styles.summaryQtyText}>Số lượng: x{item.quantity}</Text>
+                          <Text style={styles.summaryStockBadge}>
+                            {isItemOrder ? '• 🧶 Hàng đặt (5–6 ngày)' : '• 📦 Có sẵn'}
+                          </Text>
+                        </View>
                       </View>
+                      <Text style={styles.itemPrice}>
+                        {formatVND(item.product.price * item.quantity)}
+                      </Text>
                     </View>
-                    <Text style={styles.itemPrice}>
-                      {formatVND(item.product.price * item.quantity)}
-                    </Text>
+
+                    {/* Cross-sell Gift Set & Handwritten Card Note inside Checkout */}
+                    {!isGiftBox ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (isBuyNow) {
+                            setBuyNowGiftOverride(true);
+                          } else {
+                            updateCartItemPackaging(item.product.id, true);
+                          }
+                        }}
+                        activeOpacity={0.85}
+                        style={{
+                          backgroundColor: '#FDF6EC',
+                          borderWidth: 1,
+                          borderColor: '#EADBC8',
+                          borderRadius: 10,
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 6,
+                        }}>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '600',
+                            color: '#5C4033',
+                            flex: 1,
+                            minWidth: 160,
+                          }}>
+                          🎁 Bạn mua làm quà tặng?{' '}
+                          <Text style={{ fontWeight: '800', color: '#8B5A2B' }}>
+                            Thêm gói hộp quà vintage chỉ 15.000₫
+                          </Text>
+                        </Text>
+                        <View
+                          style={{
+                            backgroundColor: '#5C4033',
+                            paddingHorizontal: 9,
+                            paddingVertical: 3,
+                            borderRadius: 999,
+                          }}>
+                          <Text
+                            style={{
+                              color: '#FFFDF9',
+                              fontSize: 11,
+                              fontWeight: '700',
+                            }}>
+                            + Thêm 15.000₫
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ) : (
+                      <View
+                        style={{
+                          backgroundColor: '#FDF8F2',
+                          borderWidth: 1,
+                          borderColor: '#E5D3C0',
+                          borderRadius: 10,
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          gap: 6,
+                        }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 6,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: '700',
+                              color: '#5C4033',
+                            }}>
+                            🎁 Set Quà Tặng (+15.000₫) — Hộp nắp gài, rơm thơm & thiệp viết tay
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              if (isBuyNow) {
+                                setBuyNowGiftOverride(false);
+                              } else {
+                                updateCartItemPackaging(item.product.id, false);
+                              }
+                            }}
+                            activeOpacity={0.75}>
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: '600',
+                                color: '#8C7460',
+                                textDecorationLine: 'underline',
+                              }}>
+                              Đổi về Tiêu chuẩn
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                        <TextInput
+                          style={{
+                            backgroundColor: '#FFFFFF',
+                            borderWidth: 1,
+                            borderColor: '#E2D4C5',
+                            borderRadius: 8,
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            fontSize: 12,
+                            color: '#3B2A1E',
+                            minWidth: 0,
+                          }}
+                          placeholder="💌 Ghi chú nội dung thiệp (nếu có)..."
+                          placeholderTextColor="#A3907E"
+                          value={currentGiftNote}
+                          onChangeText={(txt) => {
+                            if (isBuyNow) {
+                              setBuyNowGiftNote(txt);
+                            } else {
+                              updateCartItemPackaging(item.product.id, true, txt);
+                            }
+                          }}
+                          maxLength={220}
+                        />
+                      </View>
+                    )}
                   </View>
                 );
               })}

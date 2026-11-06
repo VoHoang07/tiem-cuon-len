@@ -68,12 +68,14 @@ export default function ProductDetailScreen() {
     initialColorId,
     initialAccessoryId,
     initialQty,
+    initialGiftNote,
   } = useLocalSearchParams<{
     id: string;
     editCartItemId?: string;
     initialColorId?: string;
     initialAccessoryId?: string;
     initialQty?: string;
+    initialGiftNote?: string;
   }>();
   const router = useRouter();
   const {
@@ -83,6 +85,7 @@ export default function ProductDetailScreen() {
     addToCart,
     removeFromCart,
     updateCartQuantity,
+    updateCartItemPackaging,
     addReview,
     removeProduct,
     cartCount,
@@ -104,6 +107,7 @@ export default function ProductDetailScreen() {
   const [quantity, setQuantity] = useState(1);
   const [selectedColorId, setSelectedColorId] = useState<string | null>(null);
   const [selectedAccessoryId, setSelectedAccessoryId] = useState<string | null>(null);
+  const [giftCardNote, setGiftCardNote] = useState('');
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -130,9 +134,10 @@ export default function ProductDetailScreen() {
     setSelectedAccessoryId(
       initialAccessoryId ? String(initialAccessoryId) : null
     );
+    setGiftCardNote(initialGiftNote ? String(initialGiftNote) : '');
     setActiveGalleryIndex(0);
     setShowReviewForm(false);
-  }, [id, initialColorId, initialAccessoryId, initialQty]);
+  }, [id, initialColorId, initialAccessoryId, initialQty, initialGiftNote]);
 
   const colorOptions: ProductColorOption[] = useMemo(
     () => product?.colorOptions ?? [],
@@ -142,15 +147,19 @@ export default function ProductDetailScreen() {
     () => [
       {
         id: 'no_box',
-        name: 'Không hộp',
+        name: 'Tự dùng / Tiêu chuẩn',
         emoji: '🛍️',
         priceDelta: 0,
+        description:
+          'Bọc chống sốc cẩn thận, tối ưu chi phí cho bạn mua về tự decor/dùng.',
       },
       {
         id: 'gift_box_letter',
-        name: 'Hộp quà + Thư tay',
+        name: 'Set Quà Tặng',
         emoji: '🎁',
         priceDelta: 15000,
+        description:
+          'Hộp quà nắp gài, lót rơm thơm, ruy băng & thiệp viết tay theo yêu cầu.',
       },
     ],
     []
@@ -349,7 +358,8 @@ export default function ProductDetailScreen() {
 
   const buildVariantProduct = (): Product => {
     const colorId = activeColor?.id ?? 'c1';
-    const accId = activeAccessory?.id ?? 'a1';
+    const accId = activeAccessory?.id ?? 'no_box';
+    const isGiftSet = accId === 'gift_box_letter';
     const variantId = `${product.id}__${colorId}__${accId}`;
     return {
       ...product,
@@ -359,9 +369,12 @@ export default function ProductDetailScreen() {
       selectedColorId: activeColor?.id,
       selectedColorName: activeColor?.name ?? product.color,
       selectedColorHex: activeColor?.hex,
-      selectedAccessoryId: activeAccessory?.id,
-      selectedAccessoryName: activeAccessory?.name,
+      selectedAccessoryId: accId,
+      selectedAccessoryName: isGiftSet
+        ? 'Set Quà Tặng (+15.000₫)'
+        : 'Tự dùng / Tiêu chuẩn',
       selectedAccessoryEmoji: activeAccessory?.emoji,
+      giftCardNote: isGiftSet ? giftCardNote.trim() : undefined,
       image: activeColor?.image || product.image,
       price: effectivePrice,
     };
@@ -414,6 +427,11 @@ export default function ProductDetailScreen() {
     if (editCartItemId) {
       if (editCartItemId === nextVariant.id) {
         updateCartQuantity(nextVariant.id, quantity);
+        updateCartItemPackaging(
+          nextVariant.id,
+          activeAccessory?.id === 'gift_box_letter',
+          giftCardNote.trim()
+        );
       } else {
         removeFromCart(String(editCartItemId));
         await addToCart(nextVariant, quantity);
@@ -434,6 +452,7 @@ export default function ProductDetailScreen() {
       router.push('/login');
       return;
     }
+    const isGiftSet = activeAccessory?.id === 'gift_box_letter';
     router.push({
       pathname: '/checkout',
       params: {
@@ -443,9 +462,10 @@ export default function ProductDetailScreen() {
         selectedColorId: activeColor?.id ?? '',
         selectedColor: activeColor?.name ?? product.color,
         selectedAccessoryId: activeAccessory?.id ?? 'no_box',
-        selectedAccessory: activeAccessory
-          ? `${activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}${activeAccessory.name}`
-          : '',
+        selectedAccessory: isGiftSet
+          ? '🎁 Set Quà Tặng (+15.000₫)'
+          : '🛍️ Tự dùng / Tiêu chuẩn',
+        giftCardNote: isGiftSet ? giftCardNote.trim() : '',
         unitPrice: String(effectivePrice),
       },
     });
@@ -904,19 +924,95 @@ export default function ProductDetailScreen() {
               </View>
             )}
 
-            {/* 2. Packaging / Gift Box Pill Selector ("Không hộp" vs "Hộp quà + Thư tay (+15k)") */}
+            {/* 2. Packaging / Gift Box Variant Cards & Personalization Note */}
             <View style={styles.selectorGroup}>
-              <Text style={styles.selectorLabel}>
-                Đóng gói:{' '}
-                <Text style={styles.selectorValue}>
-                  {activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}
-                  {activeAccessory.name}
-                  {(activeAccessory.priceDelta ?? 0) > 0
-                    ? ` (+${formatVND(activeAccessory.priceDelta || 0)})`
-                    : ''}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}>
+                <Text style={styles.selectorLabel}>
+                  Đóng gói:{' '}
+                  <Text style={styles.selectorValue}>
+                    {activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}
+                    {activeAccessory.name}
+                    {(activeAccessory.priceDelta ?? 0) > 0
+                      ? ` (+${formatVND(activeAccessory.priceDelta || 0)})`
+                      : ' (Mặc định)'}
+                  </Text>
                 </Text>
-              </Text>
-              <View style={styles.pillWrap}>
+
+                {/* Quick Checkbox Toggle: [ ] Gói quà tặng (+15.000₫) */}
+                <TouchableOpacity
+                  onPress={() => {
+                    const nextAcc =
+                      activeAccessory?.id === 'gift_box_letter'
+                        ? accessoryOptions[0]
+                        : accessoryOptions[1];
+                    if (nextAcc) handleSelectAccessory(nextAcc);
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor:
+                      activeAccessory?.id === 'gift_box_letter'
+                        ? '#5C4033'
+                        : '#E2D4C5',
+                    backgroundColor:
+                      activeAccessory?.id === 'gift_box_letter'
+                        ? '#FDF6EC'
+                        : '#FAF6F1',
+                  }}>
+                  <View
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 4,
+                      borderWidth: 1.5,
+                      borderColor:
+                        activeAccessory?.id === 'gift_box_letter'
+                          ? '#5C4033'
+                          : '#B09882',
+                      backgroundColor:
+                        activeAccessory?.id === 'gift_box_letter'
+                          ? '#5C4033'
+                          : '#FFFFFF',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    {activeAccessory?.id === 'gift_box_letter' && (
+                      <Text
+                        style={{
+                          color: '#FFFFFF',
+                          fontSize: 10,
+                          fontWeight: '800',
+                          lineHeight: 12,
+                        }}>
+                        ✓
+                      </Text>
+                    )}
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: '700',
+                      color: '#4A3728',
+                    }}>
+                    🎁 Gói quà tặng (+15.000₫)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ gap: 8 }}>
                 {accessoryOptions.map((acc) => {
                   const isSelected = activeAccessory?.id === acc.id;
                   const delta = acc.priceDelta ?? 0;
@@ -924,24 +1020,154 @@ export default function ProductDetailScreen() {
                     <TouchableOpacity
                       key={acc.id}
                       style={[
-                        styles.optionPill,
-                        isSelected && styles.optionPillSelected,
+                        {
+                          borderWidth: isSelected ? 1.5 : 1,
+                          borderColor: isSelected ? '#5C4033' : '#E8DDD1',
+                          backgroundColor: isSelected ? '#FDF8F2' : '#FFFFFF',
+                          borderRadius: 12,
+                          paddingHorizontal: 12,
+                          paddingVertical: 10,
+                          flexDirection: 'row',
+                          alignItems: 'flex-start',
+                          gap: 10,
+                        },
                       ]}
                       onPress={() => handleSelectAccessory(acc)}
-                      activeOpacity={0.8}>
-                      <Text
-                        style={[
-                          styles.optionPillText,
-                          isSelected && styles.optionPillTextSelected,
-                        ]}>
-                        {acc.emoji ? `${acc.emoji} ` : ''}
-                        {acc.name}
-                        {delta > 0 ? ` (+${formatVND(delta)})` : ''}
-                      </Text>
+                      activeOpacity={0.82}>
+                      <View
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? '#5C4033' : '#C5B4A2',
+                          backgroundColor: isSelected ? '#5C4033' : '#FFFFFF',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginTop: 2,
+                        }}>
+                        {isSelected && (
+                          <View
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: 3.5,
+                              backgroundColor: '#FFFDF9',
+                            }}
+                          />
+                        )}
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 6,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 13.5,
+                              fontWeight: '700',
+                              color: isSelected ? '#3B281CC9' : '#4A3728',
+                            }}>
+                            {acc.emoji ? `${acc.emoji} ` : ''}
+                            {acc.name}
+                          </Text>
+                          <View
+                            style={{
+                              paddingHorizontal: 8,
+                              paddingVertical: 2,
+                              borderRadius: 999,
+                              backgroundColor:
+                                delta > 0
+                                  ? isSelected
+                                    ? '#5C4033'
+                                    : '#F3E8DC'
+                                  : '#F2ECE4',
+                            }}>
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '700',
+                                color:
+                                  delta > 0
+                                    ? isSelected
+                                      ? '#FFFDF9'
+                                      : '#5C4033'
+                                    : '#7A6552',
+                              }}>
+                              {delta > 0
+                                ? `+${formatVND(delta)}`
+                                : 'Mặc định'}
+                            </Text>
+                          </View>
+                        </View>
+                        {Boolean(acc.description) && (
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: '#7A6552',
+                              lineHeight: 17,
+                            }}>
+                            {acc.description}
+                          </Text>
+                        )}
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+
+              {/* Personalization Input when Set Quà Tặng (+15.000₫) is active */}
+              {activeAccessory?.id === 'gift_box_letter' && (
+                <View
+                  style={{
+                    marginTop: 4,
+                    backgroundColor: '#FDF8F2',
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: '#E5D3C0',
+                    padding: 12,
+                    gap: 6,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: '700',
+                      color: '#4A3728',
+                    }}>
+                    💌 Ghi chú nội dung thiệp (nếu có)
+                  </Text>
+                  <TextInput
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: '#E2D4C5',
+                      borderRadius: 9,
+                      paddingHorizontal: 11,
+                      paddingVertical: 9,
+                      fontSize: 13,
+                      color: '#3B2A1E',
+                      minHeight: 42,
+                    }}
+                    placeholder="Nhập lời chúc bạn muốn tiệm viết tay lên thiệp..."
+                    placeholderTextColor="#A3907E"
+                    value={giftCardNote}
+                    onChangeText={setGiftCardNote}
+                    maxLength={220}
+                    multiline
+                  />
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: '#8C7460',
+                    }}>
+                    ✨ Tiệm sẽ viết tay lời nhắn của bạn lên thiệp vintage đặt trong hộp quà.
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Desktop Inline Purchase Row */}

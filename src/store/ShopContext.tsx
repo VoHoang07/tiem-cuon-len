@@ -22,6 +22,11 @@ interface ShopContextType {
   addToCart: (product: Product, quantity: number) => Promise<void>;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
+  updateCartItemPackaging: (
+    productId: string,
+    enableGiftBox: boolean,
+    giftCardNote?: string
+  ) => void;
   clearCart: () => void;
   toggleFavorite: (productId: string) => void;
   isFavorite: (productId: string) => boolean;
@@ -47,7 +52,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
 function ShopBridge({ children }: { children: ReactNode }) {
   const { products, shopReviews, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, addShopReview, removeShopReview, replyToShopReview, refetchProducts } = useProducts();
-  const { cart, cartHydrated, cartTotal, cartCount, addToCart, removeFromCart, updateCartQuantity, clearCart, refetchCart } = useCart();
+  const { cart, cartHydrated, cartTotal, cartCount, addToCart, removeFromCart, updateCartQuantity, updateCartItemPackaging, clearCart, refetchCart } = useCart();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
   const refetchCartFavorites = useCallback(async () => {
@@ -73,6 +78,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
       addToCart,
       removeFromCart,
       updateCartQuantity,
+      updateCartItemPackaging,
       clearCart,
       toggleFavorite,
       isFavorite,
@@ -99,6 +105,7 @@ function ShopBridge({ children }: { children: ReactNode }) {
       addToCart,
       removeFromCart,
       updateCartQuantity,
+      updateCartItemPackaging,
       clearCart,
       toggleFavorite,
       isFavorite,

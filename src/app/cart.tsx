@@ -4,6 +4,7 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   Alert,
   Image,
@@ -60,6 +61,7 @@ export default function CartScreen() {
     addToCart,
     removeFromCart,
     updateCartQuantity,
+    updateCartItemPackaging,
     cartTotal,
     clearCart,
     cartHydrated,
@@ -90,6 +92,7 @@ export default function CartScreen() {
         initialColorId: item.product.selectedColorId || '',
         initialAccessoryId: item.product.selectedAccessoryId || 'no_box',
         initialQty: String(item.quantity),
+        initialGiftNote: item.product.giftCardNote || item.giftCardNote || '',
       },
     });
   };
@@ -138,105 +141,232 @@ export default function CartScreen() {
       item.product.selectedColorName || item.selectedColor || item.product.color;
     const colorHex = item.product.selectedColorHex;
     const packagingLabel =
-      item.product.selectedAccessoryName || item.selectedAccessory || 'Không hộp';
+      item.product.selectedAccessoryName ||
+      item.selectedAccessory ||
+      'Tự dùng / Tiêu chuẩn';
     const isGiftBox =
       item.product.selectedAccessoryId === 'gift_box_letter' ||
-      packagingLabel.toLowerCase().includes('hộp quà');
+      packagingLabel.toLowerCase().includes('hộp quà') ||
+      packagingLabel.toLowerCase().includes('quà tặng');
+    const giftNote = item.product.giftCardNote ?? item.giftCardNote ?? '';
 
     return (
       <Swipeable renderRightActions={() => renderRightActions(item)}>
-        <View style={[styles.cartItem, isMobile && styles.cartItemMobile]}>
-          <TouchableOpacity
-            style={styles.itemImage}
-            onPress={() => handleEditCartItemOptions(item)}
-            activeOpacity={0.8}>
-            {item.product.image ? (
-              <Image
-                source={
-                  typeof item.product.image === 'string'
-                    ? { uri: item.product.image }
-                    : (item.product.image as any)
-                }
-                style={styles.itemProductImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text style={styles.itemEmoji}>
-                {getCategoryEmoji(item.product.category)}
+        <View style={{ marginBottom: 12 }}>
+          <View
+            style={[
+              styles.cartItem,
+              isMobile && styles.cartItemMobile,
+              { marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+            ]}>
+            <TouchableOpacity
+              style={styles.itemImage}
+              onPress={() => handleEditCartItemOptions(item)}
+              activeOpacity={0.8}>
+              {item.product.image ? (
+                <Image
+                  source={
+                    typeof item.product.image === 'string'
+                      ? { uri: item.product.image }
+                      : (item.product.image as any)
+                  }
+                  style={styles.itemProductImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.itemEmoji}>
+                  {getCategoryEmoji(item.product.category)}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.itemInfo}
+              onPress={() => handleEditCartItemOptions(item)}
+              activeOpacity={0.75}>
+              <Text style={styles.itemName} numberOfLines={2}>
+                {item.product.name}
               </Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.itemInfo}
-            onPress={() => handleEditCartItemOptions(item)}
-            activeOpacity={0.75}>
-            <Text style={styles.itemName} numberOfLines={2}>
-              {item.product.name}
-            </Text>
 
-            <View style={styles.variantTagsWrap}>
-              {colorLabel ? (
+              <View style={styles.variantTagsWrap}>
+                {colorLabel ? (
+                  <View style={styles.variantTagPill}>
+                    {colorHex ? (
+                      <View
+                        style={[
+                          styles.variantColorDot,
+                          { backgroundColor: colorHex },
+                        ]}
+                      />
+                    ) : null}
+                    <Text style={styles.variantTagText} numberOfLines={1}>
+                      Màu: {colorLabel}
+                    </Text>
+                  </View>
+                ) : null}
                 <View style={styles.variantTagPill}>
-                  {colorHex ? (
-                    <View
-                      style={[
-                        styles.variantColorDot,
-                        { backgroundColor: colorHex },
-                      ]}
-                    />
-                  ) : null}
                   <Text style={styles.variantTagText} numberOfLines={1}>
-                    Màu: {colorLabel}
+                    {isGiftBox
+                      ? '🎁 Set Quà Tặng (+15.000₫)'
+                      : '🛍️ Tự dùng / Tiêu chuẩn'}
                   </Text>
                 </View>
-              ) : null}
-              <View style={styles.variantTagPill}>
-                <Text style={styles.variantTagText} numberOfLines={1}>
-                  {isGiftBox
-                    ? '🎁 Hộp quà + Thư tay (+15.000₫)'
-                    : '🛍️ Không hộp'}
+                <View style={styles.changeOptionPill}>
+                  <Text style={styles.changeOptionText}>Đổi mẫu / hộp ✎</Text>
+                </View>
+              </View>
+
+              <Text style={styles.itemPrice}>
+                {formatVND(item.product.price)} {CART_PER_PIECE}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.itemActions}>
+              <View style={styles.qtyAndDeleteRow}>
+                <View style={styles.qtyControl}>
+                  <TouchableOpacity
+                    style={styles.qtyBtn}
+                    onPress={() =>
+                      updateCartQuantity(item.product.id, item.quantity - 1)
+                    }>
+                    <Minus size={14} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <Text style={styles.qtyText}>{item.quantity}</Text>
+                  <TouchableOpacity
+                    style={styles.qtyBtn}
+                    onPress={() =>
+                      updateCartQuantity(item.product.id, item.quantity + 1)
+                    }>
+                    <Plus size={14} color={COLORS.primary} />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={styles.deleteItemBtn}
+                  onPress={() => removeFromCart(item.product.id)}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Xóa sản phẩm khỏi giỏ hàng">
+                  <Trash2 size={15} color={COLORS.error} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.itemTotal}>
+                {formatVND(item.product.price * item.quantity)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Cross-sell Gift Box & Handwritten Card Note Bar */}
+          {!isGiftBox ? (
+            <TouchableOpacity
+              onPress={() => updateCartItemPackaging(item.product.id, true)}
+              activeOpacity={0.85}
+              style={{
+                backgroundColor: '#FDF6EC',
+                borderWidth: 1,
+                borderTopWidth: 0,
+                borderColor: '#EADBC8',
+                borderBottomLeftRadius: 14,
+                borderBottomRightRadius: 14,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 8,
+              }}>
+              <Text
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: '600',
+                  color: '#5C4033',
+                  flex: 1,
+                  minWidth: 180,
+                }}>
+                🎁 Bạn mua làm quà tặng?{' '}
+                <Text style={{ fontWeight: '800', color: '#8B5A2B' }}>
+                  Thêm gói hộp quà vintage chỉ 15.000₫
+                </Text>
+              </Text>
+              <View
+                style={{
+                  backgroundColor: '#5C4033',
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 999,
+                }}>
+                <Text
+                  style={{
+                    color: '#FFFDF9',
+                    fontSize: 11.5,
+                    fontWeight: '700',
+                  }}>
+                  + Thêm 15.000₫
                 </Text>
               </View>
-              <View style={styles.changeOptionPill}>
-                <Text style={styles.changeOptionText}>Đổi mẫu / hộp ✎</Text>
-              </View>
-            </View>
-
-            <Text style={styles.itemPrice}>
-              {formatVND(item.product.price)} {CART_PER_PIECE}
-            </Text>
-          </TouchableOpacity>
-          <View style={styles.itemActions}>
-            <View style={styles.qtyAndDeleteRow}>
-              <View style={styles.qtyControl}>
+            </TouchableOpacity>
+          ) : (
+            <View
+              style={{
+                backgroundColor: '#FDF8F2',
+                borderWidth: 1,
+                borderTopWidth: 0,
+                borderColor: '#E5D3C0',
+                borderBottomLeftRadius: 14,
+                borderBottomRightRadius: 14,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                gap: 6,
+              }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '700',
+                    color: '#5C4033',
+                  }}>
+                  🎁 Đã chọn Set Quà Tặng (+15.000₫) — Hộp nắp gài, rơm thơm & thiệp viết tay
+                </Text>
                 <TouchableOpacity
-                  style={styles.qtyBtn}
-                  onPress={() =>
-                    updateCartQuantity(item.product.id, item.quantity - 1)
-                  }>
-                  <Minus size={14} color={COLORS.primary} />
-                </TouchableOpacity>
-                <Text style={styles.qtyText}>{item.quantity}</Text>
-                <TouchableOpacity
-                  style={styles.qtyBtn}
-                  onPress={() =>
-                    updateCartQuantity(item.product.id, item.quantity + 1)
-                  }>
-                  <Plus size={14} color={COLORS.primary} />
+                  onPress={() => updateCartItemPackaging(item.product.id, false)}
+                  activeOpacity={0.75}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '600',
+                      color: '#8C7460',
+                      textDecorationLine: 'underline',
+                    }}>
+                    Đổi về Tiêu chuẩn
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.deleteItemBtn}
-                onPress={() => removeFromCart(item.product.id)}
-                activeOpacity={0.7}
-                accessibilityLabel="Xóa sản phẩm khỏi giỏ hàng">
-                <Trash2 size={15} color={COLORS.error} />
-              </TouchableOpacity>
+              <TextInput
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 1,
+                  borderColor: '#E2D4C5',
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 7,
+                  fontSize: 12.5,
+                  color: '#3B2A1E',
+                  minWidth: 0,
+                }}
+                placeholder="💌 Ghi chú nội dung thiệp (nếu có)..."
+                placeholderTextColor="#A3907E"
+                value={giftNote}
+                onChangeText={(txt) =>
+                  updateCartItemPackaging(item.product.id, true, txt)
+                }
+                maxLength={220}
+              />
             </View>
-            <Text style={styles.itemTotal}>
-              {formatVND(item.product.price * item.quantity)}
-            </Text>
-          </View>
+          )}
         </View>
       </Swipeable>
     );

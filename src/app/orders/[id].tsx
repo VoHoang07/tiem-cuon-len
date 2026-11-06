@@ -599,6 +599,27 @@ export default function OrderDetailScreen() {
                       <Text style={styles.itemMeta}>
                         SL: {item.quantity} x {formatVND(item.price)}
                       </Text>
+                      {Boolean(item.product.giftCardNote) && (
+                        <View
+                          style={{
+                            marginTop: 5,
+                            backgroundColor: '#FDF6EC',
+                            borderWidth: 1,
+                            borderColor: '#E5D3C0',
+                            borderRadius: 8,
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              color: '#5C4033',
+                              fontWeight: '600',
+                            }}>
+                            💌 Nội dung thiệp: &ldquo;{item.product.giftCardNote}&rdquo;
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 6 }}>
                       <Text style={styles.itemTotal}>

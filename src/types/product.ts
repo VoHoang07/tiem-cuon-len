@@ -23,6 +23,7 @@ export interface ProductAccessoryOption {
   name: string;
   emoji?: string;
   priceDelta?: number;
+  description?: string;
   image?: string | null;
 }
 
@@ -56,6 +57,7 @@ export interface Product {
   selectedAccessoryId?: string;
   selectedAccessoryName?: string;
   selectedAccessoryEmoji?: string;
+  giftCardNote?: string;
   colorOptions?: ProductColorOption[];
   accessoryOptions?: ProductAccessoryOption[];
   isMadeToOrder?: boolean;
@@ -94,4 +96,5 @@ export interface CartItem {
   quantity: number;
   selectedColor?: string;
   selectedAccessory?: string;
+  giftCardNote?: string;
 }

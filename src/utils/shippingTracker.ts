@@ -126,7 +126,12 @@ export function formatShippingSlipForClipboard(order: Order): string {
     0
   );
   const itemsText = order.items
-    .map((i) => `${i.product.name} (x${i.quantity})`)
+    .map((i) => {
+      const card = i.product.giftCardNote
+        ? ` [💌 Thiệp: "${i.product.giftCardNote}"]`
+        : '';
+      return `${i.product.name} (x${i.quantity})${card}`;
+    })
     .join(', ');
   const shipMethod = addr?.shippingMethod || 'Giao tiêu chuẩn';
   const isExpress = shipMethod.toLowerCase().includes('hỏa tốc');
@@ -136,6 +141,7 @@ export function formatShippingSlipForClipboard(order: Order): string {
     `👤 Người nhận: ${addr?.fullName || 'Khách hàng'}`,
     `📞 SĐT: ${addr?.phone || '—'}`,
     `📍 Địa chỉ: ${fullAddress}`,
+    addr?.note ? `📝 Ghi chú / Thiệp: ${addr.note}` : '',
     `🚚 Hình thức giao: ${shipMethod}`,
     isExpress
       ? '⚡ Cước ship Hỏa Tốc: Khách tự trả cước trực tiếp cho tài xế theo giá App'
