@@ -419,13 +419,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Layer 4: Initial fetch + adaptive polling + window focus sync
+  // Layer 4: Initial fetch + adaptive polling + window focus sync (WebSocket handles live push)
   useEffect(() => {
+    let lastFetchTs = Date.now();
     fetchRemoteMessages();
-    const intervalMs = isOpen ? 2500 : 12000;
-    const timer = setInterval(fetchRemoteMessages, intervalMs);
+    const intervalMs = isOpen ? 15000 : 90000;
+    const timer = setInterval(() => {
+      lastFetchTs = Date.now();
+      fetchRemoteMessages();
+    }, intervalMs);
 
     const handleFocus = () => {
+      if (Date.now() - lastFetchTs < 15000) return;
+      lastFetchTs = Date.now();
       fetchRemoteMessages();
     };
     if (typeof window !== 'undefined') {

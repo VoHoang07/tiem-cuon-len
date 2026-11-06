@@ -40,17 +40,24 @@ const hydratedMediaMemory = new Map<
     gallery?: Product['gallery'];
     isMadeToOrder?: boolean;
     cleanTags?: string[];
+    coverChecked?: boolean;
+    tagsChecked?: boolean;
   }
 >();
 
-function cacheProductMediaInMemory(p: Product) {
+function cacheProductMediaInMemory(
+  p: Product,
+  opts?: { coverChecked?: boolean; tagsChecked?: boolean }
+) {
   if (!p || !p.id) return;
   const hasImage =
-    typeof p.image === 'string' && p.image.length > 0;
+    (typeof p.image === 'string' && p.image.length > 0) ||
+    typeof p.image === 'number' ||
+    (typeof p.image === 'object' && p.image !== null);
   const hasColors =
     Array.isArray(p.colorOptions) && p.colorOptions.length > 0;
-  if (hasImage || hasColors) {
-    const prev = hydratedMediaMemory.get(p.id);
+  const prev = hydratedMediaMemory.get(p.id);
+  if (hasImage || hasColors || opts?.coverChecked || opts?.tagsChecked || prev) {
     hydratedMediaMemory.set(p.id, {
       image: hasImage ? p.image : prev?.image,
       colorOptions: hasColors ? p.colorOptions : prev?.colorOptions,
@@ -65,6 +72,8 @@ function cacheProductMediaInMemory(p: Product) {
             (t) => typeof t === 'string' && !t.startsWith(VARIANTS_META_PREFIX)
           )
         : prev?.cleanTags,
+      coverChecked: Boolean(opts?.coverChecked || hasImage || prev?.coverChecked),
+      tagsChecked: Boolean(opts?.tagsChecked || hasColors || prev?.tagsChecked),
     });
   }
 }
@@ -1004,7 +1013,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         if (cachedAll.length > 0) {
           for (const item of cachedAll) {
             if (item && item.id && !deleted.has(item.id)) {
-              cacheProductMediaInMemory(item);
+              cacheProductMediaInMemory(item, {
+                coverChecked: Boolean(item.image),
+                tagsChecked: true,
+              });
             }
           }
         }
@@ -1012,7 +1024,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           for (const item of idbCustom) {
             if (item && item.id && !deleted.has(item.id)) {
               customAdminProductsMemory.set(item.id, item);
-              cacheProductMediaInMemory(item);
+              cacheProductMediaInMemory(item, {
+                coverChecked: Boolean(item.image),
+                tagsChecked: true,
+              });
             }
           }
         }
@@ -1055,13 +1070,15 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
       const deleted = getDeletedIds();
       // Prioritize featured products (rating >= 4.8) first so above-the-fold mobile screen renders images immediately
+      // Skip legacy numeric IDs (1..7) since they are superseded by MOCK_PRODUCTS
       const activeRows = [...baseRows]
         .filter(
           (r) =>
             r &&
             r.id &&
             !deleted.has(r.id) &&
-            !RETIRED_PRODUCT_IDS.has(r.id)
+            !RETIRED_PRODUCT_IDS.has(r.id) &&
+            !LEGACY_ID_TO_MOCK_ID[r.id]
         )
         .sort((a, b) => (b.rating >= 4.8 ? 1 : 0) - (a.rating >= 4.8 ? 1 : 0));
 
@@ -1069,7 +1086,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       const missingCoverIds = activeRows
         .filter((r) => {
           const cached = hydratedMediaMemory.get(r.id);
-          return !cached || !cached.image;
+          return !cached || (!cached.image && !cached.coverChecked);
         })
         .map((r) => r.id);
 
@@ -1091,7 +1108,6 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               const res = await fetch(
                 `${supabaseUrl}/rest/v1/products?select=id,image&id=in.(${inFilter})`,
                 {
-                  cache: 'no-store',
                   headers: {
                     apikey: supabaseAnonKey,
                     Authorization: `Bearer ${supabaseAnonKey}`,
@@ -1106,9 +1122,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                 if (Array.isArray(rows) && rows.length > 0) {
                   for (const mr of rows) {
                     const target = baseRows.find((b) => b.id === mr.id);
-                    if (target && mr.image) {
-                      target.image = mr.image;
-                      hydrateDbProduct(target);
+                    if (target) {
+                      if (mr.image) target.image = mr.image;
+                      const hydrated = hydrateDbProduct(target);
+                      cacheProductMediaInMemory(hydrated, { coverChecked: true });
                     }
                   }
                   const merged = mergeWithMockProducts(baseRows);
@@ -1123,11 +1140,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         await Promise.all([runCoverWorker(), runCoverWorker()]);
       }
 
-      // PASS 2: Background Variant & Gallery Hydration (`select=id,tags`)
+      // PASS 2: Background Variant & Gallery Hydration (`select=id,tags` ONLY — never re-download `image`!)
       const missingVariantIds = activeRows
         .filter((r) => {
           const cached = hydratedMediaMemory.get(r.id);
-          return !cached || !Array.isArray(cached.colorOptions);
+          return !cached || !cached.tagsChecked;
         })
         .map((r) => r.id);
 
@@ -1139,9 +1156,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
         try {
           const res = await fetch(
-            `${supabaseUrl}/rest/v1/products?select=id,image,tags&id=in.(${inFilter})`,
+            `${supabaseUrl}/rest/v1/products?select=id,tags&id=in.(${inFilter})`,
             {
-              cache: 'no-store',
               headers: {
                 apikey: supabaseAnonKey,
                 Authorization: `Bearer ${supabaseAnonKey}`,
@@ -1151,16 +1167,18 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           if (res.ok) {
             const mediaRows = (await res.json()) as Array<{
               id: string;
-              image?: Product['image'];
               tags?: string[];
             }>;
             if (Array.isArray(mediaRows) && mediaRows.length > 0) {
               for (const mr of mediaRows) {
                 const target = baseRows.find((b) => b.id === mr.id);
                 if (target) {
-                  target.image = mr.image ?? target.image;
                   target.tags = mr.tags ?? target.tags;
-                  hydrateDbProduct(target);
+                  const hydrated = hydrateDbProduct(target);
+                  cacheProductMediaInMemory(hydrated, {
+                    coverChecked: true,
+                    tagsChecked: true,
+                  });
                 }
               }
               const merged = mergeWithMockProducts(baseRows);
@@ -1302,14 +1320,21 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         });
     };
 
+    let lastSyncTs = Date.now();
     syncProducts();
-    const timer = setInterval(syncProducts, 30000);
+    // Egress-safe 5-minute background sync; IndexedDB + hydratedMediaMemory prevent re-downloading cached product images
+    const timer = setInterval(() => {
+      lastSyncTs = Date.now();
+      syncProducts();
+    }, 300000);
     const handleFocus = () => {
+      if (Date.now() - lastSyncTs < 120000) return;
+      lastSyncTs = Date.now();
       syncProducts();
     };
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        syncProducts();
+        handleFocus();
       }
     };
     if (typeof window !== 'undefined') {

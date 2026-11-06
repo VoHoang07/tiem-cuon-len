@@ -173,9 +173,15 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user && role !== 'admin') return;
+    let lastFetchTs = Date.now();
     fetchOrders();
-    const timer = setInterval(fetchOrders, 8000);
+    const timer = setInterval(() => {
+      lastFetchTs = Date.now();
+      fetchOrders();
+    }, 45000);
     const handleFocus = () => {
+      if (Date.now() - lastFetchTs < 15000) return;
+      lastFetchTs = Date.now();
       fetchOrders();
     };
     const handleVisibilityChange = () => {
