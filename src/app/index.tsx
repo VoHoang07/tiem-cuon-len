@@ -1,67 +1,64 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  RefreshControl,
-  Image,
-  Platform,
-} from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Search,
-  ShoppingCart,
-  Heart,
-  Sparkles,
-  User as UserIcon,
-  X,
-  Gift,
-  HeartHandshake,
-  Truck,
-  SlidersHorizontal,
-  Package,
-  ShoppingBag,
-  PlusCircle,
-  CreditCard,
-  Share2,
-} from 'lucide-react-native';
-import { useShop } from '@/store/ShopContext';
-import { useProducts } from '@/store/ProductContext';
-import { useAuth } from '@/store/AuthContext';
-import { useOrders } from '@/store/OrderContext';
-import { ProductCard } from '@/components/ProductCard';
-import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
+import { BoutiqueFooter } from '@/components/BoutiqueFooter';
+import { BrandAvatar, BrandTitle } from '@/components/BrandTitle';
 import { CategoryChips } from '@/components/CategoryChips';
+import { ProductCard } from '@/components/ProductCard';
 import { SectionHeader } from '@/components/SectionHeader';
-import { useDebounce } from '@/hooks/useDebounce';
+import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
+import { HomeSkeleton } from '@/components/Skeleton';
 import { BOTTOM_NAV_SPACER } from '@/constants/layout';
 import {
-  COLORS,
-  SPACING,
-  SHADOWS,
-  CATEGORIES,
-  LEN_CATEGORIES,
-  KEM_NHUNG_CATEGORIES,
-} from '@/constants/theme';
-import { Product, Category } from '@/types/product';
-import {
-  HOME_WELCOME,
-  HOME_SEARCH_PLACEHOLDER,
-  HOME_FEATURED,
-  HOME_ALL_PRODUCTS,
-  HOME_EMPTY_TITLE,
-  HOME_EMPTY_SUBTEXT,
+    HOME_ALL_PRODUCTS,
+    HOME_EMPTY_SUBTEXT,
+    HOME_EMPTY_TITLE,
+    HOME_FEATURED,
+    HOME_SEARCH_PLACEHOLDER,
+    HOME_WELCOME,
 } from '@/constants/strings';
-import { BrandTitle, BrandAvatar } from '@/components/BrandTitle';
-import { HomeSkeleton } from '@/components/Skeleton';
-import { BoutiqueFooter } from '@/components/BoutiqueFooter';
-import { getCategoryLabel, getCategoryCraftLine } from '@/utils/getCategoryEmoji';
+import {
+    COLORS,
+    SHADOWS,
+    SPACING
+} from '@/constants/theme';
+import { useDebounce } from '@/hooks/useDebounce';
+import { useAuth } from '@/store/AuthContext';
+import { useOrders } from '@/store/OrderContext';
+import { useProducts } from '@/store/ProductContext';
+import { useShop } from '@/store/ShopContext';
+import { Category, Product } from '@/types/product';
+import { getCategoryCraftLine, getCategoryLabel } from '@/utils/getCategoryEmoji';
+import { useFocusEffect, useRouter } from 'expo-router';
+import {
+    CreditCard,
+    Gift,
+    Heart,
+    HeartHandshake,
+    Package,
+    PlusCircle,
+    Search,
+    Share2,
+    ShoppingBag,
+    ShoppingCart,
+    SlidersHorizontal,
+    Sparkles,
+    Truck,
+    User as UserIcon,
+    X,
+} from 'lucide-react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import {
+    FlatList,
+    Image,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const GAP = 14;
 const MAX_CONTAINER_WIDTH = 1120;
@@ -420,7 +417,7 @@ export default function HomeScreen() {
                 Đồ len thủ công xinh xắn,{'\n'}chăm chút từng chi tiết 🧶
               </Text>
               <Text style={[styles.heroSubtitle, isMobile && styles.heroSubtitleMobile]}>
-                Móc khoá, hoa trang trí, thú bông & phụ kiện làm từ sợi len cotton và kẽm nhung cao cấp.
+                Móc khoá, hoa trang trí, thú bông & phụ kiện làm từ sợi len và kẽm nhung cao cấp.
               </Text>
               <View style={styles.heroPillsRow}>
                 <View style={styles.heroFeaturePill}>
@@ -535,17 +532,21 @@ export default function HomeScreen() {
                   <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
                     {isMobile ? 'Giao toàn quốc' : 'Giao hàng toàn quốc'}
                   </Text>
-                  {!isMobile && <Text style={styles.trustSub}>Đóng gói hộp quà cẩn thận</Text>}
+                  {!isMobile && (
+                    <Text style={styles.trustSub}>
+                      Đóng gói hộp quà cẩn thận chỉ với 15k và freeship cho tổng hoá đơn trên 299k
+                    </Text>
+                  )}
                 </View>
-              </View>
-              <View style={styles.trustDivider} />
-              <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
+                </View>
+                <View style={styles.trustDivider} />
+                <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
                 <View style={styles.trustIconWrap}>
                   <HeartHandshake size={15} color="#3D2B1F" />
                 </View>
                 <View style={styles.trustTextWrap}>
                   <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
-                    {isMobile ? 'Len cotton mịn' : 'Len cotton mềm mịn'}
+                    Len mềm mịn
                   </Text>
                   {!isMobile && <Text style={styles.trustSub}>An toàn & bền màu theo năm tháng</Text>}
                 </View>
@@ -859,9 +860,9 @@ export default function HomeScreen() {
           type="website"
           title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
           subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
-          priceText="Freeship đơn từ 300.000₫"
+          priceText="Freeship đơn trên 299.000₫"
           url={PUBLIC_SHOP_URL}
-          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Có tuỳ chọn Hộp quà + Thư tay xinh xắn, freeship đơn từ 300k!`}
+          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Có tuỳ chọn Set Quà Tặng Đặc Biệt xinh xắn, freeship cho tổng hoá đơn trên 299k!`}
         />
       ) : null}
     </SafeAreaView>

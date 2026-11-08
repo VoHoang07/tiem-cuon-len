@@ -477,7 +477,7 @@ async function resolveAuthoritativeShippingConfig() {
   const defaults = {
     hcmFee: 15000,
     provincialFee: 15000,
-    freeshipThreshold: 300000,
+    freeshipThreshold: 299000,
   };
   try {
     const res = await fetch(

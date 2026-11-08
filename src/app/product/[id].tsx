@@ -1,54 +1,54 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { ProductCard } from '@/components/ProductCard';
+import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  TextInput,
-  Alert,
-  Platform,
-  useWindowDimensions,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Heart,
-  ChevronLeft,
-  ChevronRight,
-  Minus,
-  Plus,
-  Star,
-  MessageSquare,
-  Edit3,
-  Trash2,
-  MessageCircle,
-  ShoppingCart,
-  Share2,
-} from 'lucide-react-native';
-import { useShop } from '@/store/ShopContext';
+    PD_ADD_TO_CART,
+    PD_GO_BACK,
+    PD_NOT_FOUND,
+    PD_REVIEWS,
+} from '@/constants/strings';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
 import { useOrders } from '@/store/OrderContext';
+import { useShop } from '@/store/ShopContext';
 import {
-  Product,
-  Review,
-  ProductColorOption,
-  ProductAccessoryOption,
-  ProductGalleryItem,
+    Product,
+    ProductAccessoryOption,
+    ProductColorOption,
+    ProductGalleryItem,
+    Review,
 } from '@/types/product';
-import { ProductCard } from '@/components/ProductCard';
-import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  PD_NOT_FOUND,
-  PD_GO_BACK,
-  PD_REVIEWS,
-  PD_ADD_TO_CART,
-} from '@/constants/strings';
+    ChevronLeft,
+    ChevronRight,
+    Edit3,
+    Heart,
+    MessageCircle,
+    MessageSquare,
+    Minus,
+    Plus,
+    Share2,
+    ShoppingCart,
+    Star,
+    Trash2,
+} from 'lucide-react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Alert,
+    Image,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const PD_BUY_NOW = 'Mua ngay';
 const MAX_WIDTH = 1040;
@@ -140,7 +140,15 @@ export default function ProductDetailScreen() {
   }, [id, initialColorId, initialAccessoryId, initialQty, initialGiftNote]);
 
   const colorOptions: ProductColorOption[] = useMemo(
-    () => product?.colorOptions ?? [],
+    () =>
+      (product?.colorOptions ?? []).filter((c) => {
+        const lower = (c.name || '').toLowerCase();
+        return (
+          !lower.includes('hộp quà') &&
+          !lower.includes('thư tay') &&
+          !lower.includes('set quà')
+        );
+      }),
     [product]
   );
   const accessoryOptions: ProductAccessoryOption[] = useMemo(
@@ -239,8 +247,8 @@ export default function ProductDetailScreen() {
     if (!hasGiftBoxSlide) {
       items.push({
         id: 'g_gift_box_default',
-        label: '🎁 Hộp quà + Thư tay',
-        angleTag: '🎁 Hộp quà + Thư tay',
+        label: '🎁 Set Quà Tặng Đặc Biệt',
+        angleTag: '🎁 Set Quà Tặng Đặc Biệt',
         image: DEFAULT_GIFT_BOX_IMAGE,
         accessoryId: 'gift_box_letter',
         zoomMode: 'normal',
@@ -926,91 +934,16 @@ export default function ProductDetailScreen() {
 
             {/* 2. Packaging / Gift Box Variant Cards & Personalization Note */}
             <View style={styles.selectorGroup}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                }}>
-                <Text style={styles.selectorLabel}>
-                  Đóng gói:{' '}
-                  <Text style={styles.selectorValue}>
-                    {activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}
-                    {activeAccessory.name}
-                    {(activeAccessory.priceDelta ?? 0) > 0
-                      ? ` (+${formatVND(activeAccessory.priceDelta || 0)})`
-                      : ' (Mặc định)'}
-                  </Text>
+              <Text style={styles.selectorLabel}>
+                Đóng gói:{' '}
+                <Text style={styles.selectorValue}>
+                  {activeAccessory.emoji ? `${activeAccessory.emoji} ` : ''}
+                  {activeAccessory.name}
+                  {(activeAccessory.priceDelta ?? 0) > 0
+                    ? ` (+${formatVND(activeAccessory.priceDelta || 0)})`
+                    : ' (Mặc định)'}
                 </Text>
-
-                {/* Quick Checkbox Toggle: [ ] Gói quà tặng (+15.000₫) */}
-                <TouchableOpacity
-                  onPress={() => {
-                    const nextAcc =
-                      activeAccessory?.id === 'gift_box_letter'
-                        ? accessoryOptions[0]
-                        : accessoryOptions[1];
-                    if (nextAcc) handleSelectAccessory(nextAcc);
-                  }}
-                  activeOpacity={0.8}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    paddingHorizontal: 10,
-                    paddingVertical: 5,
-                    borderRadius: 999,
-                    borderWidth: 1,
-                    borderColor:
-                      activeAccessory?.id === 'gift_box_letter'
-                        ? '#5C4033'
-                        : '#E2D4C5',
-                    backgroundColor:
-                      activeAccessory?.id === 'gift_box_letter'
-                        ? '#FDF6EC'
-                        : '#FAF6F1',
-                  }}>
-                  <View
-                    style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 4,
-                      borderWidth: 1.5,
-                      borderColor:
-                        activeAccessory?.id === 'gift_box_letter'
-                          ? '#5C4033'
-                          : '#B09882',
-                      backgroundColor:
-                        activeAccessory?.id === 'gift_box_letter'
-                          ? '#5C4033'
-                          : '#FFFFFF',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                    {activeAccessory?.id === 'gift_box_letter' && (
-                      <Text
-                        style={{
-                          color: '#FFFFFF',
-                          fontSize: 10,
-                          fontWeight: '800',
-                          lineHeight: 12,
-                        }}>
-                        ✓
-                      </Text>
-                    )}
-                  </View>
-                  <Text
-                    style={{
-                      fontSize: 12.5,
-                      fontWeight: '700',
-                      color: '#4A3728',
-                    }}>
-                    🎁 Nâng cấp Set Quà Tặng Đặc Biệt (+25.000₫)
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              </Text>
 
               <View style={{ gap: 8 }}>
                 {accessoryOptions.map((acc) => {
@@ -1249,7 +1182,7 @@ export default function ProductDetailScreen() {
             {/* Subtle Material & Care Footnote + Chat Link */}
             <View style={styles.subtleFooterBox}>
               <Text style={styles.subtleMetaLine}>
-                🧶 Chất liệu: {product.material} • Tuỳ chọn Không hộp hoặc Hộp quà + Thư tay (+15.000₫)
+                🧶 Chất liệu: {product.material} • Tuỳ chọn Tự dùng / Tiêu chuẩn hoặc Set Quà Tặng Đặc Biệt (+25.000₫)
               </Text>
 
               {isAdmin ? (

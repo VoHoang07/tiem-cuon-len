@@ -1,57 +1,57 @@
-import React, { useRef, useState, useMemo, memo } from 'react';
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  Pressable,
-  StyleSheet,
-  Platform,
-  useWindowDimensions,
-  Animated,
-  Modal,
-  ScrollView,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import {
-  Heart,
-  Plus,
-  Minus,
-  Check,
-  Edit3,
-  MessageCircle,
-  Share2,
-  X,
-  ShoppingCart,
-} from 'lucide-react-native';
-import {
-  Product,
-  ProductColorOption,
-  ProductAccessoryOption,
-} from '@/types/product';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
-import { useFavorites } from '@/store/FavoritesContext';
-import { useCart } from '@/store/CartContext';
+import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
+import { useCart } from '@/store/CartContext';
 import { useChatTrigger } from '@/store/ChatContext';
+import { useFavorites } from '@/store/FavoritesContext';
+import {
+    Product,
+    ProductAccessoryOption,
+    ProductColorOption,
+} from '@/types/product';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
-import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
+import { useRouter } from 'expo-router';
+import {
+    Check,
+    Edit3,
+    Heart,
+    MessageCircle,
+    Minus,
+    Plus,
+    Share2,
+    ShoppingCart,
+    X,
+} from 'lucide-react-native';
+import React, { memo, useMemo, useRef, useState } from 'react';
+import {
+    Animated,
+    Image,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
 
 const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-letter.jpg';
 
 const PACKAGING_OPTIONS: ProductAccessoryOption[] = [
   {
     id: 'no_box',
-    name: 'Không hộp',
+    name: 'Tự dùng / Tiêu chuẩn',
     emoji: '🛍️',
     priceDelta: 0,
   },
   {
     id: 'gift_box_letter',
-    name: 'Hộp quà + Thư tay',
+    name: 'Set Quà Tặng Đặc Biệt',
     emoji: '🎁',
-    priceDelta: 15000,
+    priceDelta: 25000,
   },
 ];
 
@@ -104,7 +104,15 @@ export const ProductCard = memo(function ProductCard({
   const [quickPreviewGiftBox, setQuickPreviewGiftBox] = useState<boolean>(false);
 
   const colorOptions: ProductColorOption[] = useMemo(
-    () => product.colorOptions ?? [],
+    () =>
+      (product.colorOptions ?? []).filter((c) => {
+        const lower = (c.name || '').toLowerCase();
+        return (
+          !lower.includes('hộp quà') &&
+          !lower.includes('thư tay') &&
+          !lower.includes('set quà')
+        );
+      }),
     [product.colorOptions]
   );
   const activeQuickColor: ProductColorOption | null =
@@ -209,7 +217,10 @@ export const ProductCard = memo(function ProductCard({
       selectedColorName: activeQuickColor?.name ?? product.color,
       selectedColorHex: activeQuickColor?.hex,
       selectedAccessoryId: activeQuickAccessory?.id,
-      selectedAccessoryName: activeQuickAccessory?.name,
+      selectedAccessoryName:
+        activeQuickAccessory?.id === 'gift_box_letter'
+          ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
+          : 'Tự dùng / Tiêu chuẩn',
       selectedAccessoryEmoji: activeQuickAccessory?.emoji,
       image: activeQuickColor?.image || product.image,
       price: quickEffectivePrice,

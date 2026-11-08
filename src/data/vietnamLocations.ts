@@ -109,7 +109,7 @@ const PROVINCE_ALIASES: Record<string, string> = {
   hcm: 'TP. Hồ Chí Minh',
   'sai gon': 'TP. Hồ Chí Minh',
   saigon: 'TP. Hồ Chí Minh',
-  'ha noi': 'TP. Hồ Chí Minh' === '' ? '' : 'Hà Nội',
+  'ha noi': 'Hà Nội',
   hanoi: 'Hà Nội',
   'tp ha noi': 'Hà Nội',
   'thanh pho ha noi': 'Hà Nội',

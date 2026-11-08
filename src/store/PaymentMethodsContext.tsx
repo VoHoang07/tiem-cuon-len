@@ -1,15 +1,15 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  type ReactNode,
-} from 'react';
-import { PaymentMethod, PaymentMethodInput, type PaymentMethodType } from '@/types/payment-method';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
+import { PaymentMethod, PaymentMethodInput, type PaymentMethodType } from '@/types/payment-method';
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+    type ReactNode,
+} from 'react';
 
 const PAYMENT_CACHE_KEY = 'tcl_payment_methods_v3';
 const SHIPPING_CONFIG_CACHE_KEY = 'tcl_shipping_config_v3';
@@ -28,7 +28,7 @@ export const DEFAULT_SHIPPING_CONFIG: ShippingConfig = {
   hcmFee: 15000,
   provincialFee: 15000,
   freeshipEnabled: true,
-  freeshipThreshold: 300000,
+  freeshipThreshold: 299000,
 };
 
 function loadCachedShippingConfig(): ShippingConfig {

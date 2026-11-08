@@ -1,40 +1,40 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  useWindowDimensions,
-  TextInput,
-  Alert,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import {
-  MessageCircle,
-  Sparkles,
-  Gift,
-  Palette,
-  Clock,
-  ArrowUp,
-  PlusCircle,
-  Package,
-  ShoppingBag,
-  ShieldCheck,
-  HelpCircle,
-  Share2,
-  Star,
-  MessageSquare,
-  Trash2,
-  CornerDownRight,
-  Edit3,
-} from 'lucide-react-native';
+import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
-import { useShop } from '@/store/ShopContext';
 import { useOrders } from '@/store/OrderContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import { useShop } from '@/store/ShopContext';
 import { Category } from '@/types/product';
-import { ShareModal, PUBLIC_SHOP_URL } from '@/components/ShareModal';
+import { useRouter } from 'expo-router';
+import {
+    ArrowUp,
+    Clock,
+    CornerDownRight,
+    Edit3,
+    Gift,
+    HelpCircle,
+    MessageCircle,
+    MessageSquare,
+    Package,
+    Palette,
+    PlusCircle,
+    Share2,
+    ShieldCheck,
+    ShoppingBag,
+    Sparkles,
+    Star,
+    Trash2,
+} from 'lucide-react-native';
+import React from 'react';
+import {
+    Alert,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
 
 interface BoutiqueFooterProps {
   onSelectCategory?: (category: Category) => void;
@@ -729,9 +729,9 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
           type="website"
           title="Tiệm Cuộn Len Handmade (tiemcuonlen.shop)"
           subtitle="🧶 Chuyên sản phẩm Len thủ công & Kẽm nhung đặt làm theo mẫu"
-          priceText="Freeship đơn từ 300.000₫"
+          priceText="Freeship đơn trên 299.000₫"
           url={PUBLIC_SHOP_URL}
-          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Có tuỳ chọn Hộp quà + Thư tay xinh xắn, freeship đơn từ 300k!`}
+          shareText={`🧶 Tiệm Cuộn Len Handmade — Chuyên đan móc len thủ công & hoa kẽm nhung theo yêu cầu (móc khoá, thú bông, bó hoa, túi xách, phụ kiện).\n🎁 Có tuỳ chọn Set Quà Tặng Đặc Biệt xinh xắn, freeship cho tổng hoá đơn trên 299k!`}
         />
       ) : null}
     </View>

@@ -1,4 +1,4 @@
-import { CATEGORIES, COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useProducts } from '@/store/ProductContext';
 import {
     Category,
@@ -1148,15 +1148,15 @@ export function ProductStudioForm({
     const cleanAccessories: ProductAccessoryOption[] = [
       {
         id: 'no_box',
-        name: 'Không hộp',
+        name: 'Tự dùng / Tiêu chuẩn',
         emoji: '🛍️',
         priceDelta: 0,
       },
       {
         id: 'gift_box_letter',
-        name: 'Hộp quà + Thư tay',
+        name: 'Set Quà Tặng Đặc Biệt',
         emoji: '🎁',
-        priceDelta: 15000,
+        priceDelta: 25000,
       },
     ];
 
@@ -2038,44 +2038,44 @@ export function ProductStudioForm({
                       styles.stockModeText,
                       previewPackagingId === 'no_box' && styles.stockModeTextActive,
                     ]}>
-                    🛍️ Không hộp (+0₫)
-                  </Text>
-                </TouchableOpacity>
+                    🛍️ Tự dùng / Tiêu chuẩn (+0₫)
+                    </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
+                    <TouchableOpacity
+                    style={[
                     styles.stockModePill,
                     previewPackagingId === 'gift_box_letter' &&
                       styles.stockModePillActive,
-                  ]}
-                  onPress={() => setPreviewPackagingId('gift_box_letter')}
-                  activeOpacity={0.8}>
-                  <Text
+                    ]}
+                    onPress={() => setPreviewPackagingId('gift_box_letter')}
+                    activeOpacity={0.8}>
+                    <Text
                     style={[
                       styles.stockModeText,
                       previewPackagingId === 'gift_box_letter' &&
                         styles.stockModeTextActive,
                     ]}>
-                    🎁 Hộp quà + Thư tay (+15.000₫)
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {activeColor?.price && Number(activeColor.price) > 0 ? (
-                <Text
-                  style={{
+                    🎁 Set Quà Tặng Đặc Biệt (+25.000₫)
+                    </Text>
+                    </TouchableOpacity>
+                    </View>
+                    {activeColor?.price && Number(activeColor.price) > 0 ? (
+                    <Text
+                    style={{
                     fontSize: 12,
                     fontWeight: '700',
                     color: '#6E4F37',
                     marginTop: 2,
-                  }}>
-                  {previewPackagingId === 'gift_box_letter'
-                    ? `💡 Giá hiển thị của Ảnh #${safeColorIdx + 1} khi chọn Hộp quà + Thư tay: ${(
-                        Number(activeColor.price) + 15000
+                    }}>
+                    {previewPackagingId === 'gift_box_letter'
+                    ? `💡 Giá hiển thị của Ảnh #${safeColorIdx + 1} khi chọn Set Quà Tặng Đặc Biệt: ${(
+                        Number(activeColor.price) + 25000
                       ).toLocaleString('vi-VN')}₫`
-                    : `💡 Giá hiển thị của Ảnh #${safeColorIdx + 1} khi chọn Không hộp: ${Number(
+                    : `💡 Giá hiển thị của Ảnh #${safeColorIdx + 1} khi chọn Tự dùng / Tiêu chuẩn: ${Number(
                         activeColor.price
                       ).toLocaleString('vi-VN')}₫`}
-                </Text>
+                    </Text>
               ) : null}
             </View>
 
