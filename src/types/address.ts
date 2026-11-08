@@ -8,6 +8,7 @@ export interface Address {
   ward: string;
   detailAddress: string;
   isDefault: boolean;
+  addressTag?: 'home' | 'office';
   shippingMethod?: string;
   shippingFee?: number;
   shippingCarrier?: string;

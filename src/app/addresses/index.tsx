@@ -1,28 +1,28 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  RefreshControl,
-  Platform,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  Plus,
-  MapPin,
-  Check,
-  Trash2,
-  Edit3,
-  Home,
-  Phone,
-} from 'lucide-react-native';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAddresses } from '@/store/AddressContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import { useRouter } from 'expo-router';
+import {
+    Briefcase,
+    ChevronLeft,
+    Edit3,
+    Home,
+    MapPin,
+    Phone,
+    Plus,
+    Trash2,
+} from 'lucide-react-native';
+import { useState } from 'react';
+import {
+    Alert,
+    FlatList,
+    Platform,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function AddressesScreen() {
   const router = useRouter();
@@ -62,6 +62,16 @@ export default function AddressesScreen() {
         <View style={styles.addressHeader}>
           <View style={styles.namePhoneRow}>
             <Text style={styles.addressName}>{addr.fullName}</Text>
+            <View style={styles.tagBadge}>
+              {addr.addressTag === 'office' ? (
+                <Briefcase size={11} color="#6E5239" />
+              ) : (
+                <Home size={11} color="#6E5239" />
+              )}
+              <Text style={styles.tagBadgeText}>
+                {addr.addressTag === 'office' ? 'Văn phòng' : 'Nhà riêng'}
+              </Text>
+            </View>
             {addr.isDefault && (
               <View style={styles.defaultBadge}>
                 <Text style={styles.defaultBadgeText}>Mặc định</Text>
@@ -299,6 +309,22 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     color: '#5C4033',
+  },
+  tagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FAF5ED',
+    borderWidth: 1,
+    borderColor: '#E6DDD0',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  tagBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6E5239',
   },
   addressActions: {
     flexDirection: 'row',

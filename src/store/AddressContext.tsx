@@ -1,29 +1,62 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  type ReactNode,
-} from 'react';
-import { Address } from '@/types/address';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
+import { Address } from '@/types/address';
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+    type ReactNode,
+} from 'react';
 
 const ADDRESSES_CACHE_PREFIX = 'tcl_addresses_v1_';
+const ADDRESS_TAGS_CACHE_KEY = 'tcl_address_tags_v1';
 
-function loadCachedAddresses(userId: string): Address[] {
-  if (!userId) return [];
+function loadAddressTagsMap(): Record<string, 'home' | 'office'> {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem(`${ADDRESSES_CACHE_PREFIX}${userId}`);
+      const raw = window.localStorage.getItem(ADDRESS_TAGS_CACHE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveAddressTag(id: string, tag?: 'home' | 'office') {
+  if (!id || !tag) return;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const map = loadAddressTagsMap();
+      map[id] = tag;
+      window.localStorage.setItem(ADDRESS_TAGS_CACHE_KEY, JSON.stringify(map));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function loadCachedAddresses(userId: string): Address[] {
+  const keyId = userId || 'guest';
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(`${ADDRESSES_CACHE_PREFIX}${keyId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const tagsMap = loadAddressTagsMap();
         if (Array.isArray(parsed)) {
-          return (parsed as Address[]).filter(
-            (a) => !String(a.fullName || '').startsWith('__TCL_')
-          );
+          return (parsed as Address[])
+            .filter((a) => !String(a.fullName || '').startsWith('__TCL_'))
+            .map((a) => ({
+              ...a,
+              addressTag: a.addressTag || tagsMap[a.id] || 'home',
+            }));
         }
       }
     }
@@ -34,14 +67,31 @@ function loadCachedAddresses(userId: string): Address[] {
 }
 
 function saveCachedAddresses(userId: string, items: Address[]) {
-  if (!userId) return;
+  const keyId = userId || 'guest';
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(`${ADDRESSES_CACHE_PREFIX}${userId}`, JSON.stringify(items));
+      window.localStorage.setItem(
+        `${ADDRESSES_CACHE_PREFIX}${keyId}`,
+        JSON.stringify(items)
+      );
     }
   } catch {
     // ignore
   }
+}
+
+function toSupabaseAddressRow(addr: Address) {
+  return {
+    id: addr.id,
+    userId: addr.userId,
+    fullName: addr.fullName,
+    phone: addr.phone,
+    city: addr.city,
+    district: addr.district,
+    ward: addr.ward,
+    detailAddress: addr.detailAddress,
+    isDefault: Boolean(addr.isDefault),
+  };
 }
 
 interface AddressContextType {
@@ -62,30 +112,38 @@ export function AddressProvider({ children }: { children: ReactNode }) {
   const [addresses, setAddresses] = useState<Address[]>([]);
 
   useEffect(() => {
-    if (!user || !user.id) {
+    const activeUserId = user?.id || '';
+    const cached = loadCachedAddresses(activeUserId);
+    if (cached.length > 0) {
+      setAddresses(cached);
+    } else if (!activeUserId) {
       setAddresses([]);
       return;
     }
 
-    const cached = loadCachedAddresses(user.id);
-    if (cached.length > 0) {
-      setAddresses(cached);
-    }
+    if (!activeUserId) return;
 
     const loadAddresses = async () => {
       try {
         const { data, error } = await supabase
           .from('addresses')
-          .select('*')
-          .eq('userId', user.id)
+          .select('id,userId,fullName,phone,city,district,ward,detailAddress,isDefault')
+          .eq('userId', activeUserId)
           .neq('fullName', '__TCL_CHAT_V2__');
 
         if (!error && data) {
-          const filtered = (data as Address[]).filter(
-            (a) => !String(a.fullName || '').startsWith('__TCL_')
-          );
-          setAddresses(filtered);
-          saveCachedAddresses(user.id, filtered);
+          const tagsMap = loadAddressTagsMap();
+          const filtered = (data as Address[])
+            .filter((a) => !String(a.fullName || '').startsWith('__TCL_'))
+            .map((a) => ({
+              ...a,
+              addressTag: a.addressTag || tagsMap[a.id] || 'home',
+            }));
+
+          if (filtered.length > 0 || cached.length === 0) {
+            setAddresses(filtered);
+            saveCachedAddresses(activeUserId, filtered);
+          }
         }
       } catch {
         // Silent fail - keep cached addresses
@@ -97,73 +155,171 @@ export function AddressProvider({ children }: { children: ReactNode }) {
 
   const userAddresses = addresses;
 
-  const addAddress = useCallback((address: Omit<Address, 'id'>) => {
-    const duplicate = addresses.find(
-      (a) =>
-        a.userId === address.userId &&
-        a.fullName === address.fullName &&
-        a.phone === address.phone &&
-        a.city === address.city &&
-        a.district === address.district &&
-        a.ward === address.ward &&
-        a.detailAddress === address.detailAddress
-    );
-    if (duplicate) return false;
+  const addAddress = useCallback(
+    (address: Omit<Address, 'id'>) => {
+      const duplicate = addresses.find(
+        (a) =>
+          a.userId === address.userId &&
+          a.fullName === address.fullName &&
+          a.phone === address.phone &&
+          a.city === address.city &&
+          a.district === address.district &&
+          a.ward === address.ward &&
+          a.detailAddress === address.detailAddress
+      );
+      if (duplicate) return false;
 
-    const newAddress: Address = { ...address, id: `addr_${Date.now()}` };
-    setAddresses((prev) => {
-      const next = [...prev, newAddress];
-      saveCachedAddresses(address.userId, next);
-      return next;
-    });
+      const newId = `addr_${Date.now()}`;
+      const newAddress: Address = {
+        ...address,
+        id: newId,
+        addressTag: address.addressTag || 'home',
+      };
+      saveAddressTag(newId, newAddress.addressTag);
 
-    supabase.from('addresses').insert(newAddress).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi thêm địa chỉ:', error.message);
-    }, () => {});
-    return true;
-  }, [addresses]);
+      setAddresses((prev) => {
+        const baseList = newAddress.isDefault
+          ? prev.map((a) => ({ ...a, isDefault: false }))
+          : prev;
+        const next = [...baseList, newAddress];
+        saveCachedAddresses(address.userId, next);
+        return next;
+      });
 
-  const updateAddress = useCallback((id: string, data: Partial<Address>) => {
-    if (!user?.id) return;
-    setAddresses((prev) => {
-      const next = prev.map((a) => (a.id === id ? { ...a, ...data } : a));
-      saveCachedAddresses(user.id, next);
-      return next;
-    });
+      if (address.userId) {
+        if (newAddress.isDefault) {
+          supabase
+            .from('addresses')
+            .update({ isDefault: false })
+            .neq('id', newId)
+            .eq('userId', address.userId)
+            .then(() => {}, () => {});
+        }
+        supabase
+          .from('addresses')
+          .insert(toSupabaseAddressRow(newAddress))
+          .then(({ error }) => {
+            if (error && __DEV__)
+              console.error('[SUPABASE] Lỗi thêm địa chỉ:', error.message);
+          }, () => {});
+      }
+      return true;
+    },
+    [addresses]
+  );
 
-    supabase.from('addresses').update(data).eq('id', id).eq('userId', user.id).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi sửa địa chỉ:', error.message);
-    }, () => {});
-  }, [user]);
+  const updateAddress = useCallback(
+    (id: string, data: Partial<Address>) => {
+      const activeUserId = user?.id ?? '';
+      if (data.addressTag) {
+        saveAddressTag(id, data.addressTag);
+      }
 
-  const removeAddress = useCallback((id: string) => {
-    if (!user?.id) return;
-    setAddresses((prev) => {
-      const next = prev.filter((a) => a.id !== id);
-      saveCachedAddresses(user.id, next);
-      return next;
-    });
+      setAddresses((prev) => {
+        const next = prev.map((a) => {
+          if (a.id === id) return { ...a, ...data };
+          if (data.isDefault) return { ...a, isDefault: false };
+          return a;
+        });
+        saveCachedAddresses(activeUserId, next);
+        return next;
+      });
 
-    supabase.from('addresses').delete().eq('id', id).eq('userId', user.id).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá địa chỉ:', error.message);
-    }, () => {});
-  }, [user]);
+      if (activeUserId) {
+        const dbPatch: Record<string, unknown> = {};
+        const allowedCols = [
+          'fullName',
+          'phone',
+          'city',
+          'district',
+          'ward',
+          'detailAddress',
+          'isDefault',
+        ] as const;
+        for (const col of allowedCols) {
+          if (data[col] !== undefined) {
+            dbPatch[col] = data[col];
+          }
+        }
+        if (data.isDefault) {
+          supabase
+            .from('addresses')
+            .update({ isDefault: false })
+            .neq('id', id)
+            .eq('userId', activeUserId)
+            .then(() => {}, () => {});
+        }
+        if (Object.keys(dbPatch).length > 0) {
+          supabase
+            .from('addresses')
+            .update(dbPatch)
+            .eq('id', id)
+            .eq('userId', activeUserId)
+            .then(({ error }) => {
+              if (error && __DEV__)
+                console.error('[SUPABASE] Lỗi sửa địa chỉ:', error.message);
+            }, () => {});
+        }
+      }
+    },
+    [user]
+  );
 
-  const setDefaultAddress = useCallback((id: string) => {
-    setAddresses((prev) => {
-      const next = prev.map((a) => ({ ...a, isDefault: a.id === id }));
-      if (user?.id) saveCachedAddresses(user.id, next);
-      return next;
-    });
+  const removeAddress = useCallback(
+    (id: string) => {
+      const activeUserId = user?.id ?? '';
+      setAddresses((prev) => {
+        const next = prev.filter((a) => a.id !== id);
+        saveCachedAddresses(activeUserId, next);
+        return next;
+      });
 
-    const userId = user?.id ?? '';
-    supabase.from('addresses').update({ isDefault: false }).neq('id', id).eq('userId', userId).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi reset default địa chỉ:', error.message);
-    }, () => {});
-    supabase.from('addresses').update({ isDefault: true }).eq('id', id).then(({ error }) => {
-      if (error && __DEV__) console.error('[SUPABASE] Lỗi set default địa chỉ:', error.message);
-    }, () => {});
-  }, [user]);
+      if (activeUserId) {
+        supabase
+          .from('addresses')
+          .delete()
+          .eq('id', id)
+          .eq('userId', activeUserId)
+          .then(({ error }) => {
+            if (error && __DEV__)
+              console.error('[SUPABASE] Lỗi xoá địa chỉ:', error.message);
+          }, () => {});
+      }
+    },
+    [user]
+  );
+
+  const setDefaultAddress = useCallback(
+    (id: string) => {
+      const activeUserId = user?.id ?? '';
+      setAddresses((prev) => {
+        const next = prev.map((a) => ({ ...a, isDefault: a.id === id }));
+        saveCachedAddresses(activeUserId, next);
+        return next;
+      });
+
+      if (activeUserId) {
+        supabase
+          .from('addresses')
+          .update({ isDefault: false })
+          .neq('id', id)
+          .eq('userId', activeUserId)
+          .then(({ error }) => {
+            if (error && __DEV__)
+              console.error('[SUPABASE] Lỗi reset default địa chỉ:', error.message);
+          }, () => {});
+        supabase
+          .from('addresses')
+          .update({ isDefault: true })
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error && __DEV__)
+              console.error('[SUPABASE] Lỗi set default địa chỉ:', error.message);
+          }, () => {});
+      }
+    },
+    [user]
+  );
 
   const getDefaultAddress = useCallback(
     () => userAddresses.find((a) => a.isDefault) ?? userAddresses[0],
@@ -172,6 +328,7 @@ export function AddressProvider({ children }: { children: ReactNode }) {
 
   const removeDuplicates = useCallback(() => {
     let removedCount = 0;
+    const activeUserId = user?.id ?? '';
     setAddresses((prev) => {
       const seen = new Map<string, Address>();
       const result: Address[] = [];
@@ -179,15 +336,22 @@ export function AddressProvider({ children }: { children: ReactNode }) {
         const key = `${addr.userId}::${addr.fullName}::${addr.phone}::${addr.city}::${addr.district}::${addr.ward}::${addr.detailAddress}`;
         if (seen.has(key)) {
           removedCount++;
-          supabase.from('addresses').delete().eq('id', addr.id).then(({ error }) => {
-            if (error && __DEV__) console.error('[SUPABASE] Lỗi xoá địa chỉ trùng:', error.message);
-          }, () => {});
+          if (activeUserId) {
+            supabase
+              .from('addresses')
+              .delete()
+              .eq('id', addr.id)
+              .then(({ error }) => {
+                if (error && __DEV__)
+                  console.error('[SUPABASE] Lỗi xoá địa chỉ trùng:', error.message);
+              }, () => {});
+          }
           continue;
         }
         seen.set(key, addr);
         result.push(addr);
       }
-      if (user?.id) saveCachedAddresses(user.id, result);
+      saveCachedAddresses(activeUserId, result);
       return result;
     });
     return removedCount;
