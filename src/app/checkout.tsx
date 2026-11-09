@@ -411,7 +411,7 @@ export default function CheckoutScreen() {
       if (shippingOption === 'express') {
         return {
           totalDays: '5–6 ngày',
-          breakdown: '5–6 ngày đan thủ công + Giao hỏa tốc 2h ngay khi hoàn thiện',
+          breakdown: '5–6 ngày đan thủ công + Giao trong ngày (TP.HCM) ngay khi hoàn thiện',
         };
       }
       return isHCM
@@ -433,8 +433,8 @@ export default function CheckoutScreen() {
     }
     if (shippingOption === 'express') {
       return {
-        totalDays: 'Trong 2 giờ',
-        breakdown: 'Hàng có sẵn • Giao hỏa tốc 2h nội thành TP.HCM',
+        totalDays: 'Trong ngày',
+        breakdown: 'Hàng có sẵn • Giao trong ngày nội thành TP.HCM',
       };
     }
     return isHCM
@@ -470,7 +470,7 @@ export default function CheckoutScreen() {
       return `Nhận tại Tiệm (${deliveryTimeEstimate.totalDays})`;
     }
     if (shippingOption === 'express') {
-      return `Giao Hỏa Tốc 2h (Dự kiến ${expressEstimate.range} • Nhận sau ${deliveryTimeEstimate.totalDays})`;
+      return `Giao trong ngày (TP.HCM) (Dự kiến ${expressEstimate.range} • Nhận sau ${deliveryTimeEstimate.totalDays})`;
     }
     return isHCM
       ? `Giao tiêu chuẩn Nội thành (Dự kiến ${deliveryTimeEstimate.totalDays})`
@@ -540,7 +540,7 @@ export default function CheckoutScreen() {
 
     if (!hasAskedExpressChat) {
       sendMessage(
-        `🚀 Cho mình hỏi giá Ship Hỏa Tốc 2h giao tới địa chỉ: "${fullAddr}" cho đơn: ${itemsSummary} (Dự kiến hệ thống: ${expressEstimate.range}). Tiệm báo giá ship giúp mình để mình xác nhận thanh toán nhé!`,
+        `🚀 Cho mình hỏi giá Ship Giao trong ngày (TP.HCM) tới địa chỉ: "${fullAddr}" cho đơn: ${itemsSummary} (Dự kiến hệ thống: ${expressEstimate.range}). Tiệm báo giá ship giúp mình để mình xác nhận thanh toán nhé!`,
         firstProd
           ? {
               id: firstProd.id,
@@ -1146,7 +1146,7 @@ export default function CheckoutScreen() {
                     id: 'express' as const,
                     icon: <Zap size={20} color="#D97706" />,
                     iconBg: '#FEF3C7',
-                    title: 'Hỏa Tốc 2h (HCM)',
+                    title: 'Giao trong ngày (TP.HCM)',
                     sub: 'Báo giá qua Chat trước khi đặt',
                     priceLabel: `${expressEstimate.range}`,
                     isFree: false,
@@ -1632,7 +1632,7 @@ export default function CheckoutScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.expressOverlayTitle}>
-                  Xác nhận giá Ship Hỏa Tốc 2h
+                  Xác nhận giá Ship Giao trong ngày (TP.HCM)
                 </Text>
                 <Text style={styles.expressOverlaySub}>
                   Dự kiến tới {selectedAddress?.district || 'TP.HCM'}: {expressEstimate.range}
@@ -1643,10 +1643,10 @@ export default function CheckoutScreen() {
                 onPress={() => setShowExpressCard(false)}>
                 <Text style={styles.expressOverlayCloseText}>✕</Text>
               </TouchableOpacity>
-            </View>
+              </View>
 
-            {/* Clickable Card to jump to Chat with Shop */}
-            <TouchableOpacity
+              {/* Clickable Card to jump to Chat with Shop */}
+              <TouchableOpacity
               style={styles.expressChatJumpCard}
               onPress={handleAskExpressFeeInChat}
               activeOpacity={0.85}>
@@ -1655,27 +1655,27 @@ export default function CheckoutScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.expressChatJumpTitle}>
-                  💬 Nhấn vào đây để Chat với Shop biết giá Hỏa Tốc
+                  💬 Nhấn vào đây để Chat với Shop biết giá Giao trong ngày
                 </Text>
                 <Text style={styles.expressChatJumpDesc}>
                   {hasAskedExpressChat || latestAdminReply
-                    ? 'Đã mở hội thoại Hỏa Tốc • Nhấn để xem tin nhắn báo giá của Shop'
+                    ? 'Đã mở hội thoại với Shop • Nhấn để xem tin nhắn báo giá của Shop'
                     : 'Nhảy sang khung Chat gửi địa chỉ để Shop báo giá ship chính xác'}
                 </Text>
               </View>
               <ChevronRight size={18} color="#92400E" />
-            </TouchableOpacity>
+              </TouchableOpacity>
 
-            {latestAdminReply ? (
+              {latestAdminReply ? (
               <View style={styles.expressReplyBanner}>
                 <Text style={styles.expressReplyBannerText} numberOfLines={3}>
                   💬 Shop báo: &ldquo;{latestAdminReply.text}&rdquo;
                 </Text>
               </View>
-            ) : null}
+              ) : null}
 
-            {/* Confirm Express Payment Button */}
-            <TouchableOpacity
+              {/* Confirm Express Payment Button */}
+              <TouchableOpacity
               style={[
                 styles.expressConfirmPayBtn,
                 !hasAskedExpressChat && !latestAdminReply && styles.expressConfirmPayBtnLocked,
@@ -1684,7 +1684,7 @@ export default function CheckoutScreen() {
                 if (!hasAskedExpressChat && !latestAdminReply) {
                   Alert.alert(
                     'Chat với Shop trước nhé',
-                    'Vui lòng nhấn vào thẻ "Chat với Shop biết giá Hỏa Tốc" ở trên để hỏi giá ship trước khi xác nhận thanh toán.'
+                    'Vui lòng nhấn vào thẻ "Chat với Shop biết giá Giao trong ngày" ở trên để hỏi giá ship trước khi xác nhận thanh toán.'
                   );
                   return;
                 }
@@ -1696,11 +1696,11 @@ export default function CheckoutScreen() {
               <Text style={styles.expressConfirmPayBtnText}>
                 {hasAskedExpressChat || latestAdminReply
                   ? selectedPayment?.type === 'cod'
-                    ? `✅ Xác nhận thanh toán Hỏa Tốc • COD (${formatVND(checkoutTotal)})`
-                    : `✅ Xác nhận thanh toán Hỏa Tốc • Quét QR (${formatVND(checkoutTotal)})`
-                  : '🔒 Xác nhận thanh toán Hỏa Tốc (Cần bấm Chat với Shop trước)'}
+                    ? `✅ Xác nhận thanh toán Giao trong ngày • COD (${formatVND(checkoutTotal)})`
+                    : `✅ Xác nhận thanh toán Giao trong ngày • Quét QR (${formatVND(checkoutTotal)})`
+                  : '🔒 Xác nhận thanh toán Giao trong ngày (Cần bấm Chat với Shop trước)'}
               </Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
 
             {/* Option to switch to Standard Shipping and pay normally */}
             <TouchableOpacity

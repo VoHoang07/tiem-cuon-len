@@ -15,7 +15,7 @@ const SHOP_JSON_LD = {
   },
   image: 'https://www.tiemcuonlen.shop/logo-512x512.png',
   description:
-    'Tiệm Cuộn Len (tiemcuonlen.shop) — Cửa hàng trực tuyến chính thức chuyên bán sẵn và nhận đặt đan móc thủ công thú bông len, móc khóa len, bó hoa len, chậu hoa kẽm nhung và phụ kiện handmade cao cấp. Giao hàng toàn quốc & Hỏa tốc 2h tại TP.HCM.',
+    'Tiệm Cuộn Len (tiemcuonlen.shop) — Cửa hàng trực tuyến chính thức chuyên bán sẵn và nhận đặt đan móc thủ công thú bông len, móc khóa len, bó hoa len, chậu hoa kẽm nhung và phụ kiện handmade cao cấp. Giao hàng toàn quốc & Giao trong ngày (TP.HCM).',
   telephone: '+84387966507',
   email: 'vohoang1327@gmail.com',
   priceRange: '12.000₫ - 350.000₫',
@@ -43,7 +43,7 @@ export default function Root({ children }: PropsWithChildren) {
         </title>
         <meta
           name="description"
-          content="Tiệm Cuộn Len (tiemcuonlen.shop) chuyên bán sẵn và nhận đặt đan móc thủ công móc khóa len, thú bông len, bó hoa len, chậu hoa kẽm nhung quà tặng cao cấp. Giao hàng toàn quốc & Hỏa tốc 2h TP.HCM."
+          content="Tiệm Cuộn Len (tiemcuonlen.shop) chuyên bán sẵn và nhận đặt đan móc thủ công móc khóa len, thú bông len, bó hoa len, chậu hoa kẽm nhung quà tặng cao cấp. Giao hàng toàn quốc & Giao trong ngày (TP.HCM)."
         />
         <meta name="application-name" content="Tiệm Cuộn Len" />
         <meta name="theme-color" content="#765341" />

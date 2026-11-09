@@ -1,46 +1,46 @@
-import React, { useState, useMemo, type ComponentType } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  Linking,
-  Platform,
-  useWindowDimensions,
-} from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  ChevronDown,
-  ChevronUp,
-  Home,
-  HelpCircle,
-  MessageCircle,
-  Mail,
-  Phone,
-  Search,
-  ShoppingBag,
-  CreditCard,
-  Truck,
-  RotateCcw,
-  Package,
-  ClipboardList,
-  Sparkles,
-  ShieldCheck,
-  Clock,
-  Copy,
-  Check,
-  ArrowRight,
-  Store,
-  X,
-} from 'lucide-react-native';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import * as Clipboard from 'expo-clipboard';
+import { useRouter } from 'expo-router';
+import {
+    ArrowRight,
+    Check,
+    ChevronDown,
+    ChevronLeft,
+    ChevronUp,
+    ClipboardList,
+    Clock,
+    Copy,
+    CreditCard,
+    HelpCircle,
+    Home,
+    Mail,
+    MessageCircle,
+    Package,
+    Phone,
+    RotateCcw,
+    Search,
+    ShieldCheck,
+    ShoppingBag,
+    Sparkles,
+    Store,
+    Truck,
+    X,
+} from 'lucide-react-native';
+import React, { useMemo, useState, type ComponentType } from 'react';
+import {
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type FaqCategory = 'all' | 'order' | 'payment' | 'shipping' | 'policy';
 
@@ -85,7 +85,7 @@ const CUSTOMER_FAQ: FaqItem[] = [
   {
     category: 'shipping',
     q: 'Phí vận chuyển và điều kiện Miễn phí vận chuyển (Freeship)?',
-    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn 15.000₫ (Miễn phí cho đơn từ 300.000₫); (2) Giao Hỏa Tốc 2h (Grab/Ahamove khoảng 45.000₫ – 65.000₫ — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
+    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn 15.000₫ (Miễn phí cho đơn từ 299.000₫); (2) Giao trong ngày (TP.HCM) (Grab/Ahamove khoảng 45.000₫ – 65.000₫ — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
   },
   {
     category: 'shipping',
@@ -270,7 +270,7 @@ export default function HelpScreen() {
         summary:
           'Theo dõi tiến độ đơn hàng và định vị kiện hàng trực tuyến.',
         steps: [
-          'Giao tiêu chuẩn toàn quốc 15.000₫ (Freeship cho đơn từ 300.000₫) hoặc Giao Hỏa Tốc 2h (~45k – 65k trả cước theo App).',
+          'Giao tiêu chuẩn toàn quốc 15.000₫ (Freeship cho đơn từ 299.000₫) hoặc Giao trong ngày (TP.HCM) (~45k – 65k trả cước theo App).',
           'Vào mục "Đơn hàng của tôi" để xem tiến độ 4 bước: Đã đặt đơn → Đang chuẩn bị → Đang vận chuyển → Giao thành công.',
           'Bấm nút "Xem hành trình đơn hàng" để xem vị trí bưu kiện trên Viettel Post, GHTK, GHN, J&T hoặc SPX.',
         ],

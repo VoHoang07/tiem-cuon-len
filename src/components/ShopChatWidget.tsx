@@ -44,9 +44,9 @@ const CLIENT_QUICK_PROMPTS = [
 ];
 
 const ADMIN_QUICK_REPLIES = [
-  '🚀 Phí ship Hỏa tốc qua địa chỉ bạn là 25k nhé, bạn bấm Đồng ý để thanh toán nha!',
-  '🚀 Phí ship Hỏa tốc qua mình là 35k nhé, bạn bấm Đồng ý để thanh toán nha!',
-  '🚀 Phí ship Hỏa tốc qua mình là 45k nhé, bạn bấm Đồng ý để thanh toán nha!',
+  '🚀 Phí ship Giao trong ngày (TP.HCM) qua địa chỉ bạn là 25k nhé, bạn bấm Đồng ý để thanh toán nha!',
+  '🚀 Phí ship Giao trong ngày (TP.HCM) qua mình là 35k nhé, bạn bấm Đồng ý để thanh toán nha!',
+  '🚀 Phí ship Giao trong ngày (TP.HCM) qua mình là 45k nhé, bạn bấm Đồng ý để thanh toán nha!',
   'Dạ mẫu này tiệm đang sẵn hàng ạ 🧶',
   'Tiệm nhận đan theo màu bạn chọn nhé!',
   'Bạn nhắn SĐT & địa chỉ để tiệm lên đơn nha!',
@@ -192,7 +192,11 @@ export function ShopChatWidget() {
 
   const hasExpressInquiry = useMemo(() => {
     return displayedMessages.some(
-      (m) => m.text.includes('Hỏa Tốc') || m.text.includes('hỏa tốc')
+      (m) =>
+        m.text.includes('Giao trong ngày') ||
+        m.text.includes('giao trong ngày') ||
+        m.text.includes('Hỏa Tốc') ||
+        m.text.includes('hỏa tốc')
     );
   }, [displayedMessages]);
 

@@ -52,7 +52,7 @@ export const SHIPPING_CARRIERS: CarrierInfo[] = [
   },
   {
     id: 'grab_ahamove',
-    name: 'GrabExpress / Ahamove (Hỏa tốc)',
+    name: 'GrabExpress / Ahamove (Giao trong ngày TP.HCM)',
     shortLabel: 'Grab / Ahamove',
     portalUrl: 'https://www.ahamove.com/',
     buildTrackingUrl: (code) =>
@@ -134,7 +134,9 @@ export function formatShippingSlipForClipboard(order: Order): string {
     })
     .join(', ');
   const shipMethod = addr?.shippingMethod || 'Giao tiêu chuẩn';
-  const isExpress = shipMethod.toLowerCase().includes('hỏa tốc');
+  const shipLower = shipMethod.toLowerCase();
+  const isExpress =
+    shipLower.includes('trong ngày') || shipLower.includes('hỏa tốc');
 
   return [
     `📦 ĐƠN HÀNG TIỆM CUỘN LEN (#${order.id.slice(-8)})`,
@@ -144,7 +146,7 @@ export function formatShippingSlipForClipboard(order: Order): string {
     addr?.note ? `📝 Ghi chú / Thiệp: ${addr.note}` : '',
     `🚚 Hình thức giao: ${shipMethod}`,
     isExpress
-      ? '⚡ Cước ship Hỏa Tốc: Khách tự trả cước trực tiếp cho tài xế theo giá App'
+      ? '⚡ Cước ship Giao trong ngày (TP.HCM): Khách tự trả cước trực tiếp cho tài xế theo giá App'
       : '💳 Mục "Người trả phí" trên Goship: Chọn "Shop trả"',
     `💰 Ô "Thu hộ" (COD): ${
       codAmount > 0

@@ -274,9 +274,12 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       });
     }
     const shippingMethod = sanitizeTextServer(rawAddr.shippingMethod || '', 120);
+    const shippingLower = shippingMethod.toLowerCase();
     const isPickupOrExpress =
-      shippingMethod.toLowerCase().includes('ghé tiệm') ||
-      shippingMethod.toLowerCase().includes('hỏa tốc');
+      shippingLower.includes('ghé tiệm') ||
+      shippingLower.includes('nhận tại tiệm') ||
+      shippingLower.includes('trong ngày') ||
+      shippingLower.includes('hỏa tốc');
     const isHcm =
       city.toLowerCase().includes('hồ chí minh') ||
       city.toLowerCase().includes('hcm') ||
