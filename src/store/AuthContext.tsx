@@ -748,14 +748,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let verifiedPicture: string | undefined;
 
         if (provider === 'google') {
-          const res = await fetch(
-            'https://www.googleapis.com/oauth2/v3/userinfo',
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken.trim()}`,
-              },
-            }
-          );
+          const cleanToken = accessToken.trim();
+          const isJwtIdToken = cleanToken.split('.').length === 3;
+          const res = isJwtIdToken
+            ? await fetch(
+                `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
+                  cleanToken
+                )}`
+              )
+            : await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: {
+                  Authorization: `Bearer ${cleanToken}`,
+                },
+              });
           if (!res.ok) {
             return {
               success: false,
@@ -763,7 +768,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
           }
           const profile = await res.json();
-          if (!profile?.sub || !profile?.email || profile?.email_verified === false) {
+          if (
+            !profile?.sub ||
+            !profile?.email ||
+            profile?.email_verified === false ||
+            profile?.email_verified === 'false'
+          ) {
             return {
               success: false,
               error: 'Tài khoản Google chưa được xác minh.',
@@ -772,7 +782,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           verifiedId = String(profile.sub);
           verifiedEmail = String(profile.email).toLowerCase().trim();
           verifiedName = sanitizeInput(
-            String(profile.name || profile.given_name || verifiedEmail.split('@')[0])
+            String(
+              profile.name || profile.given_name || verifiedEmail.split('@')[0]
+            )
           );
           verifiedPicture = profile.picture ? String(profile.picture) : undefined;
         } else {

@@ -418,19 +418,6 @@ export default function LoginScreen() {
                 </Text>
                 </View>
 
-                {/* 1-Click Social Login (Google / Existing Gmail / Facebook) */}
-                <SocialAuthButtons
-                redirectPath={redirect || '/'}
-                onSuccess={() => router.replace((redirect || '/') as Href)}
-                />
-
-                {/* Divider */}
-                <View style={[styles.dividerRow, { marginTop: 2, marginBottom: 12 }]}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>hoặc</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-
                 {/* Form */}
               <View style={styles.formSection}>
                 <HiddenBotField value={botTrap} onChangeText={setBotTrap} />
@@ -477,7 +464,9 @@ export default function LoginScreen() {
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
-                      autoComplete="off"
+                      autoComplete="email"
+                      textContentType="emailAddress"
+                      nativeID="email"
                       returnKeyType="go"
                       onSubmitEditing={handleLogin}
                       />
@@ -591,6 +580,14 @@ export default function LoginScreen() {
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>hoặc</Text>
                 <View style={styles.dividerLine} />
+              </View>
+
+              {/* Pinterest-style "Tiếp tục với Google" Button */}
+              <View style={{ marginBottom: 14 }}>
+                <SocialAuthButtons
+                  redirectPath={redirect || '/'}
+                  onSuccess={() => router.replace((redirect || '/') as Href)}
+                />
               </View>
 
               {/* Register CTA */}
