@@ -2,6 +2,8 @@ import { BoutiqueFooter } from '@/components/BoutiqueFooter';
 import { BrandAvatar, BrandTitle } from '@/components/BrandTitle';
 import { CategoryChips } from '@/components/CategoryChips';
 import { ComboShowcaseSection } from '@/components/ComboShowcaseSection';
+import { GrandOpeningPromoSection } from '@/components/GrandOpeningPromoSection';
+import { LiveSocialProofToast } from '@/components/LiveSocialProofToast';
 import { ProductCard } from '@/components/ProductCard';
 import { SectionHeader } from '@/components/SectionHeader';
 import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
@@ -569,6 +571,9 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* Grand Opening Campaign & 1-Tap Voucher Wallet */}
+      {showHeroAndFeatured && <GrandOpeningPromoSection />}
+
       {/* Curated Featured Row (Pure horizontal ScrollView for zero VirtualizedList scroll jank) */}
       {showHeroAndFeatured && featuredProducts.length > 0 && (
         <View style={styles.featuredSection}>
@@ -856,6 +861,8 @@ export default function HomeScreen() {
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
       />
+
+      {!isAdmin && <LiveSocialProofToast />}
 
       {showShareWebModal ? (
         <ShareModal

@@ -7,6 +7,7 @@ const {
   verifySupabaseUser,
   resolveAuthoritativeProductPrices,
   resolveAuthoritativeShippingConfig,
+  resolveAuthoritativePromoDiscount,
   logServerAuditEvent,
   withGlobalErrorHandler,
   sendOrderNotificationServer,
@@ -251,7 +252,10 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       'detailAddress',
       'shippingMethod',
       'shippingFee',
-    ]);
+      'note',
+      'promoCode',
+      'discountAmount',
+      ]);
 
     const city = sanitizeTextServer(rawAddr.city, 80);
     const cleanPhone = sanitizeTextServer(rawAddr.phone, 20)
@@ -287,7 +291,15 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       }
     }
 
-    const authoritativeTotal = authoritativeSubtotal + authoritativeShippingFee;
+    const promoResult = resolveAuthoritativePromoDiscount(
+      rawAddr.promoCode,
+      authoritativeSubtotal
+    );
+    const authoritativeDiscount = promoResult.discountAmount || 0;
+    const authoritativeTotal = Math.max(
+      0,
+      authoritativeSubtotal - authoritativeDiscount + authoritativeShippingFee
+    );
     const paymentMethod = sanitizeTextServer(cleanOrder.paymentMethod, 100);
     const isCod =
       paymentMethod.toLowerCase().includes('cod') ||
@@ -317,6 +329,9 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         detailAddress: sanitizeTextServer(rawAddr.detailAddress, 220),
         shippingMethod,
         shippingFee: authoritativeShippingFee,
+        note: rawAddr.note ? sanitizeTextServer(rawAddr.note, 500) : undefined,
+        promoCode: promoResult.promoCode || undefined,
+        discountAmount: authoritativeDiscount > 0 ? authoritativeDiscount : undefined,
       },
       paymentMethod,
       status: authoritativeStatus,

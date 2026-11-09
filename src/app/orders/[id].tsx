@@ -1,52 +1,52 @@
-import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  TextInput,
-  Linking,
-  useWindowDimensions,
-} from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  Package,
-  QrCode,
-  Truck,
-  Copy,
-  Check,
-  ExternalLink,
-  MapPin,
-  Phone,
-  User as UserIcon,
-  CheckCircle2,
-  Clock,
-  Star,
-} from 'lucide-react-native';
-import { useOrders } from '@/store/OrderContext';
+    getOrderStatusColor,
+    getOrderStatusLabel,
+    ORDER_STATUS_NEXT,
+} from '@/constants/orderStatus';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
+import { useOrders } from '@/store/OrderContext';
 import { useShop } from '@/store/ShopContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import type { OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
 import {
-  getOrderStatusLabel,
-  getOrderStatusColor,
-  ORDER_STATUS_NEXT,
-} from '@/constants/orderStatus';
-import {
-  SHIPPING_CARRIERS,
-  ADMIN_BOOKING_PORTALS,
-  formatShippingSlipForClipboard,
-  getCarrierTrackingUrl,
-  getCodCollectAmount,
-  getFullAddressString,
+    ADMIN_BOOKING_PORTALS,
+    formatShippingSlipForClipboard,
+    getCarrierTrackingUrl,
+    getCodCollectAmount,
+    getFullAddressString,
+    SHIPPING_CARRIERS,
 } from '@/utils/shippingTracker';
-import type { OrderStatus } from '@/types/order';
+import * as Clipboard from 'expo-clipboard';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+    Check,
+    CheckCircle2,
+    ChevronLeft,
+    Clock,
+    Copy,
+    ExternalLink,
+    MapPin,
+    Package,
+    Phone,
+    QrCode,
+    Star,
+    Truck,
+    User as UserIcon,
+} from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import {
+    Image,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 function getTimelineStepIndex(status: OrderStatus): number {
   if (status === 'Đã hủy') return -1;
@@ -791,6 +791,25 @@ export default function OrderDetailScreen() {
                 })}
               </Text>
             </View>
+            {order.shippingAddress?.promoCode &&
+              Number(order.shippingAddress?.discountAmount) > 0 && (
+                <View style={styles.metaLineRow}>
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      { color: '#065F46', fontWeight: '800' },
+                    ]}>
+                    🎟️ Mã giảm giá ({order.shippingAddress.promoCode})
+                  </Text>
+                  <Text
+                    style={[
+                      styles.sectionValue,
+                      { color: '#065F46', fontWeight: '900' },
+                    ]}>
+                    -{formatVND(Number(order.shippingAddress.discountAmount))}
+                  </Text>
+                </View>
+              )}
             {order.shippingAddress?.shippingFee !== undefined && (
               <View style={styles.metaLineRow}>
                 <Text style={styles.sectionTitle}>Phí vận chuyển</Text>

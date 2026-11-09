@@ -14,4 +14,7 @@ export interface Address {
   shippingCarrier?: string;
   trackingCode?: string;
   shippedAt?: string;
-}
+  note?: string;
+  promoCode?: string;
+  discountAmount?: number;
+  }

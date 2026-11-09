@@ -1,4 +1,5 @@
 import { HiddenBotField } from '@/components/HiddenBotField';
+import { PromoMilestoneAndPickerCard } from '@/components/PromoMilestoneAndPickerCard';
 import {
     CHECKOUT_DELIVERY,
     CHECKOUT_ORDER_SUMMARY,
@@ -129,6 +130,10 @@ export default function CheckoutScreen() {
   const [howFoundShop, setHowFoundShop] = useState<string>(() =>
     getVisitorSelfReportedSource()
   );
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    discountAmount: number;
+  }>({ code: '', discountAmount: 0 });
 
   useEffect(() => {
     setBuyNowGiftOverride(null);
@@ -487,7 +492,10 @@ export default function CheckoutScreen() {
     setShowAdminShipConfig(false);
   };
 
-  const checkoutTotal = subtotal + shippingFee;
+  const checkoutTotal = Math.max(
+    0,
+    subtotal - appliedPromo.discountAmount + shippingFee
+  );
 
   useEffect(() => {
     if (!selectedAddressId && userAddresses.length > 0) {
@@ -735,6 +743,11 @@ export default function CheckoutScreen() {
         note: combinedAddressNote || selectedAddress.note,
         shippingMethod: shippingMethodLabel,
         shippingFee,
+        promoCode: appliedPromo.code || undefined,
+        discountAmount:
+          appliedPromo.discountAmount > 0
+            ? appliedPromo.discountAmount
+            : undefined,
       },
       paymentMethod: selectedPayment.title,
       status,
@@ -1459,10 +1472,32 @@ export default function CheckoutScreen() {
                 );
               })}
               <View style={styles.divider} />
+              <PromoMilestoneAndPickerCard
+                subtotal={subtotal}
+                onPromoChange={setAppliedPromo}
+              />
               <View style={styles.subRow}>
                 <Text style={styles.subLabel}>Tạm tính ({checkoutItems.length} món)</Text>
                 <Text style={styles.subValue}>{formatVND(subtotal)}</Text>
               </View>
+              {appliedPromo.discountAmount > 0 && (
+                <View style={styles.subRow}>
+                  <Text
+                    style={[
+                      styles.subLabel,
+                      { color: '#065F46', fontWeight: '800' },
+                    ]}>
+                    🎟️ Mã giảm giá ({appliedPromo.code})
+                  </Text>
+                  <Text
+                    style={[
+                      styles.subValue,
+                      { color: '#065F46', fontWeight: '900' },
+                    ]}>
+                    -{formatVND(appliedPromo.discountAmount)}
+                  </Text>
+                </View>
+              )}
               <View style={styles.subRow}>
                 <Text style={styles.subLabel}>Phí vận chuyển</Text>
                 <Text

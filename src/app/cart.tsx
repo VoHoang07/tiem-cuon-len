@@ -1,48 +1,49 @@
-import React, { useState } from 'react';
+import { BottomNav } from '@/components/BottomNav';
+import { PromoMilestoneAndPickerCard } from '@/components/PromoMilestoneAndPickerCard';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
-  Alert,
-  Image,
-  useWindowDimensions,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Swipeable } from 'react-native-gesture-handler';
-import {
-  ChevronLeft,
-  Minus,
-  Plus,
-  Trash2,
-  ShoppingBag,
-  Home,
-  RotateCcw,
-} from 'lucide-react-native';
-import { useShop } from '@/store/ShopContext';
+    CART_CLEAR_ALL,
+    CART_EMPTY_ALERT_MSG,
+    CART_EMPTY_ALERT_TITLE,
+    CART_EMPTY_SUBTEXT,
+    CART_EMPTY_TITLE,
+    CART_PER_PIECE,
+    CART_START_SHOPPING,
+    CART_TITLE,
+    CHECKOUT_ORDER_SUMMARY,
+    CHECKOUT_TITLE,
+    CHECKOUT_TOTAL,
+} from '@/constants/strings';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
-import { BottomNav } from '@/components/BottomNav';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import { useShop } from '@/store/ShopContext';
+import type { CartItem } from '@/types/product';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
+import { useRouter } from 'expo-router';
 import {
-  CART_TITLE,
-  CART_CLEAR_ALL,
-  CART_EMPTY_TITLE,
-  CART_EMPTY_SUBTEXT,
-  CART_START_SHOPPING,
-  CART_PER_PIECE,
-  CART_EMPTY_ALERT_TITLE,
-  CART_EMPTY_ALERT_MSG,
-  CHECKOUT_TITLE,
-  CHECKOUT_TOTAL,
-  CHECKOUT_ORDER_SUMMARY,
-} from '@/constants/strings';
-import type { CartItem } from '@/types/product';
+    ChevronLeft,
+    Home,
+    Minus,
+    Plus,
+    RotateCcw,
+    ShoppingBag,
+    Trash2,
+} from 'lucide-react-native';
+import React, { useState } from 'react';
+import {
+    Alert,
+    FlatList,
+    Image,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -69,6 +70,10 @@ export default function CartScreen() {
   const { isAuthenticated } = useAuth();
   const { shippingConfig } = usePaymentMethods();
   const [lastClearedItems, setLastClearedItems] = useState<CartItem[]>([]);
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    discountAmount: number;
+  }>({ code: '', discountAmount: 0 });
 
   const isFreeShip =
     shippingConfig.freeShippingEnabled &&
@@ -79,7 +84,10 @@ export default function CartScreen() {
       : isFreeShip
         ? 0
         : shippingConfig.standardShippingFee;
-  const finalTotal = cartTotal + shippingFee;
+  const finalTotal = Math.max(
+    0,
+    cartTotal - appliedPromo.discountAmount + shippingFee
+  );
 
   const handleEditCartItemOptions = (item: CartItem) => {
     const baseId = String(
@@ -414,10 +422,24 @@ export default function CartScreen() {
   const ListFooter = cart.length > 0 ? (
     <View style={[styles.summary, isMobile && styles.summaryMobile]}>
       <Text style={styles.summaryTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
+      <PromoMilestoneAndPickerCard
+        subtotal={cartTotal}
+        onPromoChange={setAppliedPromo}
+      />
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Tạm tính</Text>
         <Text style={styles.summaryValue}>{formatVND(cartTotal)}</Text>
       </View>
+      {appliedPromo.discountAmount > 0 && (
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryLabel, { color: '#065F46', fontWeight: '800' }]}>
+            🎟️ Mã giảm giá ({appliedPromo.code})
+          </Text>
+          <Text style={[styles.summaryValue, { color: '#065F46', fontWeight: '900' }]}>
+            -{formatVND(appliedPromo.discountAmount)}
+          </Text>
+        </View>
+      )}
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Phí vận chuyển</Text>
         <Text style={styles.summaryValue}>

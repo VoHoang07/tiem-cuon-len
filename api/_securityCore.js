@@ -692,6 +692,39 @@ async function logServerAuditEvent(req, payload = {}) {
 }
 
 /**
+ * Server-Authoritative Grand Opening Promo Vouchers (Anti-Loss Protection):
+ * Enforces strict minimum order subtotals on the Server so no client can fake a discount on small orders.
+ */
+const AUTHORITATIVE_PROMO_VOUCHERS = {
+  CHAOBAN10K: { minOrderSubtotal: 99000, discountAmount: 10000 },
+  KHAITRUONG20K: { minOrderSubtotal: 179000, discountAmount: 20000 },
+  CUONLEN35K: { minOrderSubtotal: 299000, discountAmount: 35000 },
+  VIP50K: { minOrderSubtotal: 429000, discountAmount: 50000 },
+};
+
+function resolveAuthoritativePromoDiscount(rawCode, authoritativeSubtotal) {
+  const code = String(rawCode || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '');
+  if (!code) {
+    return { promoCode: '', discountAmount: 0 };
+  }
+  const rule = AUTHORITATIVE_PROMO_VOUCHERS[code];
+  if (!rule) {
+    return { promoCode: '', discountAmount: 0 };
+  }
+  const sub = Number(authoritativeSubtotal) || 0;
+  if (sub < rule.minOrderSubtotal) {
+    return { promoCode: '', discountAmount: 0 };
+  }
+  return {
+    promoCode: code,
+    discountAmount: rule.discountAmount,
+  };
+}
+
+/**
  * Global API Error Handler Wrapper:
  * - Catches any unexpected runtime, parsing, or database error
  * - Logs full diagnostic details (stack, error message, route, IP) to the Audit Logger
@@ -778,8 +811,13 @@ async function sendOrderNotificationServer(order) {
       const qty = Number(ci.quantity) || 1;
       const unitPrice = Number(ci.price || (ci.product && ci.product.price) || 0);
       return `${idx + 1}. ${pName} x${qty} — ${formatPrice(unitPrice * qty)}`;
-    });
-    itemLines.push(`🚚 Vận chuyển: ${shippingMethod} — ${formatPrice(shippingFee)}`);
+      });
+      if (addr.promoCode && Number(addr.discountAmount) > 0) {
+      itemLines.push(
+        `🎟️ Mã giảm giá (${addr.promoCode}): -${formatPrice(addr.discountAmount)}`
+      );
+      }
+      itemLines.push(`🚚 Vận chuyển: ${shippingMethod} — ${formatPrice(shippingFee)}`);
 
     const orderDate = new Date(order.createdAt || Date.now()).toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
@@ -1059,6 +1097,7 @@ async function sendOrderNotificationServer(order) {
     verifySupabaseUser,
     resolveAuthoritativeProductPrices,
     resolveAuthoritativeShippingConfig,
+    resolveAuthoritativePromoDiscount,
     logServerAuditEvent,
     withGlobalErrorHandler,
     sendOrderNotificationServer,
