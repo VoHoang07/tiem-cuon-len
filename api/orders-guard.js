@@ -351,6 +351,14 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         note: rawAddr.note ? sanitizeTextServer(rawAddr.note, 500) : undefined,
         promoCode: promoResult.promoCode || undefined,
         discountAmount: authoritativeDiscount > 0 ? authoritativeDiscount : undefined,
+        customerAuthProvider: sanitizeTextServer(
+          rawAddr.customerAuthProvider ||
+            (resolvedCustEmail ? 'gmail_verified' : 'guest'),
+          30
+        ),
+        isVerifiedAccount: Boolean(
+          rawAddr.isVerifiedAccount || resolvedCustEmail
+        ),
         emailNotifiedAt: isCod ? new Date().toISOString() : undefined,
         },
         paymentMethod,

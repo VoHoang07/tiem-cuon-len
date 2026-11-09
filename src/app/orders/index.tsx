@@ -141,10 +141,53 @@ export default function OrdersScreen() {
 
             <View style={styles.orderBody}>
               {isAdmin && item.shippingAddress?.fullName ? (
-                <Text style={styles.customerName}>
-                  Khách: {item.shippingAddress.fullName}
-                  {item.shippingAddress.phone ? ` • ${item.shippingAddress.phone}` : ''}
-                </Text>
+                <View style={{ gap: 4, marginBottom: 4 }}>
+                  <Text style={[styles.customerName, { marginBottom: 0 }]}>
+                    Khách: {item.shippingAddress.fullName}
+                    {item.shippingAddress.phone ? ` • ${item.shippingAddress.phone}` : ''}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      alignSelf: 'flex-start',
+                      backgroundColor:
+                        item.shippingAddress.isVerifiedAccount ||
+                        item.shippingAddress.email
+                          ? '#D1FAE5'
+                          : '#FEF3C7',
+                      borderWidth: 1,
+                      borderColor:
+                        item.shippingAddress.isVerifiedAccount ||
+                        item.shippingAddress.email
+                          ? '#34D399'
+                          : '#FCD34D',
+                      borderRadius: 999,
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: '800',
+                        color:
+                          item.shippingAddress.isVerifiedAccount ||
+                          item.shippingAddress.email
+                            ? '#065F46'
+                            : '#92400E',
+                      }}
+                      numberOfLines={1}>
+                      {item.shippingAddress.isVerifiedAccount ||
+                      item.shippingAddress.email
+                        ? `🛡️ Acc Thật Đã Xác Thực (${
+                            item.shippingAddress.email ||
+                            item.shippingAddress.customerAuthProvider ||
+                            'Google / Gmail'
+                          })`
+                        : '⚠️ Khách vãng lai (Chưa liên kết Gmail/FB — Nên gọi xác nhận SĐT)'}
+                    </Text>
+                  </View>
+                </View>
               ) : null}
               <Text style={styles.orderItems} numberOfLines={2}>
                 {item.items.map((i) => `${i.product.name} x${i.quantity}`).join(', ')}

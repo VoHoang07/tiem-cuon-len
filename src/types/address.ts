@@ -18,4 +18,7 @@ export interface Address {
   note?: string;
   promoCode?: string;
   discountAmount?: number;
+  customerAuthProvider?: string;
+  isVerifiedAccount?: boolean;
+  emailNotifiedAt?: string;
   }

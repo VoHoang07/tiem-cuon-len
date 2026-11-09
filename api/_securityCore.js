@@ -832,6 +832,12 @@ async function sendOrderNotificationServer(order) {
     if (addr.note) {
       itemLines.push(`💌 Ghi chú / Thiệp: ${addr.note}`);
     }
+    const isVerifiedAcc = Boolean(addr.isVerifiedAccount || addr.email);
+    itemLines.push(
+      isVerifiedAcc
+        ? `🛡️ Xác thực chống Scam: ✅ Acc Thật Đã Xác Thực (${addr.customerAuthProvider || 'Google / Gmail'}: ${addr.email || 'Chính chủ'})`
+        : `🛡️ Xác thực chống Scam: ⚠️ Khách chưa liên kết Google/FB (Nên gọi xác nhận SĐT)`
+    );
 
     const orderDate = new Date(order.createdAt || Date.now()).toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',

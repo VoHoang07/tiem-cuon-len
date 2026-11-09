@@ -322,6 +322,51 @@ export default function OrderDetailScreen() {
 
             {/* Recipient Address + COD Summary */}
             <View style={styles.recipientBox}>
+              {isAdmin && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 6,
+                    backgroundColor:
+                      order.shippingAddress?.isVerifiedAccount ||
+                      order.shippingAddress?.email
+                        ? '#ECFDF5'
+                        : '#FFFBEB',
+                    borderWidth: 1,
+                    borderColor:
+                      order.shippingAddress?.isVerifiedAccount ||
+                      order.shippingAddress?.email
+                        ? '#6EE7B7'
+                        : '#FCD34D',
+                    borderRadius: 10,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    marginBottom: 4,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '800',
+                      color:
+                        order.shippingAddress?.isVerifiedAccount ||
+                        order.shippingAddress?.email
+                          ? '#065F46'
+                          : '#92400E',
+                    }}>
+                    {order.shippingAddress?.isVerifiedAccount ||
+                    order.shippingAddress?.email
+                      ? `🛡️ Xác thực chống Scam: ✅ Acc Thật Đã Xác Thực (${
+                          order.shippingAddress?.email ||
+                          order.shippingAddress?.customerAuthProvider ||
+                          'Google / Gmail'
+                        })`
+                      : '⚠️ Xác thực chống Scam: Khách vãng lai chưa liên kết Google/FB (Nên gọi xác nhận SĐT trước khi gửi)'}
+                  </Text>
+                </View>
+              )}
               <View style={styles.recipientRow}>
                 <UserIcon size={14} color="#6E5239" />
                 <Text style={styles.recipientName}>

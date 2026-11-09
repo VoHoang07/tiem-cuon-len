@@ -21,7 +21,10 @@ import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { useShop } from '@/store/ShopContext';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
 import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
-import { validateVietnamRealPhone } from '@/utils/contactTrustValidator';
+import {
+    validateRealCustomerEmail,
+    validateVietnamRealPhone,
+} from '@/utils/contactTrustValidator';
 import { formatVND } from '@/utils/formatCurrency';
 import {
     checkRateLimit,
@@ -764,6 +767,15 @@ export default function CheckoutScreen() {
       shippingAddress: {
         ...selectedAddress,
         email: customerEmailInput.trim().toLowerCase() || undefined,
+        customerAuthProvider:
+          user?.authProvider ||
+          (validateRealCustomerEmail(customerEmailInput).valid
+            ? 'gmail_verified'
+            : 'guest'),
+        isVerifiedAccount: Boolean(
+          user?.isVerifiedRealAccount ||
+            validateRealCustomerEmail(customerEmailInput).valid
+        ),
         note: combinedAddressNote || selectedAddress.note,
         shippingMethod: shippingMethodLabel,
         shippingFee,
@@ -1027,16 +1039,70 @@ export default function CheckoutScreen() {
                             paddingTop: 7,
                             borderTopWidth: 1,
                             borderTopColor: pCheck.valid ? '#A7F3D0' : '#FECACA',
-                            gap: 4,
+                            gap: 5,
                           }}>
-                          <Text
+                          <View
                             style={{
-                              fontSize: 11.5,
-                              fontWeight: '800',
-                              color: '#065F46',
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: 6,
                             }}>
-                            📧 Gmail nhận hóa đơn xác nhận & báo mã vận đơn tự động:
-                          </Text>
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '800',
+                                color: '#065F46',
+                              }}>
+                              📧 Gmail xác thực tài khoản thật & nhận mã vận đơn:
+                            </Text>
+                            {user?.email ? (
+                              <View
+                                style={{
+                                  backgroundColor: '#D1FAE5',
+                                  borderWidth: 1,
+                                  borderColor: '#34D399',
+                                  borderRadius: 999,
+                                  paddingHorizontal: 8,
+                                  paddingVertical: 2,
+                                }}>
+                                <Text
+                                  style={{
+                                    fontSize: 10.5,
+                                    fontWeight: '800',
+                                    color: '#065F46',
+                                  }}>
+                                  ✓ Đã xác thực Acc thật ({user.authProvider === 'facebook' ? 'Facebook' : 'Google / Gmail'})
+                                </Text>
+                              </View>
+                            ) : (
+                              <TouchableOpacity
+                                onPress={() =>
+                                  router.push({
+                                    pathname: '/login',
+                                    params: { redirect: '/checkout' },
+                                  })
+                                }
+                                style={{
+                                  backgroundColor: '#FFFDF9',
+                                  borderWidth: 1,
+                                  borderColor: '#059669',
+                                  borderRadius: 999,
+                                  paddingHorizontal: 9,
+                                  paddingVertical: 3,
+                                }}>
+                                <Text
+                                  style={{
+                                    fontSize: 10.5,
+                                    fontWeight: '800',
+                                    color: '#047857',
+                                  }}>
+                                  ⚡ Liên kết Google / Facebook 1 chạm ›
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
                           <TextInput
                             style={{
                               backgroundColor: '#FFFFFF',
@@ -1045,15 +1111,17 @@ export default function CheckoutScreen() {
                               borderRadius: 8,
                               paddingHorizontal: 10,
                               paddingVertical: 7,
-                              fontSize: 12.5,
+                              fontSize: 16,
                               color: '#1E293B',
                               minWidth: 0,
                             }}
-                            placeholder="Nhập Gmail của bạn (VD: tenban@gmail.com) để nhận mã vận đơn..."
+                            placeholder="Chạm để chọn Gmail có sẵn trên máy (VD: tenban@gmail.com)..."
                             placeholderTextColor="#94A3B8"
                             value={customerEmailInput}
                             onChangeText={setCustomerEmailInput}
                             autoCapitalize="none"
+                            autoComplete="email"
+                            textContentType="emailAddress"
                             keyboardType="email-address"
                           />
                         </View>

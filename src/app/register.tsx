@@ -1,5 +1,6 @@
 import { BrandLogo } from '@/components/BrandLogo';
 import { HiddenBotField } from '@/components/HiddenBotField';
+import { SocialAuthButtons } from '@/components/SocialAuthButtons';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
 import { validateRealCustomerEmail } from '@/utils/contactTrustValidator';
@@ -368,9 +369,21 @@ export default function RegisterScreen() {
                     ? 'Tạo tài khoản nhanh trong 10 giây để tiếp tục thanh toán đơn hàng'
                     : 'Tham gia Tiệm Cuộn Len để mua sắm và theo dõi đơn hàng dễ dàng'}
                 </Text>
-              </View>
+                </View>
 
-              <View style={styles.formSection}>
+                {/* 1-Click Social Login / Registration (Google / Existing Gmail / Facebook) */}
+                <SocialAuthButtons
+                redirectPath={redirect || '/'}
+                onSuccess={() => router.replace((redirect || '/') as Href)}
+                />
+
+                <View style={[styles.dividerRow, { marginTop: 2, marginBottom: 12 }]}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>hoặc tự tạo tài khoản mới</Text>
+                <View style={styles.dividerLine} />
+                </View>
+
+                <View style={styles.formSection}>
                 <HiddenBotField value={botTrap} onChangeText={setBotTrap} />
                 {/* Name */}
                 <View style={styles.fieldGroup}>

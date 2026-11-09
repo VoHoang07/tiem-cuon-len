@@ -1,5 +1,6 @@
 import { BrandLogo } from '@/components/BrandLogo';
 import { HiddenBotField } from '@/components/HiddenBotField';
+import { SocialAuthButtons } from '@/components/SocialAuthButtons';
 import {
     LOGIN_BUTTON,
     LOGIN_EMAIL,
@@ -415,9 +416,22 @@ export default function LoginScreen() {
                     ? 'Chỉ còn 1 bước nữa để hoàn tất đơn hàng len thủ công của bạn'
                     : 'Đăng nhập để lưu giỏ hàng, theo dõi đơn và nhận ưu đãi'}
                 </Text>
-              </View>
+                </View>
 
-              {/* Form */}
+                {/* 1-Click Social Login (Google / Existing Gmail / Facebook) */}
+                <SocialAuthButtons
+                redirectPath={redirect || '/'}
+                onSuccess={() => router.replace((redirect || '/') as Href)}
+                />
+
+                {/* Divider */}
+                <View style={[styles.dividerRow, { marginTop: 2, marginBottom: 12 }]}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>hoặc đăng nhập bằng mật khẩu</Text>
+                <View style={styles.dividerLine} />
+                </View>
+
+                {/* Form */}
               <View style={styles.formSection}>
                 <HiddenBotField value={botTrap} onChangeText={setBotTrap} />
                 {/* Email */}
