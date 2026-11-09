@@ -39,7 +39,19 @@ const SERVER_EMAILJS_PUBLIC_KEY =
   process.env.EXPO_PUBLIC_EMAILJS_PUBLIC_KEY ||
   'kT2DQJicRXPdQjvb3';
 const SERVER_OWNER_NOTIFY_EMAIL =
-  process.env.OWNER_NOTIFY_EMAIL || 'khanhly30072007@gmail.com';
+  process.env.OWNER_NOTIFY_EMAIL || 'vohoang1327@gmail.com';
+const SERVER_OWNER_NOTIFY_EMAILS = Array.from(
+  new Set(
+    [
+      'vohoang1327@gmail.com',
+      'khanhly30072007@gmail.com',
+      ...(process.env.OWNER_NOTIFY_EMAIL || '')
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ]
+  )
+);
 const BLOCKLIST_HMAC_SECRET =
   process.env.TCL_BLOCKLIST_HMAC_SECRET ||
   process.env.SEPAY_WEBHOOK_SECRET ||
@@ -778,7 +790,7 @@ async function sendOrderNotificationServer(order) {
       minute: '2-digit',
     });
 
-    const templateParams = {
+    const baseTemplateParams = {
       order_id: String(order.id),
       customer_name: String(addr.fullName || 'Khách hàng'),
       customer_phone: String(addr.phone || ''),
@@ -790,31 +802,39 @@ async function sendOrderNotificationServer(order) {
       payment_method: `${order.paymentMethod || ''} • ${shippingMethod}`,
       order_date: orderDate,
       subject: `🧶 Đơn hàng mới #${order.id} — ${addr.fullName || 'Khách hàng'}`,
-      email: SERVER_OWNER_NOTIFY_EMAIL,
     };
 
-    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Origin: 'https://www.tiemcuonlen.shop',
-      },
-      body: JSON.stringify({
-        service_id: SERVER_EMAILJS_SERVICE_ID,
-        template_id: SERVER_EMAILJS_TEMPLATE_ID,
-        user_id: SERVER_EMAILJS_PUBLIC_KEY,
-        template_params: templateParams,
-      }),
-    });
-    return res.ok;
+    const results = await Promise.all(
+      SERVER_OWNER_NOTIFY_EMAILS.map((recipientEmail) =>
+        fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: 'https://www.tiemcuonlen.shop',
+          },
+          body: JSON.stringify({
+            service_id: SERVER_EMAILJS_SERVICE_ID,
+            template_id: SERVER_EMAILJS_TEMPLATE_ID,
+            user_id: SERVER_EMAILJS_PUBLIC_KEY,
+            template_params: {
+              ...baseTemplateParams,
+              email: recipientEmail,
+            },
+          }),
+        })
+          .then((r) => r.ok)
+          .catch(() => false)
+      )
+    );
+    return results.some(Boolean);
     } catch {
     return false;
     }
     }
 
     /**
-    * Sends instant Live Chat notification to Shop Owner's phone/email (EmailJS + optional Telegram Bot)
-    * so the owner is notified immediately even when the website is completely closed.
+    * Sends instant Live Chat notification to ALL Shop Owner emails (`vohoang1327@gmail.com` & `khanhly30072007@gmail.com`)
+    * so both owners are notified immediately even when the website is completely closed.
     */
     async function sendChatNotificationServer(chatPayload) {
     if (!chatPayload || !chatPayload.text) return false;
@@ -875,7 +895,7 @@ async function sendOrderNotificationServer(order) {
     }
     }
 
-    // 2. EmailJS push notification to Shop Owner's Gmail (`vohoang1327@gmail.com`)
+    // 2. EmailJS push notification to BOTH Shop Owner Gmails (`vohoang1327@gmail.com` & `khanhly30072007@gmail.com`)
     if (
     SERVER_EMAILJS_SERVICE_ID &&
     SERVER_EMAILJS_TEMPLATE_ID &&
@@ -889,7 +909,7 @@ async function sendOrderNotificationServer(order) {
       lines.push(`👉 Mở web trả lời ngay: https://www.tiemcuonlen.shop`);
 
       const shortConv = conversationId.replace(/^user_|^guest_/, '').slice(0, 8);
-      const templateParams = {
+      const baseTemplateParams = {
         order_id: `CHAT-${shortConv.toUpperCase()}`,
         customer_name: `💬 ${customerName}`,
         customer_phone:
@@ -901,29 +921,123 @@ async function sendOrderNotificationServer(order) {
         payment_method: 'Hộp thư Trực tuyến (Live Chat)',
         order_date: chatDate,
         subject: `💬 Tin nhắn mới từ ${customerName}: "${messageText.slice(0, 42)}"`,
-        email: SERVER_OWNER_NOTIFY_EMAIL,
       };
 
-      const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.tiemcuonlen.shop',
-        },
-        body: JSON.stringify({
-          service_id: SERVER_EMAILJS_SERVICE_ID,
-          template_id: SERVER_EMAILJS_TEMPLATE_ID,
-          user_id: SERVER_EMAILJS_PUBLIC_KEY,
-          template_params: templateParams,
-        }),
-      });
-      if (res.ok) sentAny = true;
+      const results = await Promise.all(
+        SERVER_OWNER_NOTIFY_EMAILS.map((recipientEmail) =>
+          fetch('https://api.emailjs.com/api/v1.0/email/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Origin: 'https://www.tiemcuonlen.shop',
+            },
+            body: JSON.stringify({
+              service_id: SERVER_EMAILJS_SERVICE_ID,
+              template_id: SERVER_EMAILJS_TEMPLATE_ID,
+              user_id: SERVER_EMAILJS_PUBLIC_KEY,
+              template_params: {
+                ...baseTemplateParams,
+                email: recipientEmail,
+              },
+            }),
+          })
+            .then((r) => r.ok)
+            .catch(() => false)
+        )
+      );
+      if (results.some(Boolean)) sentAny = true;
     } catch {
       // ignore
     }
     }
 
     return sentAny;
+    }
+
+    /**
+    * Sends instant Email notification directly to the Customer's Gmail when Admin replies,
+    * so the Customer receives a phone/desktop notification even after leaving `tiemcuonlen.shop`!
+    */
+    async function sendChatReplyToCustomerServer(replyPayload) {
+    if (!replyPayload || !replyPayload.text || !replyPayload.customerEmail) {
+    return false;
+    }
+    if (
+    !SERVER_EMAILJS_SERVICE_ID ||
+    !SERVER_EMAILJS_TEMPLATE_ID ||
+    !SERVER_EMAILJS_PUBLIC_KEY
+    ) {
+    return false;
+    }
+
+    const rawEmail = sanitizeTextServer(replyPayload.customerEmail || '', 120)
+    .trim()
+    .toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    return false;
+    }
+
+    const customerName = sanitizeTextServer(
+    replyPayload.customerName || 'Bạn',
+    80
+    );
+    const replyText = sanitizeTextServer(replyPayload.text || '', 600);
+    const productName = sanitizeTextServer(replyPayload.productName || '', 140);
+    const conversationId = sanitizeTextServer(
+    replyPayload.conversationId || 'conv',
+    60
+    );
+
+    const chatDate = new Date().toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    });
+
+    try {
+    const lines = [`💬 Tiệm Cuộn Len vừa trả lời bạn:\n"${replyText}"`];
+    if (productName) {
+      lines.push(`🧶 Mẫu sản phẩm: ${productName}`);
+    }
+    lines.push(
+      `👉 Bấm vào đây để mở lại cuộc trò chuyện và xem chi tiết: https://www.tiemcuonlen.shop`
+    );
+
+    const shortConv = conversationId.replace(/^user_|^guest_/, '').slice(0, 8);
+    const templateParams = {
+      order_id: `TIEM-${shortConv.toUpperCase()}`,
+      customer_name: `🧶 Tiệm Cuộn Len (Gửi ${customerName})`,
+      customer_phone: 'Tư vấn trực tuyến tại tiemcuonlen.shop',
+      customer_address:
+        'Bấm mở https://www.tiemcuonlen.shop để xem phản hồi và nhắn tiếp',
+      items_list: lines.join('\n\n'),
+      total: 'Phản hồi từ Tiệm Cuộn Len',
+      payment_method: 'Hộp thư Trực tuyến (Live Chat)',
+      order_date: chatDate,
+      subject: `🧶 Tiệm Cuộn Len vừa trả lời tin nhắn của bạn: "${replyText.slice(0, 40)}"`,
+      email: rawEmail,
+    };
+
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://www.tiemcuonlen.shop',
+      },
+      body: JSON.stringify({
+        service_id: SERVER_EMAILJS_SERVICE_ID,
+        template_id: SERVER_EMAILJS_TEMPLATE_ID,
+        user_id: SERVER_EMAILJS_PUBLIC_KEY,
+        template_params: templateParams,
+      }),
+    });
+    return res.ok;
+    } catch {
+    return false;
+    }
     }
 
     module.exports = {
@@ -949,6 +1063,7 @@ async function sendOrderNotificationServer(order) {
     withGlobalErrorHandler,
     sendOrderNotificationServer,
     sendChatNotificationServer,
+    sendChatReplyToCustomerServer,
     signBlockedIpRecord,
     verifyBlockedIpRecord,
     };

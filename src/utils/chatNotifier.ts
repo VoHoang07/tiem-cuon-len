@@ -255,5 +255,64 @@ export function queueServerChatPushToOwner(msg: ChatMessage): void {
     } catch {
       // Ignore network error
     }
-  }, 3500);
-}
+    }, 3500);
+    }
+
+    let pendingCustomerReplyLines: string[] = [];
+    let pendingCustomerReplyMeta: {
+    conversationId: string;
+    customerName: string;
+    customerEmail: string;
+    productName?: string;
+    } | null = null;
+    let pendingCustomerReplyTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+    * Queues a Server-side EmailJS notification directly to the Customer's Gmail when Admin replies,
+    * so the Customer gets notified on their phone/computer even after closing `tiemcuonlen.shop`!
+    */
+    export function queueServerReplyPushToCustomer(msg: ChatMessage): void {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (!msg || msg.senderRole !== 'admin' || !msg.customerEmail) return;
+    const email = msg.customerEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+
+    pendingCustomerReplyLines.push(msg.text);
+    pendingCustomerReplyMeta = {
+    conversationId: msg.conversationId,
+    customerName: msg.customerName || 'Bạn',
+    customerEmail: email,
+    productName: msg.product?.name || pendingCustomerReplyMeta?.productName,
+    };
+
+    if (pendingCustomerReplyTimer) {
+    clearTimeout(pendingCustomerReplyTimer);
+    }
+
+    pendingCustomerReplyTimer = setTimeout(async () => {
+    const combinedText = pendingCustomerReplyLines.join('\n');
+    const meta = pendingCustomerReplyMeta;
+    pendingCustomerReplyLines = [];
+    pendingCustomerReplyMeta = null;
+    pendingCustomerReplyTimer = null;
+
+    if (!meta || !combinedText.trim()) return;
+
+    try {
+      await fetch('/api/security-audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'notify_customer_reply',
+          conversationId: meta.conversationId,
+          customerName: meta.customerName,
+          customerEmail: meta.customerEmail,
+          text: combinedText.slice(0, 580),
+          productName: meta.productName || '',
+        }),
+      });
+    } catch {
+      // Ignore network error
+    }
+    }, 3500);
+    }

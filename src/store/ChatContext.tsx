@@ -5,7 +5,9 @@ import { Product } from '@/types/product';
 import {
     playChatNotificationChime,
     queueServerChatPushToOwner,
+    queueServerReplyPushToCustomer,
     registerChatServiceWorker,
+    requestChatNotificationPermission,
     showSystemChatNotification,
     updateTabTitleForUnreadChat,
 } from '@/utils/chatNotifier';
@@ -22,6 +24,7 @@ import React, {
 
 const CHAT_STORAGE_KEY = 'tcl_chat_messages_v2';
 const GUEST_ID_KEY = 'tcl_chat_guest_id_v2';
+const GUEST_EMAIL_KEY = 'tcl_guest_notify_email_v1';
 const LAST_CLIENT_CONV_KEY = 'tcl_last_client_conv_v2';
 const BROADCAST_CHANNEL_NAME = 'tcl_live_chat_channel_v2';
 
@@ -181,7 +184,9 @@ interface ChatContextType {
   markConversationRead: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
   unreadCount: number;
-}
+  customerNotifyEmail: string;
+  saveCustomerNotifyEmail: (email: string) => void;
+  }
 
 const ChatContext = createContext<ChatContextType | null>(null);
 const ChatTriggerContext = createContext<((product: Product) => void) | null>(null);
@@ -195,6 +200,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [pendingProduct, setPendingProduct] = useState<PingedProduct | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [guestId] = useState<string>(() => getOrCreateGuestId());
+  const [guestEmail, setGuestEmail] = useState<string>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(GUEST_EMAIL_KEY) || '';
+      }
+    } catch {
+      // ignore
+    }
+    return '';
+  });
+
+  const customerNotifyEmail = useMemo(
+    () => (user?.email || guestEmail || '').trim(),
+    [user?.email, guestEmail]
+  );
 
   const broadcastRef = useRef<BroadcastChannel | null>(null);
   const supabaseChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -242,16 +262,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [user, role, guestId]);
 
   // Fetch all chat messages from Supabase REST table (`addresses` with `fullName = __TCL_CHAT_V2__`)
-  // Note: For Admin, keep polling even when tab is minimized (`visibilityState === 'hidden'`) so OS push & chime fire in background!
+  // Note: Keep polling even when tab is minimized (`visibilityState === 'hidden'`) for Admin & active Customers so OS push & chime fire in background!
   const fetchRemoteMessages = useCallback(async () => {
     if (!supabaseUrl || !supabaseAnonKey) return;
-    if (
-      !isAdmin &&
-      typeof document !== 'undefined' &&
-      document.visibilityState === 'hidden'
-    ) {
-      return;
-    }
     try {
       const res = await fetch(
         `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}&select=*`,
@@ -457,7 +470,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let lastFetchTs = Date.now();
     fetchRemoteMessages();
-    const intervalMs = isAdmin ? 15000 : isOpen ? 15000 : 60000;
+    const intervalMs = isAdmin ? 12000 : isOpen ? 12000 : 22000;
     const timer = setInterval(() => {
       lastFetchTs = Date.now();
       fetchRemoteMessages();
@@ -764,7 +777,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         : user?.name || existingConv?.customerName || 'Khách hàng';
       const customerEmail = isAdmin
         ? existingConv?.customerEmail
-        : user?.email || existingConv?.customerEmail;
+        : user?.email || customerNotifyEmail || existingConv?.customerEmail;
 
       const newMsg: ChatMessage = {
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -817,24 +830,76 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       knownMessageIdsRef.current.add(newMsg.id);
       pushMessageToSupabase(newMsg);
 
-      // 5. If Customer sent a message, dispatch Server-side Push/Email to Shop Owner's phone
-      // so the owner gets notified immediately even when `tiemcuonlen.shop` is completely closed!
+      // 5. Offline Push Notifications:
+      // - If Customer sent a message -> Push to BOTH Shop Owner Gmails (`vohoang1327@gmail.com` & `khanhly30072007@gmail.com`)
+      //   and automatically request Browser OS Notification permission for the Customer so they hear Admin's reply!
+      // - If Admin sent a reply -> Push Email notification directly to the Customer's Gmail so the Customer knows even if they left the web!
       if (!isAdmin) {
         queueServerChatPushToOwner(newMsg);
+        void requestChatNotificationPermission();
+      } else if (newMsg.customerEmail) {
+        queueServerReplyPushToCustomer(newMsg);
       }
 
       setPendingProduct(null);
-    },
-    [
+      },
+      [
       isAdmin,
       pendingProduct,
       activeConversationId,
       conversations,
       myConversationId,
       user,
+      customerNotifyEmail,
       pushMessageToSupabase,
-    ]
-  );
+      ]
+      );
+
+      const saveCustomerNotifyEmail = useCallback(
+      (rawEmail: string) => {
+      const cleaned = rawEmail.trim().toLowerCase();
+      setGuestEmail(cleaned);
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(GUEST_EMAIL_KEY, cleaned);
+        }
+      } catch {
+        // ignore
+      }
+      if (!cleaned) return;
+      void requestChatNotificationPermission();
+
+      // Attach email to existing messages of this customer's conversation and sync latest row to Supabase
+      setMessages((prev) => {
+        let latestTargetMsg: ChatMessage | null = null;
+        const next = prev.map((m) => {
+          if (m.conversationId === myConversationId) {
+            const updated = { ...m, customerEmail: cleaned };
+            latestTargetMsg = updated;
+            return updated;
+          }
+          return m;
+        });
+        saveLocalMessages(next);
+        if (latestTargetMsg) {
+          void pushMessageToSupabase(latestTargetMsg);
+          if (supabaseChannelRef.current && isChannelSubscribedRef.current) {
+            try {
+              supabaseChannelRef.current.send({
+                type: 'broadcast',
+                event: 'new_chat_message',
+                payload: latestTargetMsg,
+              });
+            } catch {
+              // ignore
+            }
+          }
+        }
+        return next;
+      });
+      },
+      [myConversationId, pushMessageToSupabase]
+      );
 
   const openChat = useCallback(() => {
     setIsOpen(true);
@@ -880,8 +945,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       markConversationRead,
       deleteConversation,
       unreadCount,
-    }),
-    [
+      customerNotifyEmail,
+      saveCustomerNotifyEmail,
+      }),
+      [
       isOpen,
       openChat,
       openChatWithProduct,
@@ -894,8 +961,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       markConversationRead,
       deleteConversation,
       unreadCount,
-    ]
-  );
+      customerNotifyEmail,
+      saveCustomerNotifyEmail,
+      ]
+      );
 
   return (
     <ChatTriggerContext.Provider value={openChatWithProduct}>

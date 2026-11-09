@@ -67,45 +67,62 @@ export function ShopChatWidget() {
     markConversationRead,
     deleteConversation,
     unreadCount,
-  } = useChat();
-  const { products } = useShop();
-  const { role } = useAuth();
-  const isAdmin = role === 'admin';
+    customerNotifyEmail,
+    saveCustomerNotifyEmail,
+    } = useChat();
+    const { products } = useShop();
+    const { role } = useAuth();
+    const isAdmin = role === 'admin';
 
-  const { width: rawWindowWidth } = useWindowDimensions();
-  const windowWidth =
+    const { width: rawWindowWidth } = useWindowDimensions();
+    const windowWidth =
     rawWindowWidth > 0
       ? rawWindowWidth
       : typeof window !== 'undefined' && window.innerWidth > 0
       ? window.innerWidth
       : 1024;
-  const isMobile = windowWidth < 640;
+    const isMobile = windowWidth < 640;
 
-  const [inputText, setInputText] = useState('');
-  const [showProductPicker, setShowProductPicker] = useState(false);
-  const [pickerSearch, setPickerSearch] = useState('');
-  const [notifPerm, setNotifPerm] = useState<string>(() =>
+    const [inputText, setInputText] = useState('');
+    const [showProductPicker, setShowProductPicker] = useState(false);
+    const [pickerSearch, setPickerSearch] = useState('');
+    const [guestEmailDraft, setGuestEmailDraft] = useState('');
+    const [isEditingGuestEmail, setIsEditingGuestEmail] = useState(false);
+    const [notifPerm, setNotifPerm] = useState<string>(() =>
     getChatNotificationPermission()
-  );
+    );
 
-  useEffect(() => {
+    useEffect(() => {
     if (isOpen) {
       setNotifPerm(getChatNotificationPermission());
+      setGuestEmailDraft(customerNotifyEmail || '');
     }
-  }, [isOpen]);
+    }, [isOpen, customerNotifyEmail]);
 
-  const handleEnableBrowserNotify = async () => {
+    const handleSaveGuestEmail = () => {
+    const trimmed = guestEmailDraft.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return;
+    saveCustomerNotifyEmail(trimmed);
+    setIsEditingGuestEmail(false);
+    playChatNotificationChime();
+    };
+
+    const handleEnableBrowserNotify = async () => {
     const ok = await requestChatNotificationPermission();
     setNotifPerm(getChatNotificationPermission());
     if (ok) {
       playChatNotificationChime();
       void showSystemChatNotification({
-        title: '🔔 Đã bật thông báo tin nhắn Tiệm Cuộn Len!',
-        body: 'Khi khách nhắn tin, máy sẽ đổ chuông & hiện thông báo (kể cả khi ẩn tab), đồng thời gửi Email về điện thoại khi tắt web.',
+        title: isAdmin
+          ? '🔔 Đã bật thông báo tin nhắn Tiệm Cuộn Len!'
+          : '🔔 Đã bật chuông báo phản hồi từ Tiệm Cuộn Len!',
+        body: isAdmin
+          ? 'Khi khách nhắn tin, máy sẽ đổ chuông & hiện thông báo, đồng thời bắn Email về cả 2 Gmail chủ shop khi tắt web.'
+          : 'Khi Tiệm trả lời tin nhắn, máy của bạn sẽ đổ chuông & hiện thông báo ngay!',
         conversationId: 'test_notify',
       });
     }
-  };
+    };
 
   const scrollRef = useRef<ScrollView | null>(null);
 
@@ -297,7 +314,7 @@ export function ShopChatWidget() {
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {isAdmin && notifPerm !== 'unsupported' && (
+              {notifPerm !== 'unsupported' && (
                 <TouchableOpacity
                   onPress={() => void handleEnableBrowserNotify()}
                   activeOpacity={0.8}
@@ -318,7 +335,9 @@ export function ShopChatWidget() {
                       color: notifPerm === 'granted' ? '#166534' : '#92400E',
                     }}>
                     {notifPerm === 'granted'
-                      ? '🔔 Chuông + Email Bật'
+                      ? isAdmin
+                        ? '🔔 Chuông + 2 Gmail Bật'
+                        : '🔔 Đã bật chuông'
                       : '🔔 Bật chuông báo'}
                   </Text>
                 </TouchableOpacity>
@@ -331,7 +350,145 @@ export function ShopChatWidget() {
                 <X size={18} color="#3D2B1F" />
               </TouchableOpacity>
             </View>
-          </View>
+            </View>
+
+            {/* Customer Offline Email Notification Bar (or Admin Customer Email Status) */}
+            {!isAdmin ? (
+            customerNotifyEmail && !isEditingGuestEmail ? (
+              <View
+                style={{
+                  backgroundColor: '#ECFDF5',
+                  borderBottomWidth: 1,
+                  borderBottomColor: '#A7F3D0',
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}>
+                <Text
+                  style={{
+                    flex: 1,
+                    fontSize: 11,
+                    fontWeight: '700',
+                    color: '#065F46',
+                  }}
+                  numberOfLines={1}>
+                  📩 Sẽ báo về {customerNotifyEmail} khi Tiệm trả lời (kể cả khi thoát web)
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setGuestEmailDraft(customerNotifyEmail);
+                    setIsEditingGuestEmail(true);
+                  }}
+                  activeOpacity={0.8}>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '800',
+                      color: '#047857',
+                      textDecorationLine: 'underline',
+                    }}>
+                    Đổi
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View
+                style={{
+                  backgroundColor: '#FFFBEB',
+                  borderBottomWidth: 1,
+                  borderBottomColor: '#FDE68A',
+                  paddingHorizontal: 10,
+                  paddingVertical: 7,
+                  gap: 5,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '700',
+                    color: '#92400E',
+                  }}>
+                  📩 Nhập Gmail để nhận thông báo ngay khi Tiệm trả lời (kể cả khi bạn thoát web):
+                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}>
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: '#FCD34D',
+                      borderRadius: 8,
+                      paddingHorizontal: 9,
+                      paddingVertical: 5,
+                      fontSize: 12,
+                      color: '#3B281E',
+                    }}
+                    placeholder="Nhập Gmail của bạn (VD: tenban@gmail.com)..."
+                    placeholderTextColor="#A1887F"
+                    value={guestEmailDraft}
+                    onChangeText={setGuestEmailDraft}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    onSubmitEditing={handleSaveGuestEmail}
+                  />
+                  <TouchableOpacity
+                    onPress={handleSaveGuestEmail}
+                    activeOpacity={0.85}
+                    style={{
+                      backgroundColor: '#4A3427',
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color: '#FFFDF9',
+                      }}>
+                      Lưu
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )
+            ) : activeAdminConversation ? (
+            <View
+              style={{
+                backgroundColor: activeAdminConversation.customerEmail
+                  ? '#ECFDF5'
+                  : '#FAF5EF',
+                borderBottomWidth: 1,
+                borderBottomColor: activeAdminConversation.customerEmail
+                  ? '#A7F3D0'
+                  : '#E8DACB',
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+              }}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: activeAdminConversation.customerEmail
+                    ? '#065F46'
+                    : '#7A6555',
+                }}
+                numberOfLines={1}>
+                {activeAdminConversation.customerEmail
+                  ? `📩 Khách có Gmail (${activeAdminConversation.customerEmail}) — Tự báo cho khách khi bạn trả lời`
+                  : '💬 Khách chưa điền Gmail (Khách vẫn nhận được chuông & thông báo trên trình duyệt)'}
+              </Text>
+            </View>
+            ) : null}
 
           {/* Admin Customer Switcher Bar (Fixed 42px height, never stretches) */}
           {isAdmin && conversations.length > 0 && (

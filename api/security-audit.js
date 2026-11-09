@@ -11,6 +11,7 @@ const {
   verifySupabaseUser,
   withGlobalErrorHandler,
   sendChatNotificationServer,
+  sendChatReplyToCustomerServer,
   signBlockedIpRecord,
   verifyBlockedIpRecord,
   syncBlockedIpInMemoryCache,
@@ -262,6 +263,40 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
     }
 
     const notified = await sendChatNotificationServer(cleanChat);
+    return res.status(200).json({ success: true, notified });
+    }
+
+    // ─── LIVE CHAT REPLY NOTIFICATION TO CUSTOMER (WHEN CUSTOMER LEFT WEB) ────
+    if (action === 'notify_customer_reply') {
+    const cleanReply = stripUnknownFieldsServer(rawBody, [
+      'conversationId',
+      'customerName',
+      'customerEmail',
+      'text',
+      'productName',
+    ]);
+    const text = sanitizeTextServer(cleanReply.text || '', 600);
+    const customerEmail = sanitizeTextServer(
+      cleanReply.customerEmail || '',
+      120
+    );
+    if (!text || !customerEmail) {
+      return res
+        .status(200)
+        .json({ success: true, notified: false, reason: 'missing_email' });
+    }
+    const convKey = `reply_${sanitizeTextServer(
+      cleanReply.conversationId || customerEmail,
+      80
+    )}`;
+    const nowTs = Date.now();
+    const lastSent = chatNotifyCooldowns.get(convKey) || 0;
+    if (nowTs - lastSent < 8000) {
+      return res.status(200).json({ success: true, throttled: true });
+    }
+    chatNotifyCooldowns.set(convKey, nowTs);
+
+    const notified = await sendChatReplyToCustomerServer(cleanReply);
     return res.status(200).json({ success: true, notified });
     }
 
