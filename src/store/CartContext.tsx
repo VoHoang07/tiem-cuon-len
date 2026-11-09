@@ -1,3 +1,7 @@
+import {
+    buildCuratedComboProducts,
+    isCuratedComboProductId,
+} from '@/data/comboCatalog';
 import { MOCK_PRODUCTS } from '@/data/products';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
@@ -67,7 +71,13 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     ? (p.giftCardNote ?? ci.giftCardNote ?? '')
     : undefined;
 
-  const liveProduct = catalogProducts?.find((m) => m.id === baseId);
+  const liveProduct =
+    catalogProducts?.find((m) => m.id === baseId) ||
+    (isCuratedComboProductId(baseId)
+      ? buildCuratedComboProducts(catalogProducts || []).find(
+          (m) => m.id === baseId
+        )
+      : undefined);
   const mock = MOCK_PRODUCTS.find((m) => m.id === baseId);
   const source = liveProduct || mock;
   if (!source) {

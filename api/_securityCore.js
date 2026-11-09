@@ -118,7 +118,28 @@ const STATIC_CATALOG_PRICES = {
   vw_acc_bracelet_06: 45000,
   vw_stem_pastel_07: 75000,
   vw_stem_glitter_08: 39000,
-};
+  // 6 Curated Theme Combos + Package Variants
+  combo_couple_zodiac_01: 139000,
+  combo_couple_zodiac_01__pkg_couple_2zodiac: 139000,
+  combo_couple_zodiac_01__pkg_couple_zodiac_flower: 129000,
+  combo_bestie_cute_02: 85000,
+  combo_bestie_cute_02__pkg_bestie_duck_chicken: 85000,
+  combo_bestie_cute_02__pkg_bestie_foodie: 85000,
+  combo_bestie_cute_02__pkg_bestie_any2: 85000,
+  combo_sweet_bakery_03: 99000,
+  combo_sweet_bakery_03__pkg_bakery_mini: 99000,
+  combo_sweet_bakery_03__pkg_bakery_big: 289000,
+  combo_muse_flower_plush_04: 145000,
+  combo_muse_flower_plush_04__pkg_muse_delicate: 145000,
+  combo_muse_flower_plush_04__pkg_muse_premium: 199000,
+  combo_twinkle_universe_05: 379000,
+  combo_twinkle_universe_05__pkg_twinkle_pair_mix: 379000,
+  combo_twinkle_universe_05__pkg_twinkle_pair_regular: 469000,
+  combo_winter_dalat_06: 219000,
+  combo_winter_dalat_06__pkg_winter_earmuff: 219000,
+  combo_winter_dalat_06__pkg_winter_bear_earmuff: 229000,
+  combo_winter_dalat_06__pkg_winter_beanie: 259000,
+  };
 
 let cachedBlockedIps = new Set();
 let cachedBlockedIpsAt = 0;

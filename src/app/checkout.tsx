@@ -7,6 +7,10 @@ import {
     CHECKOUT_TOTAL
 } from '@/constants/strings';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import {
+    buildCuratedComboProducts,
+    isCuratedComboProductId,
+} from '@/data/comboCatalog';
 import { useAddresses } from '@/store/AddressContext';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
@@ -133,7 +137,12 @@ export default function CheckoutScreen() {
   // Compute buyNow product (derive authoritative variant + packaging price from catalog)
   const buyNowProduct = useMemo(() => {
     if (!isBuyNow || !productId) return null;
-    const base = products.find((p) => p.id === productId) ?? null;
+    const base =
+      products.find((p) => p.id === productId) ??
+      (isCuratedComboProductId(String(productId))
+        ? buildCuratedComboProducts(products).find((p) => p.id === productId) ??
+          null
+        : null);
     if (!base) return null;
     const baseColorOptions = getProductColorOptionsWithCombo(base);
     const matchedColor =

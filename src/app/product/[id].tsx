@@ -7,6 +7,12 @@ import {
     PD_REVIEWS,
 } from '@/constants/strings';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import {
+    buildCuratedComboProducts,
+    getCuratedComboDefinition,
+    getCuratedComboMemberModelChips,
+    isCuratedComboProductId,
+} from '@/data/comboCatalog';
 import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
 import { useOrders } from '@/store/OrderContext';
@@ -130,7 +136,18 @@ export default function ProductDetailScreen() {
     moved: boolean;
   }>({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
 
-  const product = products.find((p) => p.id === id);
+  const product = useMemo(
+    () =>
+      products.find((p) => p.id === id) ||
+      (isCuratedComboProductId(String(id))
+        ? buildCuratedComboProducts(products).find((p) => p.id === id)
+        : undefined),
+    [products, id]
+  );
+  const curatedComboDef = useMemo(
+    () => getCuratedComboDefinition(product?.id),
+    [product?.id]
+  );
 
   useEffect(() => {
     const parsedQty = Math.max(1, Math.min(99, Number(initialQty) || 1));
@@ -148,10 +165,17 @@ export default function ProductDetailScreen() {
     () => getProductColorOptionsWithCombo(product),
     [product]
   );
-  const singleModelOptions: ProductColorOption[] = useMemo(
-    () => colorOptions.filter((c) => !isComboColorOption(c)),
-    [colorOptions]
-  );
+  const singleModelOptions: ProductColorOption[] = useMemo(() => {
+    if (product && isCuratedComboProductId(product.id)) {
+      const memberChips = getCuratedComboMemberModelChips(product.id, products);
+      return memberChips.map((chipName, idx) => ({
+        id: `member_chip_${idx}`,
+        name: chipName,
+        hex: '#D97706',
+      }));
+    }
+    return colorOptions.filter((c) => !isComboColorOption(c));
+  }, [colorOptions, product, products]);
   const accessoryOptions: ProductAccessoryOption[] = useMemo(
     () => [
       {
@@ -370,7 +394,12 @@ export default function ProductDetailScreen() {
     singleModelOptions[0]?.price && Number(singleModelOptions[0].price) > 0
       ? Number(singleModelOptions[0].price)
       : product.price;
-  const comboSavings = isComboActive
+  const matchedCuratedPkg = curatedComboDef?.packages.find(
+    (pk) => pk.id === activeColor?.id
+  );
+  const comboSavings = matchedCuratedPkg
+    ? Math.max(0, matchedCuratedPkg.originalPrice - matchedCuratedPkg.price)
+    : isComboActive
     ? Math.max(0, singleRefPrice * 2 - baseVariantPrice)
     : 0;
   const resolvedColorDisplayName =

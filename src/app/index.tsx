@@ -1,6 +1,7 @@
 import { BoutiqueFooter } from '@/components/BoutiqueFooter';
 import { BrandAvatar, BrandTitle } from '@/components/BrandTitle';
 import { CategoryChips } from '@/components/CategoryChips';
+import { ComboShowcaseSection } from '@/components/ComboShowcaseSection';
 import { ProductCard } from '@/components/ProductCard';
 import { SectionHeader } from '@/components/SectionHeader';
 import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
@@ -694,10 +695,13 @@ export default function HomeScreen() {
               {kemNhungCount} mẫu nhung mịn
             </Text>
           </View>
-        </TouchableOpacity>
-      </View>
+          </TouchableOpacity>
+          </View>
 
-      {/* Main Catalog Filter & Sort Toolbar */}
+          {/* Featured 6 Curated Theme Combos ("🎁 Combo Tiết Kiệm") */}
+          {searchInput.trim().length === 0 && <ComboShowcaseSection products={products} />}
+
+          {/* Main Catalog Filter & Sort Toolbar */}
       <View style={styles.catalogToolbar}>
         <SectionHeader
           title={

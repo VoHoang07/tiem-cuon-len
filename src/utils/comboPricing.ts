@@ -1,3 +1,4 @@
+import { isCuratedComboProductId } from '@/data/comboCatalog';
 import { Product, ProductColorOption } from '@/types/product';
 
 export const DEFAULT_COMBO_OPTION_ID = 'c_combo_2';
@@ -64,7 +65,9 @@ export function calculateSmartCombo2Price(unitPrice: number): number {
 
 export function isComboColorOption(opt?: ProductColorOption | null): boolean {
   if (!opt) return false;
-  if (opt.id === DEFAULT_COMBO_OPTION_ID) return true;
+  if (opt.id === DEFAULT_COMBO_OPTION_ID || opt.id.startsWith('pkg_')) {
+    return true;
+  }
   const lower = (opt.name || '').toLowerCase();
   return lower.includes('combo');
 }
@@ -86,6 +89,10 @@ export function getProductColorOptionsWithCombo(
       !lower.includes('set quà')
     );
   });
+
+  if (isCuratedComboProductId(product.id)) {
+    return rawColors;
+  }
 
   const baseList: ProductColorOption[] =
     rawColors.length > 0
