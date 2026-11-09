@@ -1196,10 +1196,10 @@ export default function CheckoutScreen() {
                               </View>
                             </View>
                             <Text style={styles.paymentTextDesktop}>{opt.title}</Text>
-                            <Text style={styles.shippingSubtextDesktop} numberOfLines={1}>
+                            <Text style={styles.shippingSubtextDesktop}>
                               {opt.sub}
                             </Text>
-                          </View>
+                            </View>
                         ) : (
                           <>
                             <View style={[styles.paymentOptionLeft, { flex: 1 }]}>

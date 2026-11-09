@@ -488,14 +488,14 @@ export default function HomeScreen() {
                   <Package size={15} color="#3D2B1F" />
                 </View>
                 <View style={styles.trustTextWrap}>
-                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
-                    {isMobile ? `${uniqueProducts.length} Sản phẩm` : `Kho hàng (${uniqueProducts.length} SP)`}
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]}>
+                    {isMobile ? `${uniqueProducts.length} SP` : `Kho hàng (${uniqueProducts.length} SP)`}
                   </Text>
                   {!isMobile && <Text style={styles.trustSub}>Bấm để quản lý & sửa giá</Text>}
                 </View>
-              </TouchableOpacity>
-              <View style={styles.trustDivider} />
-              <TouchableOpacity
+                </TouchableOpacity>
+                <View style={styles.trustDivider} />
+                <TouchableOpacity
                 style={[styles.trustItem, isMobile && styles.trustItemMobile]}
                 onPress={() => router.push('/orders')}
                 activeOpacity={0.75}>
@@ -503,14 +503,14 @@ export default function HomeScreen() {
                   <ShoppingBag size={15} color="#3D2B1F" />
                 </View>
                 <View style={styles.trustTextWrap}>
-                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
-                    {isMobile ? `${orders.length} Đơn hàng` : `Đơn hàng (${pendingOrdersCount} chờ xử lý)`}
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]}>
+                    {isMobile ? `${orders.length} Đơn` : `Đơn hàng (${pendingOrdersCount} chờ xử lý)`}
                   </Text>
                   {!isMobile && <Text style={styles.trustSub}>Duyệt & cập nhật giao hàng</Text>}
                 </View>
-              </TouchableOpacity>
-              <View style={styles.trustDivider} />
-              <TouchableOpacity
+                </TouchableOpacity>
+                <View style={styles.trustDivider} />
+                <TouchableOpacity
                 style={[styles.trustItem, isMobile && styles.trustItemMobile]}
                 onPress={() => router.push('/payment-methods')}
                 activeOpacity={0.75}>
@@ -518,26 +518,26 @@ export default function HomeScreen() {
                   <CreditCard size={15} color="#3D2B1F" />
                 </View>
                 <View style={styles.trustTextWrap}>
-                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
-                    {isMobile ? 'Cấu hình TT' : 'Cấu hình thanh toán'}
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]}>
+                    {isMobile ? 'Thanh toán' : 'Cấu hình thanh toán'}
                   </Text>
                   {!isMobile && <Text style={styles.trustSub}>Ngân hàng, QR, MoMo & COD</Text>}
                 </View>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={[styles.trustBar, isMobile && styles.trustBarMobile]}>
-              <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
+                </TouchableOpacity>
+                </View>
+                ) : (
+                <View style={[styles.trustBar, isMobile && styles.trustBarMobile]}>
+                <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
                 <View style={styles.trustIconWrap}>
                   <Truck size={15} color="#3D2B1F" />
                 </View>
                 <View style={styles.trustTextWrap}>
-                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]}>
                     {isMobile ? 'Giao toàn quốc' : 'Giao hàng toàn quốc'}
                   </Text>
                   {!isMobile && (
                     <Text style={styles.trustSub}>
-                      Đóng gói hộp quà cẩn thận chỉ với 15k và freeship cho tổng hoá đơn trên 299k
+                      Set Quà Tặng Đặc Biệt (+25k) và Freeship cho đơn từ 299k
                     </Text>
                   )}
                 </View>
@@ -548,25 +548,25 @@ export default function HomeScreen() {
                   <HeartHandshake size={15} color="#3D2B1F" />
                 </View>
                 <View style={styles.trustTextWrap}>
-                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]}>
                     Len mềm mịn
                   </Text>
                   {!isMobile && <Text style={styles.trustSub}>An toàn & bền màu theo năm tháng</Text>}
                 </View>
-              </View>
-              <View style={styles.trustDivider} />
-              <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
+                </View>
+                <View style={styles.trustDivider} />
+                <View style={[styles.trustItem, isMobile && styles.trustItemMobile]}>
                 <View style={styles.trustIconWrap}>
                   <Gift size={15} color="#3D2B1F" />
                 </View>
                 <View style={styles.trustTextWrap}>
-                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]} numberOfLines={1}>
+                  <Text style={[styles.trustTitle, isMobile && styles.trustTitleMobile]}>
                     {isMobile ? 'Đặt theo mẫu' : 'Nhận đặt theo mẫu'}
                   </Text>
                   {!isMobile && <Text style={styles.trustSub}>Tùy chỉnh màu sắc & kích thước</Text>}
                 </View>
-              </View>
-            </View>
+                </View>
+                </View>
           )}
         </View>
       )}

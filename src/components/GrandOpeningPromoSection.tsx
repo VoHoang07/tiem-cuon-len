@@ -10,7 +10,6 @@ import {
 import { Check, Clock, Gift, ShieldCheck, Sparkles, Tag } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -141,35 +140,32 @@ export function GrandOpeningPromoSection() {
             ? styles.ticketCardFourCol
             : styles.ticketCardTwoCol,
           { borderColor: accent.border },
-          !v.active && { opacity: 0.5 },
+          !v.active && { opacity: 0.55 },
         ]}>
-        {/* Left Perforated Stub */}
-        <View style={[styles.ticketStub, { backgroundColor: accent.stubBg }]}>
-          <View style={styles.notchTop} />
-          <View style={styles.notchBottom} />
-          <Tag size={14} color="#FAF3EA" />
-          <Text style={styles.ticketStubAmount}>
-            -{Math.round(v.discountAmount / 1000)}K
-          </Text>
+        {/* Top Colored Header Strip — Full card width so text never gets squeezed or truncated */}
+        <View style={[styles.ticketTopStrip, { backgroundColor: accent.stubBg }]}>
+          <View style={styles.ticketTopLeft}>
+            <Tag size={13} color="#FAF3EA" />
+            <Text style={styles.ticketStubAmount}>{v.title}</Text>
+          </View>
           <View style={styles.stubMinPill}>
             <Text style={styles.ticketStubMin}>
-              Đơn ≥{Math.round(v.minOrderSubtotal / 1000)}k
+              Đơn từ {Math.round(v.minOrderSubtotal / 1000)}k
             </Text>
           </View>
         </View>
 
-        {/* Right Compact Content */}
+        {/* Middle Content — Full width, zero truncation */}
         <View style={styles.ticketBody}>
-          <View>
-            <View style={styles.ticketTopRow}>
+          <View style={{ gap: 5 }}>
+            <View style={styles.badgeLineRow}>
               <View
                 style={[
                   styles.badgePill,
                   { backgroundColor: accent.badgeBg },
                 ]}>
                 <Text
-                  style={[styles.badgePillText, { color: accent.badgeColor }]}
-                  numberOfLines={1}>
+                  style={[styles.badgePillText, { color: accent.badgeColor }]}>
                   {v.badge}
                 </Text>
               </View>
@@ -183,29 +179,23 @@ export function GrandOpeningPromoSection() {
                   activeOpacity={0.8}>
                   <Text
                     style={{
-                      fontSize: 9.5,
+                      fontSize: 10,
                       fontWeight: '800',
                       color: v.active ? '#065F46' : '#991B1B',
                     }}>
-                    {v.active ? '● Bật' : '○ Tắt'}
+                    {v.active ? '● Đang bật' : '○ Đã tắt'}
                   </Text>
                 </TouchableOpacity>
               )}
             </View>
 
-            <Text style={styles.ticketTitle} numberOfLines={1}>
-              {v.title}
-            </Text>
-            <Text style={styles.ticketDesc} numberOfLines={2}>
-              {v.description}
-            </Text>
+            <Text style={styles.ticketDesc}>{v.description}</Text>
           </View>
 
+          {/* Bottom Perforated Footer — Code + Save Button */}
           <View style={styles.ticketFooterRow}>
             <View style={styles.codeTagBox}>
-              <Text style={styles.codeMono} numberOfLines={1}>
-                {v.code}
-              </Text>
+              <Text style={styles.codeMono}>{v.code}</Text>
             </View>
 
             <TouchableOpacity
@@ -239,12 +229,12 @@ export function GrandOpeningPromoSection() {
 
   return (
     <View style={[styles.container, isMobile && styles.containerMobile]}>
-      {/* Compact Header Row */}
+      {/* Header Row */}
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={styles.titleLineRow}>
             <View style={styles.iconCircle}>
-              <Sparkles size={14} color="#784B2A" />
+              <Sparkles size={15} color="#784B2A" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <View
@@ -270,7 +260,7 @@ export function GrandOpeningPromoSection() {
                   </View>
                 )}
               </View>
-              <Text style={styles.sectionSub} numberOfLines={1}>
+              <Text style={styles.sectionSub}>
                 Bấm “Lưu mã” để hệ thống tự động chọn mức giảm cao nhất tại Giỏ hàng & Thanh toán
               </Text>
             </View>
@@ -280,7 +270,7 @@ export function GrandOpeningPromoSection() {
         {/* Sleek Countdown Pill */}
         <View style={styles.countdownBox}>
           <Clock size={13} color="#784B2A" />
-          <Text style={styles.countdownLabel}>Còn lại:</Text>
+          <Text style={styles.countdownLabel}>Kết thúc sau:</Text>
           <View style={styles.timePills}>
             <View style={styles.timeBlock}>
               <Text style={styles.timeDigits}>{countdown.hours}</Text>
@@ -297,22 +287,17 @@ export function GrandOpeningPromoSection() {
         </View>
       </View>
 
-      {/* Balanced 4-Column Row on Desktop, 2x2 on Tablet, Swipe on Mobile */}
-      {isMobile ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.mobileScrollContent}>
-          {visibleVouchers.map(renderTicketCard)}
-        </ScrollView>
-      ) : (
-        <View
-          style={
-            isWideDesktop ? styles.desktopFourColRow : styles.tabletTwoColGrid
-          }>
-          {visibleVouchers.map(renderTicketCard)}
-        </View>
-      )}
+      {/* Responsive Grid: 4 Equal Columns on Wide Desktop, 2x2 on Tablet, Full-Width Stack on Mobile (Zero Overflow) */}
+      <View
+        style={
+          isMobile
+            ? styles.mobileStackGrid
+            : isWideDesktop
+            ? styles.desktopFourColRow
+            : styles.tabletTwoColGrid
+        }>
+        {visibleVouchers.map(renderTicketCard)}
+      </View>
     </View>
   );
 }
@@ -327,29 +312,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5D5C3',
     paddingHorizontal: 16,
-    paddingVertical: 13,
-    gap: 11,
+    paddingVertical: 14,
+    gap: 12,
   },
   containerMobile: {
     marginHorizontal: 12,
     paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingVertical: 12,
     borderRadius: 16,
+    gap: 10,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 10,
   },
   headerRowMobile: {
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     gap: 8,
   },
   titleLineRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
   },
   iconCircle: {
@@ -359,19 +346,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#EADBC8',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 1,
   },
   sectionTitle: {
     fontSize: 15.5,
     fontWeight: '900',
     color: '#3B281E',
+    lineHeight: 21,
   },
   sectionTitleMobile: {
     fontSize: 14,
+    lineHeight: 19,
   },
   sectionSub: {
     fontSize: 11.5,
     color: '#6E5643',
-    marginTop: 1,
+    marginTop: 2,
+    lineHeight: 16,
   },
   adminSafePill: {
     flexDirection: 'row',
@@ -392,6 +383,7 @@ const styles = StyleSheet.create({
   countdownBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 6,
     backgroundColor: '#FAF5EE',
     borderWidth: 1,
@@ -434,14 +426,15 @@ const styles = StyleSheet.create({
   tabletTwoColGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: 10,
   },
-  mobileScrollContent: {
-    gap: 10,
-    paddingRight: 4,
+  mobileStackGrid: {
+    flexDirection: 'column',
+    gap: 8,
   },
   ticketCard: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     backgroundColor: '#FFFDF9',
     borderRadius: 14,
     borderWidth: 1,
@@ -452,82 +445,66 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   ticketCardTwoCol: {
-    width: '48.8%' as any,
+    width: '48.6%' as any,
   },
   ticketCardMobile: {
-    width: 248,
+    width: '100%',
   },
-  ticketStub: {
-    width: 68,
+  ticketTopStrip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    gap: 3,
-    position: 'relative',
+    justifyContent: 'space-between',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    gap: 6,
   },
-  notchTop: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#F5EDE2',
-  },
-  notchBottom: {
-    position: 'absolute',
-    bottom: -6,
-    right: -6,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#F5EDE2',
+  ticketTopLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 1,
   },
   ticketStubAmount: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
     color: '#FFFDF9',
-    letterSpacing: -0.3,
   },
   stubMinPill: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
   },
   ticketStubMin: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '800',
     color: '#FAF3EA',
   },
   ticketBody: {
     flex: 1,
-    minWidth: 0,
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     paddingVertical: 9,
     justifyContent: 'space-between',
-    gap: 7,
+    gap: 8,
   },
-  ticketTopRow: {
+  badgeLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 4,
-    marginBottom: 3,
   },
   badgePill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: 6,
-    flexShrink: 1,
   },
   badgePillText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '800',
   },
   adminDotPill: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 999,
     borderWidth: 1,
@@ -540,48 +517,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderColor: '#FECACA',
   },
-  ticketTitle: {
-    fontSize: 13.5,
-    fontWeight: '900',
-    color: '#3B281E',
-  },
   ticketDesc: {
-    fontSize: 10.5,
-    color: '#7A6552',
-    lineHeight: 14,
-    marginTop: 2,
+    fontSize: 11,
+    color: '#6E5643',
+    lineHeight: 15.5,
   },
   ticketFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 6,
-    paddingTop: 5,
+    paddingTop: 7,
     borderTopWidth: 1,
-    borderTopColor: '#F2E8DC',
+    borderTopColor: '#F0E4D4',
   },
   codeTagBox: {
     backgroundColor: '#F6EFE6',
     borderWidth: 1,
     borderColor: '#E5D5C3',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3.5,
     borderRadius: 6,
-    flexShrink: 1,
   },
   codeMono: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '900',
     color: '#5C4033',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
   claimBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 5.5,
     borderRadius: 7,
   },
   claimBtnSaved: {
@@ -595,7 +566,7 @@ const styles = StyleSheet.create({
     color: '#FFFDF9',
   },
   claimBtnTextSaved: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '800',
     color: '#15803D',
   },

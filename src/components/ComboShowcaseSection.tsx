@@ -194,13 +194,13 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
         </Text>
 
         <View style={styles.pkgPreviewPill}>
-          <Text style={styles.pkgPreviewText} numberOfLines={1}>
+          <Text style={styles.pkgPreviewText}>
             📦 {def.packages[0]?.name}
           </Text>
         </View>
 
         <View style={styles.cardFooterRow}>
-          <View style={{ minWidth: 0 }}>
+          <View style={{ flex: 1, minWidth: 110 }}>
             <View style={styles.priceLine}>
               <Text style={styles.comboPriceText}>{formatVND(def.price)}</Text>
               <Text style={styles.originalPriceText}>
@@ -404,11 +404,13 @@ const styles = StyleSheet.create({
   cardsGridDesktop: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: 14,
   },
   cardsGridTablet: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: 12,
   },
   comboCard: {
@@ -420,10 +422,10 @@ const styles = StyleSheet.create({
     ...SHADOWS.small,
   },
   comboCardMobile: {
-    width: 278,
+    width: 288,
   },
   comboCardDesktop: {
-    width: '32.2%',
+    width: '32%',
   },
   comboCardTablet: {
     width: '48.5%',
@@ -553,11 +555,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 8,
   },
   priceLine: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    flexWrap: 'wrap',
     gap: 6,
   },
   comboPriceText: {

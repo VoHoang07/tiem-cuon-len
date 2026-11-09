@@ -94,19 +94,19 @@ export function ComboStudioLiveView({
             </View>
           </View>
           <View style={styles.polaroidCaptionBox}>
-            <Text style={styles.polaroidCaptionTitle} numberOfLines={1}>
+            <Text style={styles.polaroidCaptionTitle} numberOfLines={2}>
               {label1}
             </Text>
           </View>
-        </View>
+          </View>
 
-        {/* Center Plus Connector */}
-        <View style={styles.plusConnectorCircle}>
+          {/* Center Plus Connector */}
+          <View style={styles.plusConnectorCircle}>
           <Plus size={compact ? 14 : 18} color="#B45309" strokeWidth={3} />
-        </View>
+          </View>
 
-        {/* Polaroid 2 */}
-        <View style={styles.polaroidCard}>
+          {/* Polaroid 2 */}
+          <View style={styles.polaroidCard}>
           <View style={styles.polaroidPhotoBox}>
             {renderPhoto(img2, label2)}
             <View
@@ -118,20 +118,20 @@ export function ComboStudioLiveView({
             </View>
           </View>
           <View style={styles.polaroidCaptionBox}>
-            <Text style={styles.polaroidCaptionTitle} numberOfLines={1}>
+            <Text style={styles.polaroidCaptionTitle} numberOfLines={2}>
               {label2}
             </Text>
           </View>
-        </View>
-      </View>
+          </View>
+          </View>
 
-      {/* Bottom Paired Summary Strip */}
-      <View style={styles.bottomSummaryPill}>
-        <Text style={styles.bottomSummaryLabel}>💝 Combo đang chọn:</Text>
-        <Text style={styles.bottomSummaryValue} numberOfLines={1}>
+          {/* Bottom Paired Summary Strip */}
+          <View style={styles.bottomSummaryPill}>
+          <Text style={styles.bottomSummaryLabel}>💝 Combo đang chọn:</Text>
+          <Text style={styles.bottomSummaryValue}>
           {label1} + {label2}
-        </Text>
-      </View>
+          </Text>
+          </View>
     </View>
   );
 }
@@ -168,7 +168,7 @@ export function ComboSlotSelector({
       <View style={styles.slotSection}>
         <View style={styles.slotHeaderRow}>
           <Text style={styles.slotHeaderTitle}>{title}</Text>
-          <Text style={styles.slotHeaderSelected} numberOfLines={1}>
+          <Text style={styles.slotHeaderSelected}>
             Đang chọn: {selected?.label || candidates[0]?.label}
           </Text>
         </View>
@@ -288,6 +288,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 6,
   },
   aiTagPill: {
@@ -403,6 +404,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 6,
   },
   bottomSummaryLabel: {
@@ -441,7 +443,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   slotHeaderTitle: {
     fontSize: 12,

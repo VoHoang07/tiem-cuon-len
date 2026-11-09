@@ -252,15 +252,14 @@ export function PromoMilestoneAndPickerCard({
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 4,
+                      flexWrap: 'wrap',
+                      gap: 6,
                     }}>
                     <Text
                       style={[
                         styles.chipCode,
                         active && { color: '#FFFDF9' },
-                      ]}
-                      numberOfLines={1}>
+                      ]}>
                       🎟️ {v.code}
                     </Text>
                     <Text
@@ -268,22 +267,21 @@ export function PromoMilestoneAndPickerCard({
                         styles.chipDiscount,
                         active && { color: '#FDE68A' },
                       ]}>
-                      -{Math.round(v.discountAmount / 1000)}k
+                      (-{formatVND(v.discountAmount)})
                     </Text>
                   </View>
                   <Text
                     style={[
                       styles.chipSub,
                       active && { color: '#F5EFE6' },
-                    ]}
-                    numberOfLines={1}>
+                    ]}>
                     {active
-                      ? '✓ Đang dùng (Chạm để bỏ)'
+                      ? '✓ Đang dùng (Chạm lần nữa để bỏ chọn)'
                       : eligible
-                      ? `✓ Đủ điều kiện (≥${Math.round(
+                      ? `✓ Đủ điều kiện (Đơn ≥${Math.round(
                           v.minOrderSubtotal / 1000
                         )}k)`
-                      : `Thêm ${formatVND(shortfall)} (≥${Math.round(
+                      : `Cần mua thêm ${formatVND(shortfall)} (Đơn ≥${Math.round(
                           v.minOrderSubtotal / 1000
                         )}k)`}
                   </Text>
@@ -446,13 +444,11 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
   },
   chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     gap: 6,
   },
   voucherChip: {
-    width: '48.6%' as any,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -460,9 +456,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DFCBB5',
     borderRadius: 10,
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 7,
-    gap: 4,
+    gap: 8,
   },
   voucherChipActive: {
     backgroundColor: '#4A3427',

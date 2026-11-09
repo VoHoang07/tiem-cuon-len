@@ -341,8 +341,8 @@ export const ProductCard = memo(function ProductCard({
               )}
               {product.accessoryOptions && product.accessoryOptions.length > 0 && (
                 <View style={styles.accessoryCountBadge}>
-                  <Text style={styles.accessoryCountText} numberOfLines={1}>
-                    {product.accessoryOptions[0]?.emoji || '🎀'} {product.accessoryOptions.length} phụ kiện
+                  <Text style={styles.accessoryCountText}>
+                    {product.accessoryOptions[0]?.emoji || '🎀'} {product.accessoryOptions.length} gói
                   </Text>
                 </View>
               )}
@@ -759,7 +759,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
+    flexWrap: 'wrap',
+    gap: 5,
     marginTop: 1,
   },
   colorDotsRow: {
@@ -786,7 +787,6 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     borderWidth: 1,
     borderColor: '#E2D2C0',
-    maxWidth: '58%',
   },
   accessoryCountText: {
     fontSize: 10,
@@ -797,34 +797,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 4,
   },
   ratingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
     backgroundColor: '#FDF6EA',
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 8,
   },
   ratingStar: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: COLORS.starYellow,
   },
   ratingText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     color: COLORS.warmBrown,
   },
   stockText: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 10.5,
+    fontWeight: '600',
     color: COLORS.lightText,
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
     marginTop: 2,
     gap: 4,
   },
