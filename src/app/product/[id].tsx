@@ -33,10 +33,7 @@ import {
     getProductColorOptionsWithCombo,
     isComboColorOption,
 } from '@/utils/comboPricing';
-import {
-    ComboSlotCandidate,
-    composeComboStudioDataUrl,
-} from '@/utils/comboStudioComposer';
+import { ComboSlotCandidate } from '@/utils/comboStudioComposer';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -130,7 +127,6 @@ export default function ProductDetailScreen() {
   const [comboNote, setComboNote] = useState('');
   const [slot1Id, setSlot1Id] = useState<string | null>(null);
   const [slot2Id, setSlot2Id] = useState<string | null>(null);
-  const [composedComboImg, setComposedComboImg] = useState<string | null>(null);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -203,24 +199,6 @@ export default function ProductDetailScreen() {
       setComboNote(`${defaultSlot1.label} + ${defaultSlot2.label}`);
     }
   }, [id, effectiveActiveColorId, defaultSlot1?.id, defaultSlot2?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!selectedSlot1 && !selectedSlot2) {
-      setComposedComboImg(null);
-      return;
-    }
-    composeComboStudioDataUrl(
-      selectedSlot1,
-      selectedSlot2,
-      curatedComboDef?.themeBadge || '🎁 COMBO TIẾT KIỆM • TIỆM CUỘN LEN'
-    ).then((url) => {
-      if (!cancelled) setComposedComboImg(url);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedSlot1, selectedSlot2, curatedComboDef?.themeBadge]);
 
   const singleModelOptions: ProductColorOption[] = useMemo(() => {
     if (product && isCuratedComboProductId(product.id)) {
@@ -484,7 +462,7 @@ export default function ProductDetailScreen() {
       selectedAccessoryEmoji: activeAccessory?.emoji,
       giftCardNote: isGiftSet ? giftCardNote.trim() : undefined,
       image:
-        (isComboActive && composedComboImg) ||
+        (isComboActive && selectedSlot1?.image) ||
         activeColor?.image ||
         product.image,
       price: effectivePrice,

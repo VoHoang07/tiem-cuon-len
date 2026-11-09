@@ -1,26 +1,26 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from 'react';
-import { Product, Review, ShopCategoryItem } from '@/types/product';
-import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { MOCK_PRODUCTS } from '@/data/products';
+import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
+import { Product, Review, ShopCategoryItem } from '@/types/product';
 import {
-  DEFAULT_SHOP_CATEGORIES,
-  setDynamicCategoriesRegistry,
+    DEFAULT_SHOP_CATEGORIES,
+    setDynamicCategoriesRegistry,
 } from '@/utils/getCategoryEmoji';
 import {
-  sanitizeText,
-  sanitizeMultilineText,
-  validateReviewSchema,
+    sanitizeMultilineText,
+    sanitizeText,
+    validateReviewSchema,
 } from '@/utils/schemaValidator';
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from 'react';
 
 const PAGE_SIZE = 250;
 const PRODUCTS_CACHE_KEY = 'tcl_products_cache_v12';
@@ -670,12 +670,19 @@ function productsSignature(list: Product[]): string {
     .join('|');
 }
 
+let saveCacheDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 function saveCachedProducts(items: Product[]) {
   if (typeof window === 'undefined' || items.length === 0) return;
-  // Full items (including HD Base64 images) are persisted in IndexedDB (100MB+ quota)
-  saveToIdb('cached_all_products', items);
-  if (!window.localStorage) return;
-  setTimeout(() => {
+  if (saveCacheDebounceTimer) {
+    clearTimeout(saveCacheDebounceTimer);
+  }
+  // Debounce IndexedDB + localStorage persistence so multi-chunk hydration never triggers
+  // 10+ simultaneous 25MB structured-clone allocations on Mobile Safari / WebView
+  saveCacheDebounceTimer = setTimeout(() => {
+    saveCacheDebounceTimer = null;
+    saveToIdb('cached_all_products', items);
+    if (!window.localStorage) return;
     try {
       // Only store lightweight metadata in localStorage (<20KB) so localStorage NEVER hits 5MB QuotaExceededError
       // and never blocks saving tcl_deleted_product_ids_v1 or Supabase auth tokens
@@ -700,7 +707,7 @@ function saveCachedProducts(items: Product[]) {
     } catch {
       // ignore
     }
-  }, 0);
+  }, 900);
 }
 
 function toDbProduct(product: Product) {
@@ -1484,9 +1491,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
         // Run 2 concurrent workers for fast cover image loading on mobile
         let cursor = 0;
+        let coverUpdated = false;
         const runCoverWorker = async () => {
           while (cursor < coverChunks.length) {
-            const chunk = coverChunks[cursor++];
+            const chunkIdx = cursor++;
+            const chunk = coverChunks[chunkIdx];
             if (!chunk || chunk.length === 0) continue;
             const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
             try {
@@ -1511,10 +1520,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                       if (mr.image) target.image = mr.image;
                       const hydrated = hydrateDbProduct(target);
                       cacheProductMediaInMemory(hydrated, { coverChecked: true });
+                      coverUpdated = true;
                     }
                   }
-                  const merged = mergeWithMockProducts(baseRows);
-                  setProducts(merged);
+                  // Render above-the-fold cover photos immediately on first chunk, then batch the rest
+                  if (chunkIdx <= 1) {
+                    setProducts(mergeWithMockProducts(baseRows));
+                  }
                 }
               }
             } catch {
@@ -1523,20 +1535,24 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           }
         };
         await Promise.all([runCoverWorker(), runCoverWorker()]);
-      }
+        if (coverUpdated) {
+          setProducts(mergeWithMockProducts(baseRows));
+        }
+        }
 
-      // PASS 2: Background Variant & Gallery Hydration (`select=id,tags` ONLY — never re-download `image`!)
-      const missingVariantIds = activeRows
+        // PASS 2: Background Variant & Gallery Hydration (`select=id,tags` ONLY — never re-download `image`!)
+        const missingVariantIds = activeRows
         .filter((r) => {
           const cached = hydratedMediaMemory.get(r.id);
           return !cached || !cached.tagsChecked;
         })
         .map((r) => r.id);
 
-      if (missingVariantIds.length === 0) return;
+        if (missingVariantIds.length === 0) return;
 
-      const VARIANT_CHUNK = 2;
-      for (let i = 0; i < missingVariantIds.length; i += VARIANT_CHUNK) {
+        const VARIANT_CHUNK = 2;
+        let variantsUpdated = false;
+        for (let i = 0; i < missingVariantIds.length; i += VARIANT_CHUNK) {
         const chunk = missingVariantIds.slice(i, i + VARIANT_CHUNK);
         const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
         try {
@@ -1564,17 +1580,23 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                     coverChecked: true,
                     tagsChecked: true,
                   });
+                  variantsUpdated = true;
                 }
               }
-              const merged = mergeWithMockProducts(baseRows);
-              setProducts(merged);
-              saveCachedProducts(merged);
             }
           }
         } catch {
           // continue next chunk
         }
-      }
+        // Give mobile browser GC 60ms breathing room between multi-MB variant chunks to prevent WebKit OOM crash
+        await new Promise((r) => setTimeout(r, 60));
+        }
+
+        if (variantsUpdated) {
+        const merged = mergeWithMockProducts(baseRows);
+        setProducts(merged);
+        saveCachedProducts(merged);
+        }
     },
     []
   );
