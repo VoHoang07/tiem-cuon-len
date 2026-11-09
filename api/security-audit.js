@@ -300,6 +300,52 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
     return res.status(200).json({ success: true, notified });
     }
 
+    // ─── ADMIN DELETE CHAT CONVERSATION OR SINGLE MESSAGE ─────────────────────
+    if (action === 'delete_chat') {
+      const adminUser = await verifyAdminRequest(req);
+      if (!adminUser) {
+        return res
+          .status(403)
+          .json({ success: false, error: 'Chỉ Quản trị viên mới có quyền xóa tin nhắn.' });
+      }
+      const cleanDel = stripUnknownFieldsServer(rawBody, [
+        'conversationId',
+        'messageId',
+      ]);
+      const convId = sanitizeTextServer(cleanDel.conversationId || '', 120);
+      const msgId = sanitizeTextServer(cleanDel.messageId || '', 120);
+      const authHeaderToken = adminUser.accessToken || SUPABASE_KEY;
+
+      if (msgId) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/addresses?fullName=eq.__TCL_CHAT_V2__&id=eq.${encodeURIComponent(
+            msgId
+          )}`,
+          {
+            method: 'DELETE',
+            headers: {
+              apikey: SUPABASE_KEY,
+              Authorization: `Bearer ${authHeaderToken}`,
+            },
+          }
+        );
+      } else if (convId) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/addresses?fullName=eq.__TCL_CHAT_V2__&city=eq.${encodeURIComponent(
+            convId
+          )}`,
+          {
+            method: 'DELETE',
+            headers: {
+              apikey: SUPABASE_KEY,
+              Authorization: `Bearer ${authHeaderToken}`,
+            },
+          }
+        );
+      }
+      return res.status(200).json({ success: true });
+    }
+
     // ─── DEFAULT ACTION: RECORD AUDIT EVENT ───────────────────────────────────
   const body = stripUnknownFieldsServer(rawBody, [
     'eventType',

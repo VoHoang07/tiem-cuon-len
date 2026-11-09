@@ -8,7 +8,7 @@ import {
     type PromoVoucher,
 } from '@/utils/promoEngine';
 import { Check, Clock, Gift, ShieldCheck, Sparkles, Tag } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ScrollView,
     StyleSheet,
@@ -29,6 +29,43 @@ function getRemainingCountdown() {
   return { hours, mins, secs };
 }
 
+function getTicketAccent(code: string) {
+  switch (code) {
+    case 'CUONLEN35K':
+      return {
+        stubBg: '#9E3B46',
+        border: '#E5B8BE',
+        badgeBg: '#FDF0F2',
+        badgeColor: '#9E3B46',
+        btnBg: '#9E3B46',
+      };
+    case 'KHAITRUONG20K':
+      return {
+        stubBg: '#9A5435',
+        border: '#E4C6B4',
+        badgeBg: '#FDF3EC',
+        badgeColor: '#9A5435',
+        btnBg: '#6E4F37',
+      };
+    case 'VIP50K':
+      return {
+        stubBg: '#4A3427',
+        border: '#D9C6B2',
+        badgeBg: '#F7EFE4',
+        badgeColor: '#4A3427',
+        btnBg: '#4A3427',
+      };
+    default:
+      return {
+        stubBg: '#6E4F37',
+        border: '#E4D3C0',
+        badgeBg: '#FBF4EA',
+        badgeColor: '#6E4F37',
+        btnBg: '#5C4033',
+      };
+  }
+}
+
 export function GrandOpeningPromoSection() {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
@@ -39,7 +76,8 @@ export function GrandOpeningPromoSection() {
       : typeof window !== 'undefined' && window.innerWidth > 0
       ? window.innerWidth
       : 1024;
-  const isMobile = windowWidth < 640;
+  const isMobile = windowWidth < 680;
+  const isWideDesktop = windowWidth >= 980;
 
   const [vouchers, setVouchers] = useState<PromoVoucher[]>(() =>
     getAllPromoVouchers()
@@ -90,110 +128,109 @@ export function GrandOpeningPromoSection() {
 
   const renderTicketCard = (v: PromoVoucher) => {
     const isSaved = savedCodes.includes(v.code);
-    const isHot = v.code === 'CUONLEN35K' || v.code === 'KHAITRUONG20K';
+    const accent = getTicketAccent(v.code);
 
     return (
       <View
         key={v.code}
         style={[
           styles.ticketCard,
-          isMobile ? styles.ticketCardMobile : styles.ticketCardDesktop,
-          isHot && styles.ticketCardHot,
-          !v.active && { opacity: 0.55 },
+          isMobile
+            ? styles.ticketCardMobile
+            : isWideDesktop
+            ? styles.ticketCardFourCol
+            : styles.ticketCardTwoCol,
+          { borderColor: accent.border },
+          !v.active && { opacity: 0.5 },
         ]}>
-        {/* Left Stub */}
-        <View
-          style={[
-            styles.ticketStub,
-            isHot ? styles.ticketStubHot : styles.ticketStubWarm,
-          ]}>
-          <Tag size={16} color="#FFFDF9" />
+        {/* Left Perforated Stub */}
+        <View style={[styles.ticketStub, { backgroundColor: accent.stubBg }]}>
+          <View style={styles.notchTop} />
+          <View style={styles.notchBottom} />
+          <Tag size={14} color="#FAF3EA" />
           <Text style={styles.ticketStubAmount}>
             -{Math.round(v.discountAmount / 1000)}K
           </Text>
-          <Text style={styles.ticketStubMin}>
-            Đơn ≥{Math.round(v.minOrderSubtotal / 1000)}k
-          </Text>
+          <View style={styles.stubMinPill}>
+            <Text style={styles.ticketStubMin}>
+              Đơn ≥{Math.round(v.minOrderSubtotal / 1000)}k
+            </Text>
+          </View>
         </View>
 
-        {/* Right Body */}
+        {/* Right Compact Content */}
         <View style={styles.ticketBody}>
-          <View style={styles.ticketTopRow}>
-            <View
-              style={[
-                styles.badgePill,
-                isHot ? styles.badgePillHot : styles.badgePillStandard,
-              ]}>
-              <Text
+          <View>
+            <View style={styles.ticketTopRow}>
+              <View
                 style={[
-                  styles.badgePillText,
-                  isHot ? { color: '#9D174D' } : { color: '#78350F' },
+                  styles.badgePill,
+                  { backgroundColor: accent.badgeBg },
                 ]}>
-                {v.badge}
-              </Text>
+                <Text
+                  style={[styles.badgePillText, { color: accent.badgeColor }]}
+                  numberOfLines={1}>
+                  {v.badge}
+                </Text>
+              </View>
+              {isAdmin && (
+                <TouchableOpacity
+                  style={[
+                    styles.adminDotPill,
+                    v.active ? styles.adminDotOn : styles.adminDotOff,
+                  ]}
+                  onPress={() => handleToggleAdminActive(v.code)}
+                  activeOpacity={0.8}>
+                  <Text
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: '800',
+                      color: v.active ? '#065F46' : '#991B1B',
+                    }}>
+                    {v.active ? '● Bật' : '○ Tắt'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
-            <Text style={styles.codeMono}>{v.code}</Text>
+
+            <Text style={styles.ticketTitle} numberOfLines={1}>
+              {v.title}
+            </Text>
+            <Text style={styles.ticketDesc} numberOfLines={2}>
+              {v.description}
+            </Text>
           </View>
 
-          <Text style={styles.ticketTitle} numberOfLines={1}>
-            {v.title}
-          </Text>
-          <Text style={styles.ticketDesc} numberOfLines={2}>
-            {v.description}
-          </Text>
-
-          {isAdmin && (
-            <View style={styles.adminProfitBox}>
-              <ShieldCheck size={12} color="#065F46" />
-              <Text style={styles.adminProfitText} numberOfLines={2}>
-                {v.profitSafeNote}
+          <View style={styles.ticketFooterRow}>
+            <View style={styles.codeTagBox}>
+              <Text style={styles.codeMono} numberOfLines={1}>
+                {v.code}
               </Text>
             </View>
-          )}
 
-          <View style={styles.ticketFooterRow}>
             <TouchableOpacity
               style={[
                 styles.claimBtn,
-                isSaved ? styles.claimBtnSaved : styles.claimBtnDefault,
+                isSaved
+                  ? styles.claimBtnSaved
+                  : { backgroundColor: accent.btnBg },
               ]}
               onPress={() => handleClaimVoucher(v.code)}
               activeOpacity={0.85}>
               {isSaved ? (
                 <>
-                  <Check size={13} color="#065F46" strokeWidth={2.6} />
+                  <Check size={12} color="#15803D" strokeWidth={2.8} />
                   <Text style={styles.claimBtnTextSaved}>
-                    {justClaimedCode === v.code
-                      ? 'Đã lưu! Tự áp ở Giỏ hàng'
-                      : 'Đã lưu vào Ví'}
+                    {justClaimedCode === v.code ? 'Đã lưu!' : 'Đã lưu'}
                   </Text>
                 </>
               ) : (
                 <>
-                  <Gift size={13} color="#FFFDF9" />
-                  <Text style={styles.claimBtnTextDefault}>Lưu mã ngay</Text>
+                  <Gift size={12} color="#FFFDF9" />
+                  <Text style={styles.claimBtnTextDefault}>Lưu mã</Text>
                 </>
               )}
             </TouchableOpacity>
-
-            {isAdmin && (
-              <TouchableOpacity
-                style={[
-                  styles.adminToggleBtn,
-                  v.active ? styles.adminToggleOn : styles.adminToggleOff,
-                ]}
-                onPress={() => handleToggleAdminActive(v.code)}
-                activeOpacity={0.8}>
-                <Text
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: '800',
-                    color: v.active ? '#065F46' : '#991B1B',
-                  }}>
-                  {v.active ? 'Đang BẬT' : 'Đang TẮT'}
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       </View>
@@ -202,27 +239,48 @@ export function GrandOpeningPromoSection() {
 
   return (
     <View style={[styles.container, isMobile && styles.containerMobile]}>
-      {/* Header Banner */}
+      {/* Compact Header Row */}
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={styles.campaignTagRow}>
-            <Sparkles size={13} color="#B45309" />
-            <Text style={styles.campaignTagText}>
-              CHIẾN DỊCH MỪNG KHAI TRƯƠNG • TIẾT KIỆM TỐI ĐA
-            </Text>
+          <View style={styles.titleLineRow}>
+            <View style={styles.iconCircle}>
+              <Sparkles size={14} color="#784B2A" />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                }}>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    isMobile && styles.sectionTitleMobile,
+                  ]}>
+                  Ưu Đãi Mừng Khai Trương — Lưu Voucher Giảm Tới 50.000₫
+                </Text>
+                {isAdmin && (
+                  <View style={styles.adminSafePill}>
+                    <ShieldCheck size={11} color="#065F46" />
+                    <Text style={styles.adminSafePillText}>
+                      Đã khóa mức tối thiểu chống lỗ
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.sectionSub} numberOfLines={1}>
+                Bấm “Lưu mã” để hệ thống tự động chọn mức giảm cao nhất tại Giỏ hàng & Thanh toán
+              </Text>
+            </View>
           </View>
-          <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>
-            🎟️ Kho Voucher Khai Trương — Lưu Mã Giảm Ngay Tới 50.000₫
-          </Text>
-          <Text style={styles.sectionSub}>
-            Lưu mã bên dưới để hệ thống tự động trừ tiền trực tiếp tại Giỏ hàng & Thanh toán (Kết hợp được với Combo & Freeship 299k!)
-          </Text>
         </View>
 
-        {/* Live Flash Countdown */}
+        {/* Sleek Countdown Pill */}
         <View style={styles.countdownBox}>
-          <Clock size={14} color="#92400E" />
-          <Text style={styles.countdownLabel}>Kết thúc trong:</Text>
+          <Clock size={13} color="#784B2A" />
+          <Text style={styles.countdownLabel}>Còn lại:</Text>
           <View style={styles.timePills}>
             <View style={styles.timeBlock}>
               <Text style={styles.timeDigits}>{countdown.hours}</Text>
@@ -239,7 +297,7 @@ export function GrandOpeningPromoSection() {
         </View>
       </View>
 
-      {/* Voucher Tickets Strip / Grid */}
+      {/* Balanced 4-Column Row on Desktop, 2x2 on Tablet, Swipe on Mobile */}
       {isMobile ? (
         <ScrollView
           horizontal
@@ -248,7 +306,10 @@ export function GrandOpeningPromoSection() {
           {visibleVouchers.map(renderTicketCard)}
         </ScrollView>
       ) : (
-        <View style={styles.desktopGrid}>
+        <View
+          style={
+            isWideDesktop ? styles.desktopFourColRow : styles.tabletTwoColGrid
+          }>
           {visibleVouchers.map(renderTicketCard)}
         </View>
       )}
@@ -258,73 +319,91 @@ export function GrandOpeningPromoSection() {
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    backgroundColor: '#FFF9F0',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#F3DEC2',
-    padding: 16,
-    gap: 12,
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 6,
+    backgroundColor: '#F5EDE2',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    gap: 11,
   },
   containerMobile: {
     marginHorizontal: 12,
-    padding: 12,
-    borderRadius: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 16,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
   headerRowMobile: {
     flexDirection: 'column',
     alignItems: 'flex-start',
+    gap: 8,
   },
-  campaignTagRow: {
+  titleLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginBottom: 3,
+    gap: 10,
   },
-  campaignTagText: {
-    fontSize: 10.5,
-    fontWeight: '900',
-    color: '#B45309',
-    letterSpacing: 0.6,
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EADBC8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 15.5,
     fontWeight: '900',
     color: '#3B281E',
   },
   sectionTitleMobile: {
-    fontSize: 15,
+    fontSize: 14,
   },
   sectionSub: {
-    fontSize: 12,
+    fontSize: 11.5,
     color: '#6E5643',
-    marginTop: 2,
-    lineHeight: 17,
+    marginTop: 1,
+  },
+  adminSafePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  adminSafePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#065F46',
   },
   countdownBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#FAF5EE',
     borderWidth: 1,
-    borderColor: '#FCD34D',
+    borderColor: '#E2D0BC',
     borderRadius: 999,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   countdownLabel: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#92400E',
+    color: '#6E4F37',
   },
   timePills: {
     flexDirection: 'row',
@@ -338,151 +417,172 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   timeDigits: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '900',
     color: '#FFFDF9',
   },
   timeSep: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
-    color: '#78350F',
+    color: '#6E4F37',
   },
-  desktopGrid: {
+  desktopFourColRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  tabletTwoColGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
   mobileScrollContent: {
     gap: 10,
-    paddingRight: 6,
+    paddingRight: 4,
   },
   ticketCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFDF9',
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#EBD7BF',
+    borderWidth: 1,
     overflow: 'hidden',
   },
-  ticketCardDesktop: {
+  ticketCardFourCol: {
     flex: 1,
-    minWidth: 265,
+    minWidth: 0,
+  },
+  ticketCardTwoCol: {
+    width: '48.8%' as any,
   },
   ticketCardMobile: {
-    width: 286,
-  },
-  ticketCardHot: {
-    borderColor: '#F472B6',
-    backgroundColor: '#FFFDFB',
+    width: 248,
   },
   ticketStub: {
-    width: 78,
+    width: 68,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     gap: 3,
+    position: 'relative',
   },
-  ticketStubWarm: {
-    backgroundColor: '#6E4F37',
+  notchTop: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#F5EDE2',
   },
-  ticketStubHot: {
-    backgroundColor: '#BE185D',
+  notchBottom: {
+    position: 'absolute',
+    bottom: -6,
+    right: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#F5EDE2',
   },
   ticketStubAmount: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     color: '#FFFDF9',
+    letterSpacing: -0.3,
+  },
+  stubMinPill: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
   },
   ticketStubMin: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FDE68A',
-    textAlign: 'center',
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#FAF3EA',
   },
   ticketBody: {
     flex: 1,
-    padding: 10,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
     justifyContent: 'space-between',
-    gap: 5,
+    gap: 7,
   },
   ticketTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
+    gap: 4,
+    marginBottom: 3,
   },
   badgePill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  badgePillStandard: {
-    backgroundColor: '#FEF3C7',
-  },
-  badgePillHot: {
-    backgroundColor: '#FCE7F3',
-  },
-  badgePillText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  codeMono: {
-    fontSize: 10.5,
-    fontWeight: '900',
-    color: '#6E4F37',
-    backgroundColor: '#F6EFE6',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 5,
+    borderRadius: 6,
+    flexShrink: 1,
+  },
+  badgePillText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+  },
+  adminDotPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  adminDotOn: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  adminDotOff: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
   },
   ticketTitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '900',
     color: '#3B281E',
   },
   ticketDesc: {
-    fontSize: 11,
-    color: '#6E5643',
-    lineHeight: 15,
-  },
-  adminProfitBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    borderRadius: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  adminProfitText: {
-    flex: 1,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#065F46',
-    lineHeight: 13.5,
+    fontSize: 10.5,
+    color: '#7A6552',
+    lineHeight: 14,
+    marginTop: 2,
   },
   ticketFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 6,
-    marginTop: 2,
+    paddingTop: 5,
+    borderTopWidth: 1,
+    borderTopColor: '#F2E8DC',
+  },
+  codeTagBox: {
+    backgroundColor: '#F6EFE6',
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    flexShrink: 1,
+  },
+  codeMono: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#5C4033',
+    letterSpacing: 0.2,
   },
   claimBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 8,
-    flex: 1,
-  },
-  claimBtnDefault: {
-    backgroundColor: '#4A3427',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
   },
   claimBtnSaved: {
     backgroundColor: '#DCFCE7',
@@ -490,27 +590,13 @@ const styles = StyleSheet.create({
     borderColor: '#86EFAC',
   },
   claimBtnTextDefault: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '800',
     color: '#FFFDF9',
   },
   claimBtnTextSaved: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
-    color: '#065F46',
-  },
-  adminToggleBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
-    borderWidth: 1,
-  },
-  adminToggleOn: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#6EE7B7',
-  },
-  adminToggleOff: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
+    color: '#15803D',
   },
 });

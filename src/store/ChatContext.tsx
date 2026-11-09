@@ -23,10 +23,37 @@ import React, {
 } from 'react';
 
 const CHAT_STORAGE_KEY = 'tcl_chat_messages_v2';
+const DELETED_MSG_IDS_KEY = 'tcl_deleted_chat_msg_ids_v1';
 const GUEST_ID_KEY = 'tcl_chat_guest_id_v2';
 const GUEST_EMAIL_KEY = 'tcl_guest_notify_email_v1';
 const LAST_CLIENT_CONV_KEY = 'tcl_last_client_conv_v2';
 const BROADCAST_CHANNEL_NAME = 'tcl_live_chat_channel_v2';
+
+function loadDeletedMsgIds(): Set<string> {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(DELETED_MSG_IDS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Set(parsed.map(String));
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return new Set();
+}
+
+function saveDeletedMsgIds(ids: Set<string>) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const arr = Array.from(ids).slice(-800);
+      window.localStorage.setItem(DELETED_MSG_IDS_KEY, JSON.stringify(arr));
+    }
+  } catch {
+    // ignore
+  }
+}
 
 // Dedicated partition in Supabase `addresses` table for cross-device / cross-browser live chat persistence
 const CHAT_PARTITION_KEY = '__TCL_CHAT_V2__';
@@ -65,11 +92,14 @@ function getOrCreateGuestId(): string {
 function loadLocalMessages(): ChatMessage[] {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
+      const deletedSet = loadDeletedMsgIds();
       const raw = window.localStorage.getItem(CHAT_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return parsed as ChatMessage[];
+          return (parsed as ChatMessage[]).filter(
+            (m) => m && m.id && !deletedSet.has(m.id)
+          );
         }
       }
     }
@@ -183,6 +213,7 @@ interface ChatContextType {
   setActiveConversationId: (id: string | null) => void;
   markConversationRead: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<void>;
   unreadCount: number;
   customerNotifyEmail: string;
   saveCustomerNotifyEmail: (email: string) => void;
@@ -221,6 +252,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const isChannelSubscribedRef = useRef(false);
   const lastNewestCustomerMsgIdRef = useRef<string | null>(null);
   const deletedConvIdsRef = useRef<Set<string>>(new Set());
+  const deletedMsgIdsRef = useRef<Set<string>>(loadDeletedMsgIds());
   const lastSentAtRef = useRef<number>(0);
   const knownMessageIdsRef = useRef<Set<string>>(
     new Set(loadLocalMessages().map((m) => m.id))
@@ -282,7 +314,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const remoteList: ChatMessage[] = [];
       for (const r of rows) {
         const parsed = rowToChatMessage(r);
-        if (parsed && !deletedConvIdsRef.current.has(parsed.conversationId)) {
+        if (
+          parsed &&
+          !deletedConvIdsRef.current.has(parsed.conversationId) &&
+          !deletedMsgIdsRef.current.has(parsed.id)
+        ) {
           remoteList.push(parsed);
         }
       }
@@ -295,6 +331,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const localInFlight = prev.filter(
           (m) =>
             !deletedConvIdsRef.current.has(m.conversationId) &&
+            !deletedMsgIdsRef.current.has(m.id) &&
             !remoteIds.has(m.id) &&
             now - new Date(m.createdAt).getTime() < 10000
         );
@@ -664,15 +701,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [isAdmin, patchReadStatusOnSupabase]
   );
 
-  // Delete an entire conversation (admin only) — removes from local state, localStorage, and Supabase
+  // Delete an entire conversation (admin only) — removes from local state, localStorage, and Supabase (with Admin JWT + Server API)
   const deleteConversation = useCallback(
     async (conversationId: string) => {
       if (!isAdmin) return;
       deletedConvIdsRef.current.add(conversationId);
       setTimeout(() => {
         deletedConvIdsRef.current.delete(conversationId);
-      }, 12000);
+      }, 20000);
+
       setMessages((prev) => {
+        for (const m of prev) {
+          if (m.conversationId === conversationId) {
+            deletedMsgIdsRef.current.add(m.id);
+          }
+        }
+        saveDeletedMsgIds(deletedMsgIdsRef.current);
         const next = prev.filter((m) => m.conversationId !== conversationId);
         saveLocalMessages(next);
         return next;
@@ -706,7 +750,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Delete all messages of this conversation from Supabase by partition + conversationId (city column)
+      // Authenticate with Admin JWT token so Supabase RLS (`is_shop_admin()`) permits DELETE
+      let adminToken = supabaseAnonKey || '';
+      try {
+        if (supabase) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.access_token) {
+            adminToken = data.session.access_token;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       if (supabaseUrl && supabaseAnonKey) {
         try {
           await fetch(
@@ -717,7 +773,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               method: 'DELETE',
               headers: {
                 apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
+                Authorization: `Bearer ${adminToken}`,
               },
             }
           );
@@ -725,8 +781,91 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           // ignore network errors
         }
       }
+
+      if (typeof window !== 'undefined') {
+        try {
+          await fetch('/api/security-audit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+            },
+            body: JSON.stringify({
+              action: 'delete_chat',
+              conversationId,
+            }),
+          });
+        } catch {
+          // ignore
+        }
+      }
     },
     [activeConversationId, isAdmin]
+  );
+
+  // Delete a single message (admin only)
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!isAdmin || !messageId) return;
+      deletedMsgIdsRef.current.add(messageId);
+      saveDeletedMsgIds(deletedMsgIdsRef.current);
+
+      setMessages((prev) => {
+        const next = prev.filter((m) => m.id !== messageId);
+        saveLocalMessages(next);
+        return next;
+      });
+
+      let adminToken = supabaseAnonKey || '';
+      try {
+        if (supabase) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.access_token) {
+            adminToken = data.session.access_token;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      if (supabaseUrl && supabaseAnonKey) {
+        try {
+          await fetch(
+            `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}&id=eq.${encodeURIComponent(
+              messageId
+            )}`,
+            {
+              method: 'DELETE',
+              headers: {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${adminToken}`,
+              },
+            }
+          );
+        } catch {
+          // ignore
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        try {
+          await fetch('/api/security-audit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+            },
+            body: JSON.stringify({
+              action: 'delete_chat',
+              messageId,
+            }),
+          });
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [isAdmin]
   );
 
   // Mark read automatically when widget is open
@@ -944,6 +1083,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setActiveConversationId,
       markConversationRead,
       deleteConversation,
+      deleteMessage,
       unreadCount,
       customerNotifyEmail,
       saveCustomerNotifyEmail,
@@ -960,6 +1100,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       activeConversationId,
       markConversationRead,
       deleteConversation,
+      deleteMessage,
       unreadCount,
       customerNotifyEmail,
       saveCustomerNotifyEmail,

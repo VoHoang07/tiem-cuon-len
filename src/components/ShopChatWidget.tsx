@@ -67,6 +67,7 @@ export function ShopChatWidget() {
     setActiveConversationId,
     markConversationRead,
     deleteConversation,
+    deleteMessage,
     unreadCount,
     customerNotifyEmail,
     saveCustomerNotifyEmail,
@@ -491,26 +492,57 @@ export function ShopChatWidget() {
                   : '#FAF5EF',
                 borderBottomWidth: 1,
                 borderBottomColor: activeAdminConversation.customerEmail
-                  ? '#A7F3D0'
-                  : '#E8DACB',
-                paddingHorizontal: 12,
-                paddingVertical: 5,
-              }}>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: '700',
-                  color: activeAdminConversation.customerEmail
-                    ? '#065F46'
-                    : '#7A6555',
-                }}
-                numberOfLines={1}>
-                {activeAdminConversation.customerEmail
-                  ? `📩 Khách có Gmail (${activeAdminConversation.customerEmail}) — Tự báo cho khách khi bạn trả lời`
-                  : '💬 Khách chưa điền Gmail (Khách vẫn nhận được chuông & thông báo trên trình duyệt)'}
-              </Text>
-            </View>
-            ) : null}
+                    ? '#A7F3D0'
+                    : '#E8DACB',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}>
+                <Text
+                  style={{
+                    flex: 1,
+                    fontSize: 11,
+                    fontWeight: '700',
+                    color: activeAdminConversation.customerEmail
+                      ? '#065F46'
+                      : '#7A6555',
+                  }}
+                  numberOfLines={1}>
+                  {activeAdminConversation.customerEmail
+                    ? `📩 Gmail: ${activeAdminConversation.customerEmail}`
+                    : `💬 Đang chat: ${activeAdminConversation.customerName}`}
+                </Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    void deleteConversation(activeAdminConversation.conversationId)
+                  }
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    backgroundColor: '#FEE2E2',
+                    borderWidth: 1,
+                    borderColor: '#FCA5A5',
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 999,
+                  }}>
+                  <Trash2 size={11} color="#B91C1C" />
+                  <Text
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: '800',
+                      color: '#B91C1C',
+                    }}>
+                    Xoá hội thoại
+                  </Text>
+                </TouchableOpacity>
+                </View>
+                ) : null}
 
           {/* Admin Customer Switcher Bar (Fixed 42px height, never stretches) */}
           {isAdmin && conversations.length > 0 && (
@@ -550,22 +582,12 @@ export function ShopChatWidget() {
                           </View>
                         )}
                       </TouchableOpacity>
-                      {isSelected && (
-                        <TouchableOpacity
-                          style={styles.adminTabDeleteBtn}
-                          onPress={() => {
-                            if (typeof window !== 'undefined' && window.confirm) {
-                              if (window.confirm(`Xoá cuộc trò chuyện với ${conv.customerName}?`)) {
-                                deleteConversation(conv.conversationId);
-                              }
-                            } else {
-                              deleteConversation(conv.conversationId);
-                            }
-                          }}
-                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                          <Trash2 size={11} color="#D32F2F" />
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={styles.adminTabDeleteBtn}
+                        onPress={() => void deleteConversation(conv.conversationId)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Trash2 size={12} color="#B91C1C" />
+                      </TouchableOpacity>
                     </View>
                   );
                 })}
@@ -683,6 +705,21 @@ export function ShopChatWidget() {
                         </Text>
                         {isMine && (
                           <CheckCheck size={12} color="rgba(250,245,238,0.75)" />
+                        )}
+                        {isAdmin && msg.id !== 'welcome_msg' && (
+                          <TouchableOpacity
+                            onPress={() => void deleteMessage(msg.id)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            style={{ marginLeft: 4 }}>
+                            <Trash2
+                              size={11}
+                              color={
+                                isMine
+                                  ? 'rgba(255,220,220,0.9)'
+                                  : '#B91C1C'
+                              }
+                            />
+                          </TouchableOpacity>
                         )}
                       </View>
                     </View>
