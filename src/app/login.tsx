@@ -1,49 +1,49 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Animated,
-  Easing,
-  Pressable,
-} from 'react-native';
-import { useRouter, useLocalSearchParams, type Href } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ChevronLeft,
-  Home,
-  Sparkles,
-  ArrowRight,
-  ShieldCheck,
-} from 'lucide-react-native';
-import { useAuth } from '@/store/AuthContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
-import {
-  LOGIN_EMAIL,
-  LOGIN_EMAIL_PLACEHOLDER,
-  LOGIN_PASSWORD,
-  LOGIN_PASSWORD_PLACEHOLDER,
-  LOGIN_BUTTON,
-} from '@/constants/strings';
 import { BrandLogo } from '@/components/BrandLogo';
 import { HiddenBotField } from '@/components/HiddenBotField';
 import {
-  checkRateLimit,
-  validateHiddenBotField,
-  isCurrentIpBlocked,
-  recordSecurityAudit,
-} from '@/utils/securityGuard';
+    LOGIN_BUTTON,
+    LOGIN_EMAIL,
+    LOGIN_EMAIL_PLACEHOLDER,
+    LOGIN_PASSWORD,
+    LOGIN_PASSWORD_PLACEHOLDER,
+} from '@/constants/strings';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import { useAuth } from '@/store/AuthContext';
 import { validateLoginSchema } from '@/utils/schemaValidator';
+import {
+    checkRateLimit,
+    isCurrentIpBlocked,
+    recordSecurityAudit,
+    validateHiddenBotField,
+} from '@/utils/securityGuard';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import {
+    ArrowRight,
+    ChevronLeft,
+    Eye,
+    EyeOff,
+    Home,
+    Lock,
+    Mail,
+    ShieldCheck,
+    Sparkles,
+} from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Easing,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -58,6 +58,8 @@ export default function LoginScreen() {
   const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const handleLoginRef = useRef<() => void>(() => {});
 
   const isCheckoutRedirect = Boolean(redirect && redirect.startsWith('/checkout'));
 
@@ -213,6 +215,7 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    if (submittingRef.current) return;
     setError('');
 
     const botCheck = validateHiddenBotField(botTrap, formMountedAtRef.current, 400);
@@ -266,8 +269,10 @@ export default function LoginScreen() {
       triggerShake();
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     const result = await login(schemaCheck.data.email, schemaCheck.data.password);
+    submittingRef.current = false;
     setSubmitting(false);
     if (result.success) {
       recordSecurityAudit({
@@ -290,8 +295,21 @@ export default function LoginScreen() {
       });
       setError(result.error ?? 'Đăng nhập thất bại.');
       triggerShake();
-    }
-  };
+      }
+      };
+      handleLoginRef.current = handleLogin;
+
+      useEffect(() => {
+      if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+      const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        handleLoginRef.current();
+      }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+      }, []);
 
   if (isLoading) {
     return (
@@ -446,7 +464,9 @@ export default function LoginScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       autoComplete="off"
-                    />
+                      returnKeyType="go"
+                      onSubmitEditing={handleLogin}
+                      />
                   </View>
                 </Animated.View>
 

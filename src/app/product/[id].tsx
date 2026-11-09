@@ -900,7 +900,7 @@ export default function ProductDetailScreen() {
                 fill={COLORS.starYellow}
               />
               <Text style={styles.quietMetaText}>
-                {product.rating.toFixed(1)}
+                {(Number(product.rating) || 5.0).toFixed(1)}
               </Text>
               <Text style={styles.quietMetaDot}>•</Text>
               <Text style={styles.quietMetaText}>
@@ -1386,7 +1386,7 @@ export default function ProductDetailScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.reviewsHeader}>
             <Text style={styles.sectionTitle}>
-              {PD_REVIEWS} ({product.reviews.length})
+              {PD_REVIEWS} ({(Array.isArray(product.reviews) ? product.reviews : []).length})
             </Text>
             {canReview && !showReviewForm ? (
               <TouchableOpacity
@@ -1449,12 +1449,12 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
-          {product.reviews.length === 0 ? (
+          {(Array.isArray(product.reviews) ? product.reviews : []).length === 0 ? (
             <Text style={styles.emptyReviewsText}>
               Chưa có đánh giá nào cho sản phẩm này.
             </Text>
           ) : (
-            product.reviews.map((review) => (
+            (Array.isArray(product.reviews) ? product.reviews : []).map((review) => (
               <View key={review.id} style={styles.reviewItem}>
                 <View style={styles.reviewItemHeader}>
                   <Text style={styles.reviewUser}>{review.userName}</Text>

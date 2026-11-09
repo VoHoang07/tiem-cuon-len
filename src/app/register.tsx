@@ -1,43 +1,43 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Animated,
-  Easing,
-  Pressable,
-} from 'react-native';
-import { useRouter, useLocalSearchParams, type Href } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  User,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ChevronLeft,
-  Home,
-  Sparkles,
-  ArrowRight,
-  ShieldCheck,
-} from 'lucide-react-native';
-import { useAuth } from '@/store/AuthContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { BrandLogo } from '@/components/BrandLogo';
 import { HiddenBotField } from '@/components/HiddenBotField';
-import {
-  checkRateLimit,
-  validateHiddenBotField,
-  isCurrentIpBlocked,
-  recordSecurityAudit,
-} from '@/utils/securityGuard';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import { useAuth } from '@/store/AuthContext';
 import { validateRegisterSchema } from '@/utils/schemaValidator';
+import {
+    checkRateLimit,
+    isCurrentIpBlocked,
+    recordSecurityAudit,
+    validateHiddenBotField,
+} from '@/utils/securityGuard';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import {
+    ArrowRight,
+    ChevronLeft,
+    Eye,
+    EyeOff,
+    Home,
+    Lock,
+    Mail,
+    ShieldCheck,
+    Sparkles,
+    User,
+} from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Easing,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -56,6 +56,8 @@ export default function RegisterScreen() {
   >(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const handleRegisterRef = useRef<() => void>(() => {});
 
   const isCheckoutRedirect = Boolean(redirect && redirect.startsWith('/checkout'));
 
@@ -172,6 +174,7 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
+    if (submittingRef.current) return;
     setError('');
 
     const botCheck = validateHiddenBotField(botTrap, formMountedAtRef.current, 600);
@@ -231,12 +234,14 @@ export default function RegisterScreen() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     const result = await register(
       schemaCheck.data.name,
       schemaCheck.data.email,
       schemaCheck.data.password
     );
+    submittingRef.current = false;
     setSubmitting(false);
 
     if (result.success) {
@@ -260,8 +265,21 @@ export default function RegisterScreen() {
       });
       setError(result.error ?? 'Đăng ký thất bại.');
       triggerShake();
-    }
-  };
+      }
+      };
+      handleRegisterRef.current = handleRegister;
+
+      useEffect(() => {
+      if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+      const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        handleRegisterRef.current();
+      }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+      }, []);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -379,7 +397,9 @@ export default function RegisterScreen() {
                       onFocus={() => setFocusedField('name')}
                       onBlur={() => setFocusedField(null)}
                       autoCapitalize="words"
-                    />
+                      returnKeyType="go"
+                      onSubmitEditing={handleRegister}
+                      />
                   </View>
                 </View>
 
@@ -413,7 +433,9 @@ export default function RegisterScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       autoComplete="off"
-                    />
+                      returnKeyType="go"
+                      onSubmitEditing={handleRegister}
+                      />
                   </View>
                 </View>
 
@@ -448,11 +470,13 @@ export default function RegisterScreen() {
                       autoCorrect={false}
                       spellCheck={false}
                       autoComplete="new-password"
-                    />
-                  </View>
-                </View>
+                      returnKeyType="go"
+                      onSubmitEditing={handleRegister}
+                      />
+                      </View>
+                      </View>
 
-                {/* Confirm Password */}
+                      {/* Confirm Password */}
                 <View style={styles.fieldGroup}>
                   <Text style={styles.fieldLabel}>Xác nhận mật khẩu</Text>
                   <View

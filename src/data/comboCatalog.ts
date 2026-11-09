@@ -356,41 +356,48 @@ export function buildCuratedComboProducts(liveProducts: Product[]): Product[] {
       if (mp.image) {
         gallery.push({
           id: `g_${def.id}_${mp.id}_cover`,
-          uri: mp.image,
-          caption: `${mp.name} (Trong ${def.shortTitle})`,
+          label: `${mp.name} (Trong ${def.shortTitle})`,
+          angleTag: mp.name,
+          image: mp.image,
+          zoomMode: 'normal',
         });
       }
       if (Array.isArray(mp.colorOptions)) {
         for (const co of mp.colorOptions.slice(0, 6)) {
-          if (co.image && co.image !== mp.image) {
+          if (co && co.image && co.image !== mp.image) {
             gallery.push({
               id: `g_${def.id}_${mp.id}_${co.id}`,
-              uri: co.image,
-              caption: `${mp.name} — Mẫu: ${co.name}`,
+              label: `${mp.name} — Mẫu: ${co.name}`,
+              angleTag: co.name || mp.name,
+              image: co.image,
+              zoomMode: 'normal',
             });
           }
         }
       }
-    }
+      }
 
-    return {
+      return {
       id: def.id,
       name: def.name,
       price: def.price,
-      category: def.category,
+      category: def.category as any,
       image: primaryImg,
       description: def.description,
       material: def.material,
       color: def.packages[0]?.name || def.shortTitle,
       quantity: 20,
       isMadeToOrder: true,
+      rating: 5.0,
+      reviews: [],
+      isFavorite: false,
+      createdAt: '2026-04-01T00:00:00.000Z',
       tags: ['combo', def.themeBadge, def.shortTitle],
       colorOptions,
       gallery: gallery.length > 0 ? gallery : undefined,
-      secondaryComboImage: secondaryImg || undefined,
-    } as Product;
-  });
-}
+      } as Product;
+      });
+      }
 
 /**
  * Returns quick-pick model names from the member products of a Curated Combo

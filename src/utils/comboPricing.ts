@@ -65,10 +65,11 @@ export function calculateSmartCombo2Price(unitPrice: number): number {
 
 export function isComboColorOption(opt?: ProductColorOption | null): boolean {
   if (!opt) return false;
-  if (opt.id === DEFAULT_COMBO_OPTION_ID || opt.id.startsWith('pkg_')) {
+  const optId = String(opt.id || '');
+  if (optId === DEFAULT_COMBO_OPTION_ID || optId.startsWith('pkg_')) {
     return true;
   }
-  const lower = (opt.name || '').toLowerCase();
+  const lower = String(opt.name || '').toLowerCase();
   return lower.includes('combo');
 }
 
@@ -81,14 +82,22 @@ export function getProductColorOptionsWithCombo(
 ): ProductColorOption[] {
   if (!product) return [];
 
-  const rawColors = (product.colorOptions ?? []).filter((c) => {
-    const lower = (c.name || '').toLowerCase();
-    return (
-      !lower.includes('hộp quà') &&
-      !lower.includes('thư tay') &&
-      !lower.includes('set quà')
-    );
-  });
+  const rawColors = (Array.isArray(product.colorOptions) ? product.colorOptions : [])
+    .filter((c) => {
+      if (!c) return false;
+      const lower = String(c.name || '').toLowerCase();
+      return (
+        !lower.includes('hộp quà') &&
+        !lower.includes('thư tay') &&
+        !lower.includes('set quà')
+      );
+    })
+    .map((c, idx) => ({
+      ...c,
+      id: String(c.id || `c_${idx + 1}`),
+      name: String(c.name || `Mẫu ${idx + 1}`),
+      hex: String(c.hex || '#D4A373'),
+    }));
 
   if (isCuratedComboProductId(product.id)) {
     return rawColors;
