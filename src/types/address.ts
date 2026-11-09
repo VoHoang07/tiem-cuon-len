@@ -3,6 +3,7 @@ export interface Address {
   userId: string;
   fullName: string;
   phone: string;
+  email?: string;
   city: string;
   district: string;
   ward: string;

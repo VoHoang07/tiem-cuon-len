@@ -1,46 +1,47 @@
-import React, { useState, useCallback, useMemo } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  RefreshControl,
-  Alert,
-  useWindowDimensions,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Clipboard from 'expo-clipboard';
-import { Linking } from 'react-native';
-import {
-  ChevronLeft,
-  ShoppingBag,
-  ChevronRight,
-  Trash2,
-  Home,
-  ArrowRightCircle,
-  QrCode,
-  Copy,
-  Check,
-  Truck,
-} from 'lucide-react-native';
-import { useOrders } from '@/store/OrderContext';
+    getOrderStatusColor,
+    getOrderStatusLabel,
+    ORDER_STATUS_NEXT,
+} from '@/constants/orderStatus';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
+import { useOrders } from '@/store/OrderContext';
+import type { Order, OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
 import {
-  formatShippingSlipForClipboard,
-  getCarrierTrackingUrl,
-  getCodCollectAmount,
+    exportOrdersToGoshipCsv,
+    formatShippingSlipForClipboard,
+    getCarrierTrackingUrl,
+    getCodCollectAmount,
 } from '@/utils/shippingTracker';
+import * as Clipboard from 'expo-clipboard';
+import { useRouter } from 'expo-router';
 import {
-  getOrderStatusLabel,
-  getOrderStatusColor,
-  ORDER_STATUS_NEXT,
-} from '@/constants/orderStatus';
-import type { Order, OrderStatus } from '@/types/order';
+    ArrowRightCircle,
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Copy,
+    Home,
+    QrCode,
+    ShoppingBag,
+    Trash2,
+    Truck,
+} from 'lucide-react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+    Alert,
+    FlatList,
+    Linking,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const STATUS_FILTERS: { key: 'ALL' | OrderStatus; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
@@ -331,8 +332,93 @@ export default function OrdersScreen() {
           );
         })}
       </ScrollView>
-    </View>
-  );
+
+      {/* Admin Goship.io Bulk Export & Portal Bar */}
+      {isAdmin && displayOrders.length > 0 && (
+        <View
+          style={{
+            marginHorizontal: isMobile ? 12 : 20,
+            marginBottom: 10,
+            backgroundColor: '#FAF4EC',
+            borderWidth: 1,
+            borderColor: '#E5D5C3',
+            borderRadius: 14,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 8,
+          }}>
+          <View style={{ flex: 1, minWidth: 180 }}>
+            <Text
+              style={{
+                fontSize: 12.5,
+                fontWeight: '800',
+                color: '#3B281E',
+              }}>
+              📦 Công cụ đẩy đơn hàng loạt lên Goship.io ({displayOrders.length} đơn)
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                color: '#6E5643',
+                marginTop: 2,
+              }}>
+              Tải file Excel/CSV chuẩn định dạng Goship (Tên, SĐT, ĐC 3 cấp, Tiền COD, Khai giá, Ghi chú thiệp)
+            </Text>
+          </View>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#4A3427',
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 9,
+              }}
+              onPress={() => exportOrdersToGoshipCsv(displayOrders)}
+              activeOpacity={0.85}>
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: '800',
+                  color: '#FFFDF9',
+                }}>
+                📥 Xuất Excel / CSV Goship ({displayOrders.length} đơn)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#FFFDF9',
+                borderWidth: 1,
+                borderColor: '#D6C2AD',
+                paddingHorizontal: 11,
+                paddingVertical: 7,
+                borderRadius: 9,
+              }}
+              onPress={() => Linking.openURL('https://goship.io')}
+              activeOpacity={0.85}>
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: '800',
+                  color: '#4A3427',
+                }}>
+                🚀 Mở Goship.io ›
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      </View>
+      );
 
   const ListEmpty = (
     <View style={[styles.constrained, styles.empty]}>

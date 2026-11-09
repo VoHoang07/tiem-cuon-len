@@ -73,7 +73,19 @@ export const DEFAULT_PROMO_VOUCHERS: PromoVoucher[] = [
     profitSafeNote:
       'Dành cho đơn lớn ≥429k (giảm ~11.6%), giữ biên lợi nhuận cực tốt.',
   },
-];
+  ];
+
+  export const REVIEW_REWARD_VOUCHER: PromoVoucher = {
+  code: 'TRIAN15K',
+  title: 'Giảm 15.000₫',
+  badge: '🌟 Quà Tri Ân Đánh Giá 5★',
+  description: 'Đơn từ 129.000₫ (Dành tặng khách hàng đã đánh giá sản phẩm)',
+  discountAmount: 15000,
+  minOrderSubtotal: 129000,
+  active: true,
+  profitSafeNote:
+    'An toàn 100%: Thưởng khách quay lại mua lần 2 với đơn ≥129k (~11.6%).',
+  };
 
 const listeners = new Set<() => void>();
 
@@ -126,9 +138,14 @@ export function saveAdminPromoVouchers(vouchers: PromoVoucher[]): void {
 }
 
 export function getActivePromoVouchers(): PromoVoucher[] {
-  return getAllPromoVouchers()
-    .filter((v) => v.active)
-    .sort((a, b) => a.minOrderSubtotal - b.minOrderSubtotal);
+  const base = getAllPromoVouchers().filter((v) => v.active);
+  const wallet = getSavedWalletCodes();
+  const withReward =
+    wallet.includes(REVIEW_REWARD_VOUCHER.code) &&
+    !base.some((v) => v.code === REVIEW_REWARD_VOUCHER.code)
+      ? [...base, REVIEW_REWARD_VOUCHER]
+      : base;
+  return withReward.sort((a, b) => a.minOrderSubtotal - b.minOrderSubtotal);
 }
 
 export function getSavedWalletCodes(): string[] {
@@ -208,7 +225,14 @@ export function evaluatePromoCode(
     };
   }
 
-  const vouchers = getActivePromoVouchers();
+  const vouchers = [
+    ...getActivePromoVouchers(),
+    ...(getActivePromoVouchers().some(
+      (v) => v.code === REVIEW_REWARD_VOUCHER.code
+    )
+      ? []
+      : [REVIEW_REWARD_VOUCHER]),
+  ];
   const matched = vouchers.find((v) => v.code.toUpperCase() === code);
   if (!matched) {
     return {

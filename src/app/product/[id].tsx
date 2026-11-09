@@ -4,6 +4,7 @@ import {
 } from '@/components/ComboStudioLiveView';
 import { ProductCard } from '@/components/ProductCard';
 import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
+import { VintageGiftCardPreview } from '@/components/VintageGiftCardPreview';
 import {
     PD_ADD_TO_CART,
     PD_GO_BACK,
@@ -36,6 +37,7 @@ import {
 import { ComboSlotCandidate } from '@/utils/comboStudioComposer';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
+import { saveVoucherToWallet } from '@/utils/promoEngine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
     ChevronLeft,
@@ -506,11 +508,15 @@ export default function ProductDetailScreen() {
     };
 
     addReview(product.id, newReview);
+    saveVoucherToWallet('TRIAN15K');
     setReviewText('');
     setReviewRating(5);
     setShowReviewForm(false);
-    Alert.alert('Thành công', 'Đánh giá đã được gửi.');
-  };
+    Alert.alert(
+      '🎉 Cảm ơn bạn đã đánh giá!',
+      'Tiệm Cuộn Len tặng bạn mã TRIAN15K (Giảm 15.000₫ cho đơn từ 129.000₫) — Mã đã được lưu tự động vào Ví Voucher của bạn!'
+    );
+    };
 
   const maxOrderQty =
     product.isMadeToOrder !== false ? 99 : Math.max(1, product.quantity);
@@ -1263,53 +1269,12 @@ export default function ProductDetailScreen() {
                 })}
               </View>
 
-              {/* Personalization Input when Set Quà Tặng (+15.000₫) is active */}
+              {/* Live Vintage Air-Mail Postcard Preview when Set Quà Tặng Đặc Biệt (+25.000₫) is active */}
               {activeAccessory?.id === 'gift_box_letter' && (
-                <View
-                  style={{
-                    marginTop: 4,
-                    backgroundColor: '#FDF8F2',
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: '#E5D3C0',
-                    padding: 12,
-                    gap: 6,
-                  }}>
-                  <Text
-                    style={{
-                      fontSize: 12.5,
-                      fontWeight: '700',
-                      color: '#4A3728',
-                    }}>
-                    💌 Ghi chú nội dung thiệp (nếu có)
-                  </Text>
-                  <TextInput
-                    style={{
-                      backgroundColor: '#FFFFFF',
-                      borderWidth: 1,
-                      borderColor: '#E2D4C5',
-                      borderRadius: 9,
-                      paddingHorizontal: 11,
-                      paddingVertical: 9,
-                      fontSize: 13,
-                      color: '#3B2A1E',
-                      minHeight: 42,
-                    }}
-                    placeholder="Nhập lời chúc bạn muốn tiệm viết tay lên thiệp..."
-                    placeholderTextColor="#A3907E"
-                    value={giftCardNote}
-                    onChangeText={setGiftCardNote}
-                    maxLength={220}
-                    multiline
-                  />
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: '#8C7460',
-                    }}>
-                    ✨ Tiệm sẽ viết tay lời nhắn của bạn lên thiệp vintage đặt trong hộp quà.
-                  </Text>
-                </View>
+                <VintageGiftCardPreview
+                  value={giftCardNote}
+                  onChange={setGiftCardNote}
+                />
               )}
             </View>
 

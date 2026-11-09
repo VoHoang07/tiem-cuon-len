@@ -9,8 +9,10 @@ import { useOrders } from '@/store/OrderContext';
 import { useShop } from '@/store/ShopContext';
 import type { OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
+import { saveVoucherToWallet } from '@/utils/promoEngine';
 import {
     ADMIN_BOOKING_PORTALS,
+    exportOrdersToGoshipCsv,
     formatShippingSlipForClipboard,
     getCarrierTrackingUrl,
     getCodCollectAmount,
@@ -475,7 +477,89 @@ export default function OrderDetailScreen() {
                       ? 'Đã chép phiếu giao hàng! Dán vào Goship / Viettel Post / GHTK'
                       : '📋 Bước 1: Chép toàn bộ thông tin để tạo đơn Ship'}
                   </Text>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+
+                  {/* Goship.io 1-Tap Field Copy Grid & CSV Export */}
+                  <View
+                  style={{
+                    backgroundColor: '#FAF4EC',
+                    borderWidth: 1,
+                    borderColor: '#E5D5C3',
+                    borderRadius: 10,
+                    padding: 9,
+                    gap: 6,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '800',
+                      color: '#5C4033',
+                    }}>
+                    ⚡ Chép nhanh từng ô cho Goship.io / Xuất file CSV:
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      flexWrap: 'wrap',
+                      gap: 6,
+                    }}>
+                    {[
+                      {
+                        key: 'gs_name',
+                        label: '👤 Chép Tên',
+                        val: order.shippingAddress?.fullName || 'Khách hàng',
+                      },
+                      {
+                        key: 'gs_phone',
+                        label: '📞 Chép SĐT',
+                        val: order.shippingAddress?.phone || '',
+                      },
+                      {
+                        key: 'gs_detail',
+                        label: '🏠 Chép ĐC chi tiết',
+                        val: order.shippingAddress?.detailAddress || fullAddress,
+                      },
+                      {
+                        key: 'gs_cod',
+                        label: `💰 Chép COD (${codAmount})`,
+                        val: String(codAmount),
+                      },
+                      {
+                        key: 'gs_items',
+                        label: '🧶 Chép Tên SP & Thiệp',
+                        val: order.items
+                          .map((i) => {
+                            const c = i.product.giftCardNote
+                              ? ` [Thiệp: ${i.product.giftCardNote}]`
+                              : '';
+                            return `${i.product.name} (x${i.quantity})${c}`;
+                          })
+                          .join(', '),
+                      },
+                    ].map((btn) => (
+                      <TouchableOpacity
+                        key={btn.key}
+                        style={styles.portalChip}
+                        onPress={() => handleCopy(btn.val, btn.key)}
+                        activeOpacity={0.8}>
+                        <Text style={styles.portalChipText}>
+                          {copiedKey === btn.key ? '✅ Đã chép!' : btn.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity
+                      style={[
+                        styles.portalChip,
+                        { backgroundColor: '#4A3427', borderColor: '#4A3427' },
+                      ]}
+                      onPress={() => exportOrdersToGoshipCsv([order])}
+                      activeOpacity={0.8}>
+                      <Text style={[styles.portalChipText, { color: '#FFFDF9' }]}>
+                        📥 Tải CSV Goship.io
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  </View>
 
                 {/* Quick Portal Shortcuts */}
                 <View style={styles.portalRow}>
@@ -555,7 +639,7 @@ export default function OrderDetailScreen() {
 
                 {savedNotice && (
                   <Text style={styles.savedNoticeText}>
-                    ✅ Đã đồng bộ mã vận đơn sang màn hình của khách hàng!
+                    ✅ Đã đồng bộ mã vận đơn & tự động gửi Email báo mã vận đơn tới Gmail khách hàng!
                   </Text>
                 )}
               </View>
@@ -673,11 +757,50 @@ export default function OrderDetailScreen() {
                           ))}
                         </View>
                       </View>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          flexWrap: 'wrap',
+                          gap: 6,
+                          marginBottom: 4,
+                        }}>
+                        {[
+                          '🧶 Đường móc tỉ mỉ, chắc tay',
+                          '🎁 Hộp quà & thiệp rất xinh',
+                          '🚚 Giao hàng nhanh, đóng gói kỹ',
+                          '💝 Giống mẫu 100%, sẽ ủng hộ tiếp',
+                        ].map((tag) => (
+                          <TouchableOpacity
+                            key={tag}
+                            onPress={() =>
+                              setItemComment((prev) =>
+                                prev ? `${prev}. ${tag}` : tag
+                              )
+                            }
+                            style={{
+                              backgroundColor: '#FFFBEB',
+                              borderWidth: 1,
+                              borderColor: '#FDE68A',
+                              borderRadius: 999,
+                              paddingHorizontal: 9,
+                              paddingVertical: 4,
+                            }}>
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: '700',
+                                color: '#92400E',
+                              }}>
+                              + {tag}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                       <TextInput
                         style={styles.inlineReviewInput}
                         value={itemComment}
                         onChangeText={setItemComment}
-                        placeholder="Chia sẻ vài câu cảm nhận về mẫu len này nhé..."
+                        placeholder="Chia sẻ vài câu cảm nhận về mẫu len này để nhận ngay mã TRIAN15K (-15.000₫) nhé..."
                         placeholderTextColor={COLORS.lightText}
                         multiline
                       />
@@ -696,36 +819,67 @@ export default function OrderDetailScreen() {
                             comment: text,
                             date: new Date().toISOString(),
                           });
+                          saveVoucherToWallet('TRIAN15K');
                           setReviewedItemIds((prev) => ({ ...prev, [item.product.id]: true }));
                           setActiveReviewItemId(null);
                           setItemComment('');
                         }}>
                         <Text style={styles.submitInlineReviewText}>
-                          Gửi đánh giá sản phẩm ({itemRating} ★)
+                          Gửi đánh giá & Nhận mã TRIAN15K (-15k) ({itemRating} ★)
                         </Text>
                       </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
+                      </View>
+                      )}
+                      </View>
+                      );
+                      })}
+                      </View>
 
-          {/* 3B. Shop Review Box when Order is Completed ('Hoàn thành') */}
-          {order.status === 'Hoàn thành' && (
-            <View style={[styles.section, isMobile && styles.sectionMobile]}>
-              <Text style={styles.sectionTitle}>⭐ Đánh giá Shop (Tiệm Cuộn Len)</Text>
-              {shopReviewed ? (
-                <View style={styles.shopReviewedBanner}>
-                  <Text style={styles.shopReviewedText}>
-                    ✅ Cảm ơn bạn đã gửi đánh giá {shopRating} ★ cho Tiệm Cuộn Len! Đánh giá của bạn đã hiển thị ở mục Đánh giá Shop trên trang chủ.
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.inlineReviewBox}>
-                  <View style={styles.starsPickerRow}>
-                    <Text style={styles.starsPickerLabel}>Chấm sao dịch vụ & đóng gói của Tiệm:</Text>
-                    <View style={styles.starsRow}>
+                      {/* 3B. Shop Review Box & TRIAN15K Loyalty Voucher Reward when Order is Completed ('Hoàn thành') */}
+                      {order.status === 'Hoàn thành' && (
+                      <View style={[styles.section, isMobile && styles.sectionMobile]}>
+                      <View
+                      style={{
+                      backgroundColor: '#FFFBEB',
+                      borderWidth: 1,
+                      borderColor: '#FCD34D',
+                      borderRadius: 12,
+                      padding: 10,
+                      marginBottom: 8,
+                      gap: 4,
+                      }}>
+                      <Text
+                      style={{
+                      fontSize: 12.5,
+                      fontWeight: '900',
+                      color: '#92400E',
+                      }}>
+                      🎁 Quà Tri Ân Khách Đánh Giá 5 Sao: Tặng Mã TRIAN15K (-15.000₫)
+                      </Text>
+                      <Text
+                      style={{
+                      fontSize: 11.5,
+                      color: '#78350F',
+                      lineHeight: 16,
+                      }}>
+                      Ngay khi bạn gửi đánh giá sản phẩm hoặc đánh giá Shop, hệ thống tự động mở khóa và lưu mã{' '}
+                      <Text style={{ fontWeight: '900' }}>TRIAN15K</Text> (Giảm 15.000₫ cho đơn từ 129.000₫) vào Ví Voucher của bạn!
+                      </Text>
+                      </View>
+                      <Text style={styles.sectionTitle}>⭐ Đánh giá Shop (Tiệm Cuộn Len)</Text>
+                      {shopReviewed || Object.keys(reviewedItemIds).length > 0 ? (
+                      <View style={styles.shopReviewedBanner}>
+                      <Text style={styles.shopReviewedText}>
+                      🎉 Cảm ơn bạn đã đánh giá! Tiệm đã tự động lưu mã quà tặng{' '}
+                      <Text style={{ fontWeight: '900' }}>TRIAN15K (-15.000₫)</Text>{' '}
+                      vào Ví Voucher của bạn cho lần mua tiếp theo!
+                      </Text>
+                      </View>
+                      ) : (
+                      <View style={styles.inlineReviewBox}>
+                      <View style={styles.starsPickerRow}>
+                      <Text style={styles.starsPickerLabel}>Chấm sao dịch vụ & đóng gói của Tiệm:</Text>
+                      <View style={styles.starsRow}>
                       {[1, 2, 3, 4, 5].map((st) => (
                         <TouchableOpacity key={st} onPress={() => setShopRating(st)}>
                           <Star
@@ -735,19 +889,19 @@ export default function OrderDetailScreen() {
                           />
                         </TouchableOpacity>
                       ))}
-                    </View>
-                  </View>
-                  <TextInput
-                    style={styles.inlineReviewInput}
-                    value={shopComment}
-                    onChangeText={setShopComment}
-                    placeholder="Nhận xét về cách tư vấn, đóng gói hộp quà và tốc độ giao hàng của Tiệm..."
-                    placeholderTextColor={COLORS.lightText}
-                    multiline
-                  />
-                  <TouchableOpacity
-                    style={styles.submitInlineReviewBtn}
-                    onPress={() => {
+                      </View>
+                      </View>
+                      <TextInput
+                      style={styles.inlineReviewInput}
+                      value={shopComment}
+                      onChangeText={setShopComment}
+                      placeholder="Nhận xét về cách tư vấn, đóng gói hộp quà và tốc độ giao hàng của Tiệm..."
+                      placeholderTextColor={COLORS.lightText}
+                      multiline
+                      />
+                      <TouchableOpacity
+                      style={styles.submitInlineReviewBtn}
+                      onPress={() => {
                       const text =
                         shopComment.trim() ||
                         'Shop tư vấn nhiệt tình, đóng gói hộp quà cẩn thận 5 sao!';
@@ -762,16 +916,17 @@ export default function OrderDetailScreen() {
                         comment: text,
                         date: new Date().toISOString(),
                       });
+                      saveVoucherToWallet('TRIAN15K');
                       setShopReviewed(true);
-                    }}>
-                    <Text style={styles.submitInlineReviewText}>
-                      Gửi đánh giá Shop ({shopRating} ★)
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
+                      }}>
+                      <Text style={styles.submitInlineReviewText}>
+                      Gửi đánh giá Shop & Nhận mã TRIAN15K (-15k) ({shopRating} ★)
+                      </Text>
+                      </TouchableOpacity>
+                      </View>
+                      )}
+                      </View>
+                      )}
 
           {/* 4. Payment & Order Total */}
           <View style={[styles.section, isMobile && styles.sectionMobile]}>

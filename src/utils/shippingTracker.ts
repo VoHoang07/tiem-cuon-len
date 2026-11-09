@@ -156,7 +156,103 @@ export function formatShippingSlipForClipboard(order: Order): string {
     `🛡️ Ô "Khai giá" (Giá trị hàng): ${formatVND(itemsValue || order.total)}`,
     `⚖️ Cân nặng gợi ý: 250g • Loại hàng: Đồ chơi / Quà tặng`,
     `🧶 Sản phẩm (${order.items.reduce((s, i) => s + i.quantity, 0)} món): ${itemsText}`,
-  ]
+    ]
     .filter(Boolean)
     .join('\n');
-}
+    }
+
+    function escapeCsvCell(val: unknown): string {
+    const s = String(val ?? '').replace(/\r?\n/g, ' ');
+    if (s.includes(',') || s.includes('"') || s.includes(';')) {
+    return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+    }
+
+    /**
+    * Exports a list of orders into a UTF-8 BOM CSV file formatted specifically for Goship.io / Excel
+    * so the Admin can import multiple orders to Goship.io or print packing slips in 1 click.
+    */
+    export function exportOrdersToGoshipCsv(orders: Order[]): boolean {
+    if (!orders || orders.length === 0) return false;
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+    }
+
+    const headers = [
+    'Mã đơn hàng',
+    'Tên người nhận',
+    'Số điện thoại',
+    'Tỉnh / Thành phố',
+    'Quận / Huyện',
+    'Phường / Xã',
+    'Địa chỉ chi tiết',
+    'Tiền thu hộ COD (VNĐ)',
+    'Khai giá / Giá trị hàng (VNĐ)',
+    'Khối lượng (gram)',
+    'Chiều dài (cm)',
+    'Chiều rộng (cm)',
+    'Chiều cao (cm)',
+    'Người trả phí',
+    'Cho xem hàng (Đồng kiểm)',
+    'Tên sản phẩm & Ghi chú thiệp',
+    'Trạng thái hiện tại',
+    ];
+
+    const rows = orders.map((order) => {
+    const addr = order.shippingAddress;
+    const codAmount = getCodCollectAmount(order);
+    const itemsValue =
+      order.items.reduce(
+        (sum, i) => sum + (i.price ?? i.product.price) * i.quantity,
+        0
+      ) || order.total;
+    const itemsText = order.items
+      .map((i) => {
+        const card = i.product.giftCardNote
+          ? ` [Thiệp: ${i.product.giftCardNote}]`
+          : '';
+        return `${i.product.name} (x${i.quantity})${card}`;
+      })
+      .join(' + ');
+    const noteText = addr?.note ? ` | Ghi chú: ${addr.note}` : '';
+
+    return [
+      order.id,
+      addr?.fullName || 'Khách hàng',
+      addr?.phone ? `'${addr.phone}` : '',
+      addr?.city || '',
+      addr?.district || '',
+      addr?.ward || '',
+      addr?.detailAddress || '',
+      codAmount,
+      itemsValue,
+      250,
+      15,
+      15,
+      10,
+      'Người gửi trả (Shop trả)',
+      'Cho xem hàng không thử',
+      `${itemsText}${noteText}`,
+      order.status,
+    ]
+      .map(escapeCsvCell)
+      .join(',');
+    });
+
+    // Prepend UTF-8 BOM (\uFEFF) so Microsoft Excel & Goship.io read Vietnamese characters properly
+    const csvContent = `\uFEFF${headers.map(escapeCsvCell).join(',')}\n${rows.join(
+    '\n'
+    )}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `goship-tiem-cuon-len-${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    return true;
+    }

@@ -697,6 +697,7 @@ async function logServerAuditEvent(req, payload = {}) {
  */
 const AUTHORITATIVE_PROMO_VOUCHERS = {
   CHAOBAN10K: { minOrderSubtotal: 99000, discountAmount: 10000 },
+  TRIAN15K: { minOrderSubtotal: 129000, discountAmount: 15000 },
   KHAITRUONG20K: { minOrderSubtotal: 179000, discountAmount: 20000 },
   CUONLEN35K: { minOrderSubtotal: 299000, discountAmount: 35000 },
   VIP50K: { minOrderSubtotal: 429000, discountAmount: 50000 },
@@ -864,10 +865,188 @@ async function sendOrderNotificationServer(order) {
           .catch(() => false)
       )
     );
+
+    // Also send warm Order Confirmation Email directly to the Customer's Gmail if available
+    const candidateCustEmail = String(addr.email || order.customerEmail || '')
+      .trim()
+      .toLowerCase();
+    const isRealCustomerEmail =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateCustEmail) &&
+      !candidateCustEmail.endsWith('@guest.tiemcuonlen.vn') &&
+      !candidateCustEmail.endsWith('@phone.tiemcuonlen.vn') &&
+      !SERVER_OWNER_NOTIFY_EMAILS.includes(candidateCustEmail);
+
+    if (isRealCustomerEmail) {
+      const custLines = [
+        `💝 Cảm ơn ${addr.fullName || 'bạn'} đã đặt hàng tại Tiệm Cuộn Len!`,
+        `📦 Chi tiết đơn hàng #${order.id}:`,
+        ...itemLines,
+        addr.note ? `💌 Ghi chú / Lời chúc trên thiệp: "${addr.note}"` : null,
+        `👉 Xem tiến độ đơn hàng trực tuyến: https://www.tiemcuonlen.shop/orders/${order.id}`,
+      ].filter(Boolean);
+
+      await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://www.tiemcuonlen.shop',
+        },
+        body: JSON.stringify({
+          service_id: SERVER_EMAILJS_SERVICE_ID,
+          template_id: SERVER_EMAILJS_TEMPLATE_ID,
+          user_id: SERVER_EMAILJS_PUBLIC_KEY,
+          template_params: {
+            ...baseTemplateParams,
+            items_list: custLines.join('\n'),
+            subject: `🧶 Xác nhận đơn hàng #${order.id} tại Tiệm Cuộn Len`,
+            email: candidateCustEmail,
+          },
+        }),
+      }).catch(() => false);
+    }
+
     return results.some(Boolean);
     } catch {
     return false;
     }
+    }
+
+    /**
+     * Sends automated lifecycle emails to the Customer when:
+     * - `eventType === 'shipped'`: Admin marks order as 'Đang giao' or attaches a Tracking Code
+     * - `eventType === 'completed'`: Admin marks order as 'Hoàn thành' (includes TRIAN15K gift voucher)
+     */
+    async function sendCustomerOrderLifecycleEmailServer(order, eventType) {
+      if (!order || !order.id) return false;
+      if (
+        !SERVER_EMAILJS_SERVICE_ID ||
+        !SERVER_EMAILJS_TEMPLATE_ID ||
+        !SERVER_EMAILJS_PUBLIC_KEY
+      ) {
+        return false;
+      }
+
+      const addr = order.shippingAddress || {};
+      const candidateCustEmail = String(addr.email || order.customerEmail || '')
+        .trim()
+        .toLowerCase();
+      const isRealCustomerEmail =
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateCustEmail) &&
+        !candidateCustEmail.endsWith('@guest.tiemcuonlen.vn') &&
+        !candidateCustEmail.endsWith('@phone.tiemcuonlen.vn');
+
+      if (!isRealCustomerEmail) return false;
+
+      try {
+        const formatPrice = (n) =>
+          `${Math.round(Number(n) || 0).toLocaleString('vi-VN')}đ`;
+        const nowStr = new Date().toLocaleString('vi-VN', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+
+        const itemNames = (order.items || [])
+          .map(
+            (ci) =>
+              `${(ci.product && ci.product.name) || 'Sản phẩm'} (x${
+                Number(ci.quantity) || 1
+              })`
+          )
+          .join(', ');
+
+        if (eventType === 'shipped') {
+          const carrier = addr.shippingCarrier || 'Đơn vị vận chuyển';
+          const tracking = addr.trackingCode || 'Đang cập nhật';
+          const lines = [
+            `🚚 Tin vui! Kiện hàng thủ công #${order.id} của ${
+              addr.fullName || 'bạn'
+            } đã được Tiệm Cuộn Len đóng gói cẩn thận và bàn giao cho bưu tá!`,
+            `🏷️ Đơn vị vận chuyển: ${carrier}`,
+            `🔢 Mã vận đơn: ${tracking}`,
+            `🧶 Sản phẩm: ${itemNames}`,
+            `🛡️ Lưu ý: Bạn được quyền Mở Hộp Kiểm Tra Hàng (Đồng kiểm 100%) trước khi nhận nhé!`,
+            `👉 Tra cứu hành trình đơn hàng tại: https://www.tiemcuonlen.shop/orders/${order.id}`,
+          ];
+
+          const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Origin: 'https://www.tiemcuonlen.shop',
+            },
+            body: JSON.stringify({
+              service_id: SERVER_EMAILJS_SERVICE_ID,
+              template_id: SERVER_EMAILJS_TEMPLATE_ID,
+              user_id: SERVER_EMAILJS_PUBLIC_KEY,
+              template_params: {
+                order_id: String(order.id),
+                customer_name: String(addr.fullName || 'Khách hàng'),
+                customer_phone: String(addr.phone || ''),
+                customer_address: [
+                  addr.detailAddress,
+                  addr.ward,
+                  addr.district,
+                  addr.city,
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+                items_list: lines.join('\n\n'),
+                total: formatPrice(order.total),
+                payment_method: `${carrier} • Mã vận đơn: ${tracking}`,
+                order_date: nowStr,
+                subject: `🚚 Đơn hàng #${order.id} đang giao đến bạn! (Mã vận đơn: ${tracking})`,
+                email: candidateCustEmail,
+              },
+            }),
+          });
+          return res.ok;
+        }
+
+        if (eventType === 'completed') {
+          const lines = [
+            `💝 Cảm ơn ${
+              addr.fullName || 'bạn'
+            } đã tin tưởng và đón nhận sản phẩm thủ công từ Tiệm Cuộn Len!`,
+            `🌟 Mời bạn ghé trang đơn hàng để đánh giá 5 sao kèm hình ảnh thực tế và nhận ngay Mã Quà Tri Ân giảm 15.000₫ cho lần mua tiếp theo:`,
+            `🎁 Mã Voucher Tri Ân của bạn: TRIAN15K (Giảm 15.000₫ cho đơn từ 129.000₫)`,
+            `👉 Đánh giá & lưu mã ngay tại: https://www.tiemcuonlen.shop/orders/${order.id}`,
+          ];
+
+          const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Origin: 'https://www.tiemcuonlen.shop',
+            },
+            body: JSON.stringify({
+              service_id: SERVER_EMAILJS_SERVICE_ID,
+              template_id: SERVER_EMAILJS_TEMPLATE_ID,
+              user_id: SERVER_EMAILJS_PUBLIC_KEY,
+              template_params: {
+                order_id: String(order.id),
+                customer_name: String(addr.fullName || 'Khách hàng'),
+                customer_phone: String(addr.phone || ''),
+                customer_address: 'Đơn hàng đã giao thành công',
+                items_list: lines.join('\n\n'),
+                total: '🎁 Tặng mã: TRIAN15K (-15.000₫)',
+                payment_method: 'Hoàn thành đơn hàng',
+                order_date: nowStr,
+                subject: `💝 Cảm ơn bạn! Tiệm Cuộn Len tặng bạn mã TRIAN15K (-15.000₫)`,
+                email: candidateCustEmail,
+              },
+            }),
+          });
+          return res.ok;
+        }
+
+        return false;
+      } catch {
+        return false;
+      }
     }
 
     /**
@@ -1101,6 +1280,7 @@ async function sendOrderNotificationServer(order) {
     logServerAuditEvent,
     withGlobalErrorHandler,
     sendOrderNotificationServer,
+    sendCustomerOrderLifecycleEmailServer,
     sendChatNotificationServer,
     sendChatReplyToCustomerServer,
     signBlockedIpRecord,

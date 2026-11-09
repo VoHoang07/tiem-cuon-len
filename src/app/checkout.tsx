@@ -1,5 +1,6 @@
 import { HiddenBotField } from '@/components/HiddenBotField';
 import { PromoMilestoneAndPickerCard } from '@/components/PromoMilestoneAndPickerCard';
+import { VintageGiftCardPreview } from '@/components/VintageGiftCardPreview';
 import {
     CHECKOUT_DELIVERY,
     CHECKOUT_ORDER_SUMMARY,
@@ -130,10 +131,33 @@ export default function CheckoutScreen() {
   const [howFoundShop, setHowFoundShop] = useState<string>(() =>
     getVisitorSelfReportedSource()
   );
+  const [customerEmailInput, setCustomerEmailInput] = useState<string>(() => {
+    const e = (user?.email || '').trim().toLowerCase();
+    if (
+      e &&
+      !e.endsWith('@guest.tiemcuonlen.vn') &&
+      !e.endsWith('@phone.tiemcuonlen.vn')
+    ) {
+      return e;
+    }
+    return '';
+  });
   const [appliedPromo, setAppliedPromo] = useState<{
     code: string;
     discountAmount: number;
   }>({ code: '', discountAmount: 0 });
+
+  useEffect(() => {
+    const e = (user?.email || '').trim().toLowerCase();
+    if (
+      e &&
+      !e.endsWith('@guest.tiemcuonlen.vn') &&
+      !e.endsWith('@phone.tiemcuonlen.vn') &&
+      !customerEmailInput
+    ) {
+      setCustomerEmailInput(e);
+    }
+  }, [user?.email]);
 
   useEffect(() => {
     setBuyNowGiftOverride(null);
@@ -740,6 +764,7 @@ export default function CheckoutScreen() {
       total: checkoutTotal,
       shippingAddress: {
         ...selectedAddress,
+        email: customerEmailInput.trim().toLowerCase() || undefined,
         note: combinedAddressNote || selectedAddress.note,
         shippingMethod: shippingMethodLabel,
         shippingFee,
@@ -998,9 +1023,45 @@ export default function CheckoutScreen() {
                           }}>
                           🛡️ <Text style={{ fontWeight: '800' }}>Cam kết Đồng Kiểm 100%:</Text> Bạn được mở hộp kiểm tra đúng mẫu len trước khi thanh toán. SĐT của bạn được bảo mật tuyệt đối, không gọi quảng cáo.
                         </Text>
-                      </View>
-                      );
-                      })()}
+                        <View
+                          style={{
+                            marginTop: 6,
+                            paddingTop: 7,
+                            borderTopWidth: 1,
+                            borderTopColor: pCheck.valid ? '#A7F3D0' : '#FECACA',
+                            gap: 4,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: '800',
+                              color: '#065F46',
+                            }}>
+                            📧 Gmail nhận hóa đơn xác nhận & báo mã vận đơn tự động:
+                          </Text>
+                          <TextInput
+                            style={{
+                              backgroundColor: '#FFFFFF',
+                              borderWidth: 1,
+                              borderColor: '#6EE7B7',
+                              borderRadius: 8,
+                              paddingHorizontal: 10,
+                              paddingVertical: 7,
+                              fontSize: 12.5,
+                              color: '#1E293B',
+                              minWidth: 0,
+                            }}
+                            placeholder="Nhập Gmail của bạn (VD: tenban@gmail.com) để nhận mã vận đơn..."
+                            placeholderTextColor="#94A3B8"
+                            value={customerEmailInput}
+                            onChangeText={setCustomerEmailInput}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                          />
+                        </View>
+                        </View>
+                        );
+                        })()}
 
                   {userAddresses.length > 1 && (
                     <View style={styles.addressList}>
@@ -1442,31 +1503,18 @@ export default function CheckoutScreen() {
                           • Hộp carton nắp gài vintage, ruy băng & lót rơm thơm giấy cao cấp{'\n'}
                           • Thiệp viết tay + 🎁 Tặng kèm 1 món quà len mini bí mật bất ngờ từ tiệm
                         </Text>
-                        <TextInput
-                          style={{
-                            backgroundColor: '#FFFFFF',
-                            borderWidth: 1,
-                            borderColor: '#E2D4C5',
-                            borderRadius: 8,
-                            paddingHorizontal: 10,
-                            paddingVertical: 6,
-                            fontSize: 12,
-                            color: '#3B2A1E',
-                            minWidth: 0,
-                          }}
-                          placeholder="💌 Ghi chú nội dung thiệp (nếu có)..."
-                          placeholderTextColor="#A3907E"
+                        <VintageGiftCardPreview
+                          compact
                           value={currentGiftNote}
-                          onChangeText={(txt) => {
+                          onChange={(txt) => {
                             if (isBuyNow) {
                               setBuyNowGiftNote(txt);
                             } else {
                               updateCartItemPackaging(item.product.id, true, txt);
                             }
                           }}
-                          maxLength={220}
                         />
-                      </View>
+                        </View>
                     )}
                   </View>
                 );

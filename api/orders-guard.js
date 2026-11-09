@@ -11,7 +11,8 @@ const {
   logServerAuditEvent,
   withGlobalErrorHandler,
   sendOrderNotificationServer,
-} = require('./_securityCore');
+  sendCustomerOrderLifecycleEmailServer,
+  } = require('./_securityCore');
 
 const ALLOWED_STATUSES = new Set([
   'pending_payment',
@@ -246,6 +247,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       'id',
       'fullName',
       'phone',
+      'email',
       'city',
       'district',
       'ward',
@@ -316,6 +318,19 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       ? orderIdRaw
       : `CUONLEN-${Date.now().toString().slice(-8)}-${Math.random().toString(36).slice(2, 6)}`;
 
+    const rawCustEmail = sanitizeTextServer(
+      rawAddr.email || authUser.email || '',
+      120
+    )
+      .trim()
+      .toLowerCase();
+    const resolvedCustEmail =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawCustEmail) &&
+      !rawCustEmail.endsWith('@guest.tiemcuonlen.vn') &&
+      !rawCustEmail.endsWith('@phone.tiemcuonlen.vn')
+        ? rawCustEmail
+        : undefined;
+
     const finalOrder = {
       id: orderId,
       userId: authUser.id, // Enforced from verified JWT (Anti-IDOR)
@@ -326,6 +341,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         userId: authUser.id,
         fullName: sanitizeTextServer(rawAddr.fullName, 80),
         phone: cleanPhone,
+        email: resolvedCustEmail,
         city,
         district: sanitizeTextServer(rawAddr.district, 80),
         ward: sanitizeTextServer(rawAddr.ward, 80),
@@ -497,6 +513,36 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       },
       body: JSON.stringify(updatePayload),
     });
+
+    // Automatically notify the customer by Email when order is Shipped or Completed
+    if (authUser.isAdmin) {
+      const mergedOrder = {
+        ...existingOrder,
+        status: nextStatus,
+        shippingAddress:
+          updatePayload.shippingAddress || existingOrder.shippingAddress,
+      };
+      const prevTracking =
+        (existingOrder.shippingAddress &&
+          existingOrder.shippingAddress.trackingCode) ||
+        '';
+      const newTracking =
+        (mergedOrder.shippingAddress &&
+          mergedOrder.shippingAddress.trackingCode) ||
+        '';
+
+      if (
+        (nextStatus === 'Đang giao' && existingOrder.status !== 'Đang giao') ||
+        (newTracking && newTracking !== prevTracking)
+      ) {
+        await sendCustomerOrderLifecycleEmailServer(mergedOrder, 'shipped');
+      } else if (
+        nextStatus === 'Hoàn thành' &&
+        existingOrder.status !== 'Hoàn thành'
+      ) {
+        await sendCustomerOrderLifecycleEmailServer(mergedOrder, 'completed');
+      }
+    }
 
     return res.status(200).json({
       success: true,
