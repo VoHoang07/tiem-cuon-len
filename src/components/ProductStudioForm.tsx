@@ -523,6 +523,7 @@ export function ProductStudioForm({
   const [studioPreset, setStudioPreset] = useState<StudioRetouchPreset>('vivid_stitch_1x1');
   const [isStudioBusy, setIsStudioBusy] = useState<boolean>(false);
   const [previewPackagingId, setPreviewPackagingId] = useState<'no_box' | 'gift_box_letter'>('no_box');
+  const [showAllSwatches, setShowAllSwatches] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const draftHydratedRef = useRef(false);
 
@@ -1469,9 +1470,10 @@ export function ProductStudioForm({
                 borderRadius: 14,
                 borderWidth: 1.5,
                 borderColor: '#E6D5C3',
-                padding: 12,
-                gap: 10,
-                marginBottom: 8,
+                padding: 11,
+                gap: 8,
+                marginTop: 10,
+                marginBottom: 4,
               }}>
               <View
                 style={{
@@ -1481,43 +1483,53 @@ export function ProductStudioForm({
                   flexWrap: 'wrap',
                   gap: 6,
                 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Sparkles size={15} color="#B45309" />
+                <View
+                  style={{
+                    flex: 1,
+                    minWidth: 180,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}>
+                  <Sparkles size={14} color="#B45309" />
                   <Text
                     style={{
-                      fontSize: 12.5,
+                      flex: 1,
+                      fontSize: 12,
                       fontWeight: '800',
                       color: '#3B281E',
                     }}>
-                    🪄 Phòng Lab Ảnh Studio Tự Động (Giữ nguyên 100% sản phẩm thật)
+                    🪄 Xử lý Ảnh Studio & Ghép Ảnh Bìa Tự Động
                   </Text>
                 </View>
                 {isStudioBusy && (
                   <Text
                     style={{
-                      fontSize: 11.5,
+                      fontSize: 11,
                       fontWeight: '800',
                       color: '#D97706',
                     }}>
-                    ⏳ Đang xử lý Studio HD...
+                    ⏳ Đang xử lý...
                   </Text>
                 )}
               </View>
 
-              {/* Row 1: Studio Backdrop & Yarn-Stitch Sharpening Presets */}
+              {/* Row 1: Studio Backdrop & Yarn-Stitch Sharpening Presets (Wrapped cleanly, zero clipping) */}
               <View style={{ gap: 5 }}>
                 <Text
                   style={{
-                    fontSize: 11.5,
+                    fontSize: 11,
                     fontWeight: '700',
                     color: '#6E5643',
                   }}>
-                  1. Chọn chế độ Làm nét mũi len & Ghép phông nền Studio:
+                  1. Làm nét mũi len & Đổi phông nền:
                 </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: 6,
+                  }}>
                   {STUDIO_RETOUCH_PRESETS.map((p) => {
                     const active = studioPreset === p.id;
                     return (
@@ -1527,16 +1539,16 @@ export function ProductStudioForm({
                         disabled={isStudioBusy}
                         activeOpacity={0.82}
                         style={{
-                          paddingHorizontal: 11,
-                          paddingVertical: 6.5,
-                          borderRadius: 999,
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          borderRadius: 9,
                           backgroundColor: active ? '#4A3427' : '#F7EFE6',
                           borderWidth: 1,
                           borderColor: active ? '#4A3427' : '#E2D2C1',
                         }}>
                         <Text
                           style={{
-                            fontSize: 11.5,
+                            fontSize: 11,
                             fontWeight: '800',
                             color: active ? '#FFFDF9' : '#4A3427',
                           }}>
@@ -1545,7 +1557,7 @@ export function ProductStudioForm({
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
 
                 {colorOptions.length > 1 && (
                   <TouchableOpacity
@@ -1557,38 +1569,38 @@ export function ProductStudioForm({
                       backgroundColor: '#FEF3C7',
                       borderWidth: 1,
                       borderColor: '#F59E0B',
-                      borderRadius: 9,
-                      paddingVertical: 7,
+                      borderRadius: 8,
+                      paddingVertical: 6,
                       paddingHorizontal: 10,
                       alignItems: 'center',
                     }}>
                     <Text
                       style={{
-                        fontSize: 11.5,
+                        fontSize: 11,
                         fontWeight: '800',
                         color: '#92400E',
                       }}>
-                      ⚡ Áp dụng phông & làm nét này cho TẤT CẢ {colorOptions.length} ảnh mẫu cùng lúc
+                      ⚡ Áp dụng phông này cho tất cả {colorOptions.length} ảnh mẫu
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
 
-              {/* Row 2: 1-Click Auto Cover Collage from Variant Photos */}
+              {/* Row 2: 1-Click Auto Cover Collage from Variant Photos (Zero truncation) */}
               <View
                 style={{
                   borderTopWidth: 1,
                   borderTopColor: '#EFE4D8',
-                  paddingTop: 8,
-                  gap: 6,
+                  paddingTop: 7,
+                  gap: 5,
                 }}>
                 <Text
                   style={{
-                    fontSize: 11.5,
+                    fontSize: 11,
                     fontWeight: '700',
                     color: '#6E5643',
                   }}>
-                  2. Tự động gộp các ảnh mẫu thành Ảnh Bìa Chính (Không cần ghép tay):
+                  2. Tự gộp các ảnh mẫu thành Ảnh Bìa Chính:
                 </Text>
                 <View
                   style={{
@@ -1602,21 +1614,20 @@ export function ProductStudioForm({
                     activeOpacity={0.82}
                     style={{
                       flex: 1,
-                      minWidth: 115,
+                      minWidth: 96,
                       backgroundColor: '#4A3427',
-                      borderRadius: 9,
-                      paddingVertical: 7.5,
-                      paddingHorizontal: 9,
+                      borderRadius: 8,
+                      paddingVertical: 7,
+                      paddingHorizontal: 8,
                       alignItems: 'center',
                     }}>
                     <Text
                       style={{
-                        fontSize: 11.5,
+                        fontSize: 11,
                         fontWeight: '800',
                         color: '#FFFDF9',
-                      }}
-                      numberOfLines={1}>
-                      🔲 Ghép Lưới (2–9 mẫu)
+                      }}>
+                      🔲 Ghép Lưới
                     </Text>
                   </TouchableOpacity>
 
@@ -1626,23 +1637,22 @@ export function ProductStudioForm({
                     activeOpacity={0.82}
                     style={{
                       flex: 1,
-                      minWidth: 125,
+                      minWidth: 105,
                       backgroundColor: '#F7EFE6',
                       borderWidth: 1,
                       borderColor: '#D6C3B0',
-                      borderRadius: 9,
-                      paddingVertical: 7.5,
-                      paddingHorizontal: 9,
+                      borderRadius: 8,
+                      paddingVertical: 7,
+                      paddingHorizontal: 8,
                       alignItems: 'center',
                     }}>
                     <Text
                       style={{
-                        fontSize: 11.5,
+                        fontSize: 11,
                         fontWeight: '800',
                         color: '#4A3427',
-                      }}
-                      numberOfLines={1}>
-                      🌟 1 Lớn + Dãy Mẫu Nhỏ
+                      }}>
+                      🌟 1 Lớn + Nhỏ
                     </Text>
                   </TouchableOpacity>
 
@@ -1654,23 +1664,22 @@ export function ProductStudioForm({
                     activeOpacity={0.82}
                     style={{
                       flex: 1,
-                      minWidth: 115,
+                      minWidth: 96,
                       backgroundColor: '#F7EFE6',
                       borderWidth: 1,
                       borderColor: '#D6C3B0',
-                      borderRadius: 9,
-                      paddingVertical: 7.5,
-                      paddingHorizontal: 9,
+                      borderRadius: 8,
+                      paddingVertical: 7,
+                      paddingHorizontal: 8,
                       alignItems: 'center',
                     }}>
                     <Text
                       style={{
-                        fontSize: 11.5,
+                        fontSize: 11,
                         fontWeight: '800',
                         color: '#4A3427',
-                      }}
-                      numberOfLines={1}>
-                      🃏 Polaroid Xếp Quạt
+                      }}>
+                      🃏 Xếp Quạt
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -2360,63 +2369,90 @@ export function ProductStudioForm({
 
             <View style={styles.divider} />
 
-            {/* COLOR OPTIONS (Photo-first workflow: Upload product photos first -> Pick color & individual price for each photo afterwards) */}
+            {/* COLOR OPTIONS (Clean, Spacious Variant & Price Manager) */}
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>
-                Ảnh sản phẩm — Chỉnh màu & Giá bán riêng từng cái ({colorOptions.length} mẫu đã tải lên) *
-              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                }}>
+                <Text style={styles.fieldLabel}>
+                  Danh sách Mẫu / Phân loại & Giá bán ({colorOptions.length} mẫu) *
+                </Text>
+              </View>
 
-              {/* STEP 1: Upload Product Photos First */}
-              <View style={[styles.pillWrap, { marginBottom: 8 }]}>
+              {/* STEP 1: Clean 1-Row Upload & Combo Toolbar */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginBottom: 6,
+                }}>
                 <TouchableOpacity
-                  style={[
-                    styles.addOptionPill,
-                    {
-                      backgroundColor: '#FEF3C7',
-                      borderColor: '#F59E0B',
-                      borderStyle: 'solid',
-                      paddingVertical: 9,
-                      paddingHorizontal: 14,
-                    },
-                  ]}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    backgroundColor: '#4A3427',
+                    borderRadius: 10,
+                    paddingVertical: 9,
+                    paddingHorizontal: 13,
+                  }}
                   onPress={handleBatchAddColorPhotos}
-                  activeOpacity={0.8}>
-                  <Plus size={15} color="#92400E" />
-                  <ImageIcon size={14} color="#92400E" />
-                  <Text style={[styles.addOptionPillText, { color: '#92400E', fontWeight: '800' }]}>
-                    Bước 1: Gửi ảnh sản phẩm lên (Chọn 1 hoặc nhiều ảnh)
+                  activeOpacity={0.85}>
+                  <Plus size={15} color="#FFFDF9" />
+                  <ImageIcon size={14} color="#FFFDF9" />
+                  <Text
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: '800',
+                      color: '#FFFDF9',
+                    }}>
+                    Tải ảnh mẫu lên (1 hoặc nhiều ảnh)
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.addOptionPill}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                    backgroundColor: '#F5EFE6',
+                    borderWidth: 1,
+                    borderColor: '#D8C8B8',
+                    borderRadius: 10,
+                    paddingVertical: 9,
+                    paddingHorizontal: 12,
+                  }}
                   onPress={handleCaptureNewColorPhoto}
-                  activeOpacity={0.8}>
-                  <Camera size={13} color="#4A3728" />
-                  <Text style={styles.addOptionPillText}>Chụp ảnh sản phẩm</Text>
+                  activeOpacity={0.85}>
+                  <Camera size={14} color="#4A3728" />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: '#4A3728',
+                    }}>
+                    Chụp ảnh
+                  </Text>
                 </TouchableOpacity>
 
-                {colorOptions.length === 0 && (coverImage || initialProduct?.image) ? (
-                  <TouchableOpacity
-                    style={styles.addOptionPill}
-                    onPress={handleUseCoverAsFirstVariant}
-                    activeOpacity={0.8}>
-                    <Sparkles size={13} color="#4A3728" />
-                    <Text style={styles.addOptionPillText}>
-                      Chọn màu & giá cho ảnh bìa hiện tại
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-
                 <TouchableOpacity
-                  style={[
-                    styles.addOptionPill,
-                    {
-                      backgroundColor: '#FFF7ED',
-                      borderColor: '#EA580C',
-                      borderStyle: 'solid',
-                    },
-                  ]}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                    backgroundColor: '#FFF7ED',
+                    borderWidth: 1,
+                    borderColor: '#EA580C',
+                    borderRadius: 10,
+                    paddingVertical: 9,
+                    paddingHorizontal: 12,
+                  }}
                   onPress={() => {
                     const existingIdx = colorOptions.findIndex((c) =>
                       isComboColorOption(c)
@@ -2455,19 +2491,20 @@ export function ProductStudioForm({
                       index: nextList.length - 1,
                     });
                   }}
-                  activeOpacity={0.8}>
+                  activeOpacity={0.85}>
                   <Sparkles size={13} color="#C2410C" />
                   <Text
-                    style={[
-                      styles.addOptionPillText,
-                      { color: '#C2410C', fontWeight: '800' },
-                    ]}>
-                    🎁 + Tạo phân loại Combo 2 mẫu (Tự tính giá ưu đãi)
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color: '#C2410C',
+                    }}>
+                    🎁 + Tạo Combo 2 mẫu
                   </Text>
                 </TouchableOpacity>
-                </View>
+              </View>
 
-              {/* STEP 2: List of uploaded photos to pick a color & price for each */}
+              {/* STEP 2: Variant Tabs Strip */}
               {colorOptions.length > 0 && (
                 <View style={styles.pillWrap}>
                   {colorOptions.map((c, idx) => {
@@ -2475,22 +2512,15 @@ export function ProductStudioForm({
                       activeSlot.type === 'color' && safeColorIdx === idx;
                     const pillThumb = resolveImgUri(c.image);
                     const isUnassigned =
-                      !c.hex ||
                       !c.name.trim() ||
                       c.name.trim().toLowerCase() === 'chưa chọn màu';
                     const hasVariantPrice = Boolean(c.price && Number(c.price) > 0);
-                    const needsAttention = isUnassigned || !hasVariantPrice;
                     return (
                       <TouchableOpacity
                         key={c.id || idx}
                         style={[
                           styles.optionPill,
                           selected && styles.optionPillSelected,
-                          needsAttention &&
-                            !selected && {
-                              borderColor: '#F59E0B',
-                              backgroundColor: '#FFFBEB',
-                            },
                         ]}
                         onPress={() => setActiveSlot({ type: 'color', index: idx })}
                         activeOpacity={0.8}>
@@ -2498,7 +2528,7 @@ export function ProductStudioForm({
                           Platform.OS === 'web' ? (
                             React.createElement('img', {
                               src: pillThumb,
-                              alt: c.name || `Ảnh #${idx + 1}`,
+                              alt: c.name || `Mẫu #${idx + 1}`,
                               decoding: 'async',
                               style: {
                                 width: 26,
@@ -2521,37 +2551,18 @@ export function ProductStudioForm({
                             <ImageIcon size={12} color="#8C7A6B" />
                           </View>
                         )}
-                        <View
-                          style={[
-                            styles.colorDot,
-                            {
-                              backgroundColor: isUnassigned
-                                ? 'transparent'
-                                : c.hex || '#F5EBE0',
-                              borderStyle: isUnassigned ? 'dashed' : 'solid',
-                              borderColor: isUnassigned
-                                ? '#D97706'
-                                : 'rgba(61,43,31,0.28)',
-                            },
-                          ]}
-                        />
                         <Text
                           style={[
                             styles.optionPillText,
                             selected && styles.optionPillTextSelected,
-                            needsAttention &&
-                              !selected && {
-                                color: '#B45309',
-                                fontWeight: '700',
-                              },
                           ]}
                           numberOfLines={1}>
-                          {`Ảnh #${idx + 1}: ${
-                            isUnassigned ? 'Chưa chọn màu' : c.name
+                          {`#${idx + 1}: ${
+                            isUnassigned ? 'Chưa đặt tên' : c.name
                           } • ${
                             hasVariantPrice
                               ? `${Number(c.price).toLocaleString('vi-VN')}₫`
-                              : 'Chưa nhập giá'
+                              : 'Chưa có giá'
                           }`}
                         </Text>
                       </TouchableOpacity>
@@ -2568,319 +2579,566 @@ export function ProductStudioForm({
                   <ImageIcon size={22} color="#92400E" />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.emptyVariantPromptTitle}>
-                      Bước 1: Bấm vào đây để gửi ảnh sản phẩm lên trước
+                      Bấm vào đây để chọn 1 hoặc nhiều ảnh mẫu sản phẩm lên trước
                     </Text>
                     <Text style={styles.emptyVariantPromptSub}>
-                      Bạn có thể chọn 1 hoặc nhiều ảnh sản phẩm cùng lúc. Sau khi ảnh tải lên xong, bạn chỉnh màu và nhập giá bán riêng cho từng ảnh bên dưới.
+                      Sau khi tải ảnh lên, bạn chỉ cần đặt tên mẫu và nhập giá bán cho từng ảnh ngay bên dưới.
                     </Text>
                   </View>
                 </TouchableOpacity>
               ) : null}
 
-              {/* Inline editor for the currently selected photo variant */}
+              {/* Clean, Spacious Variant Editor Card */}
               {activeColor && (
-                <View style={styles.activeColorEditorBox}>
-                  <View style={styles.activeColorTopRow}>
-                    {/* Selected Photo Mini Card */}
+                <View
+                  style={{
+                    marginTop: 6,
+                    backgroundColor: '#FAF5EE',
+                    borderRadius: 16,
+                    borderWidth: 1.5,
+                    borderColor: '#DFCBB5',
+                    padding: 14,
+                    gap: 12,
+                  }}>
+                  {/* Card Header: Variant Title + Prev/Next + Set Cover + Delete */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      paddingBottom: 8,
+                      borderBottomWidth: 1,
+                      borderBottomColor: '#E8D8C8',
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: '900',
+                        color: '#3B281E',
+                      }}>
+                      ✏️ Đang chỉnh Mẫu #{safeColorIdx + 1}/{colorOptions.length}
+                    </Text>
+
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 6,
+                      }}>
+                      {colorOptions.length > 1 && (
+                        <>
+                          <TouchableOpacity
+                            style={[
+                              styles.useSwatchNameMiniBtn,
+                              safeColorIdx === 0 && { opacity: 0.4 },
+                            ]}
+                            disabled={safeColorIdx === 0}
+                            onPress={() =>
+                              setActiveSlot({
+                                type: 'color',
+                                index: Math.max(0, safeColorIdx - 1),
+                              })
+                            }>
+                            <Text style={styles.useSwatchNameMiniBtnText}>
+                              ← Trước
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.useSwatchNameMiniBtn,
+                              safeColorIdx >= colorOptions.length - 1 && {
+                                opacity: 0.4,
+                              },
+                            ]}
+                            disabled={safeColorIdx >= colorOptions.length - 1}
+                            onPress={() =>
+                              setActiveSlot({
+                                type: 'color',
+                                index: Math.min(
+                                  colorOptions.length - 1,
+                                  safeColorIdx + 1
+                                ),
+                              })
+                            }>
+                            <Text style={styles.useSwatchNameMiniBtnText}>
+                              Tiếp →
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+
+                      {activeColor.image && coverImage !== activeColor.image ? (
+                        <TouchableOpacity
+                          style={styles.useSwatchNameMiniBtn}
+                          onPress={() =>
+                            setCoverImage(String(activeColor.image))
+                          }>
+                          <Text style={styles.useSwatchNameMiniBtnText}>
+                            ★ Đặt làm ảnh bìa
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          backgroundColor: '#FEE2E2',
+                          borderWidth: 1,
+                          borderColor: '#FCA5A5',
+                          borderRadius: 8,
+                          paddingHorizontal: 9,
+                          paddingVertical: 5,
+                        }}
+                        onPress={() => handleRemoveColorOption(safeColorIdx)}>
+                        <Trash2 size={13} color="#B91C1C" />
+                        <Text
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: '800',
+                            color: '#B91C1C',
+                          }}>
+                          Xóa mẫu
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Main Row: Left Photo Thumbnail + Right Spacious Name & Price Inputs */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                    }}>
+                    {/* Photo Thumbnail + Change Photo Button */}
                     <TouchableOpacity
-                      style={styles.activeColorPhotoPreviewBox}
+                      style={{
+                        width: 78,
+                        alignItems: 'center',
+                        gap: 5,
+                      }}
                       onPress={() => {
                         setActiveSlot({ type: 'color', index: safeColorIdx });
                         handlePickCurrentSlotPhoto(false);
                       }}
                       activeOpacity={0.85}>
-                      {resolveImgUri(activeColor.image) ? (
-                        Platform.OS === 'web' ? (
-                          React.createElement('img', {
-                            src: resolveImgUri(activeColor.image)!,
-                            alt: activeColor.name || 'Ảnh mẫu',
-                            decoding: 'async',
-                            style: {
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                              display: 'block',
-                            },
-                          })
+                      <View
+                        style={{
+                          width: 76,
+                          height: 76,
+                          borderRadius: 12,
+                          overflow: 'hidden',
+                          backgroundColor: '#FFFDF9',
+                          borderWidth: 1.5,
+                          borderColor: '#D6C2AD',
+                        }}>
+                        {resolveImgUri(activeColor.image) ? (
+                          Platform.OS === 'web' ? (
+                            React.createElement('img', {
+                              src: resolveImgUri(activeColor.image)!,
+                              alt: activeColor.name || 'Ảnh mẫu',
+                              decoding: 'async',
+                              style: {
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                display: 'block',
+                              },
+                            })
+                          ) : (
+                            <Image
+                              source={{ uri: resolveImgUri(activeColor.image)! }}
+                              style={{ width: '100%', height: '100%' }}
+                              resizeMode="cover"
+                            />
+                          )
                         ) : (
-                          <Image
-                            source={{ uri: resolveImgUri(activeColor.image)! }}
-                            style={{ width: '100%', height: '100%' }}
-                            resizeMode="cover"
-                          />
-                        )
-                      ) : (
-                        <View style={styles.activeColorPhotoEmpty}>
-                          <ImageIcon size={18} color="#92400E" />
-                          <Text style={styles.activeColorPhotoEmptyText}>
-                            + Chọn ảnh
-                          </Text>
-                        </View>
-                      )}
-                      <View style={styles.activeColorPhotoIndexBadge}>
-                        <Text style={styles.activeColorPhotoIndexText}>
-                          Ảnh #{safeColorIdx + 1}/{colorOptions.length}
+                          <View style={styles.activeColorPhotoEmpty}>
+                            <ImageIcon size={18} color="#92400E" />
+                          </View>
+                        )}
+                      </View>
+                      <View
+                        style={{
+                          backgroundColor: '#EFE4D6',
+                          borderRadius: 6,
+                          paddingHorizontal: 7,
+                          paddingVertical: 3,
+                        }}>
+                        <Text
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: '800',
+                            color: '#4A3728',
+                          }}>
+                          Đổi ảnh
                         </Text>
                       </View>
                     </TouchableOpacity>
 
-                    {/* Right side: Step label + Prev/Next photo + Name input + Per-Variant Price input */}
-                    <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                      <View style={styles.activeColorStepMetaRow}>
-                        <Text style={styles.activeColorStepLabel}>
-                          {!activeColor.hex ||
-                          activeColor.name.trim().toLowerCase() === 'chưa chọn màu'
-                            ? `Bước 2: Chọn màu & giá riêng cho Ảnh #${safeColorIdx + 1}`
-                            : `Ảnh #${safeColorIdx + 1} — Đã chọn màu: ${activeColor.name}`}
+                    {/* Right Inputs Column: 1. Variant Name + 2. Variant Price */}
+                    <View style={{ flex: 1, minWidth: 0, gap: 10 }}>
+                      {/* 1. Variant Name Input (Full width, never cramped!) */}
+                      <View style={{ gap: 4 }}>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '800',
+                            color: '#4A3728',
+                          }}>
+                          🏷️ Tên mẫu / phân loại #{safeColorIdx + 1}:
                         </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          {activeColor.image && coverImage !== activeColor.image ? (
-                            <TouchableOpacity
-                              style={styles.useSwatchNameMiniBtn}
-                              onPress={() => setCoverImage(String(activeColor.image))}
-                              activeOpacity={0.8}>
-                              <Text style={styles.useSwatchNameMiniBtnText}>
-                                ★ Đặt làm ảnh bìa
-                              </Text>
-                            </TouchableOpacity>
-                          ) : null}
-                          {colorOptions.length > 1 && (
-                            <>
-                              <TouchableOpacity
-                                style={[
-                                  styles.useSwatchNameMiniBtn,
-                                  safeColorIdx === 0 && { opacity: 0.45 },
-                                ]}
-                                disabled={safeColorIdx === 0}
-                                onPress={() =>
-                                  setActiveSlot({
-                                    type: 'color',
-                                    index: Math.max(0, safeColorIdx - 1),
-                                  })
-                                }
-                                activeOpacity={0.8}>
-                                <Text style={styles.useSwatchNameMiniBtnText}>
-                                  ← Ảnh trước
-                                </Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[
-                                  styles.useSwatchNameMiniBtn,
-                                  safeColorIdx >= colorOptions.length - 1 && {
-                                    opacity: 0.45,
-                                  },
-                                ]}
-                                disabled={safeColorIdx >= colorOptions.length - 1}
-                                onPress={() =>
-                                  setActiveSlot({
-                                    type: 'color',
-                                    index: Math.min(
-                                      colorOptions.length - 1,
-                                      safeColorIdx + 1
-                                    ),
-                                  })
-                                }
-                                activeOpacity={0.8}>
-                                <Text style={styles.useSwatchNameMiniBtnText}>
-                                  Ảnh tiếp →
-                                </Text>
-                              </TouchableOpacity>
-                            </>
-                          )}
-                        </View>
-                      </View>
-
-                      <View style={styles.activeColorInputRow}>
-                        <View
-                          style={[
-                            styles.colorDotLarge,
-                            { backgroundColor: activeColor.hex || '#F5EBE0' },
-                          ]}
-                        />
                         <TextInput
-                          style={styles.activeColorNameInput}
+                          style={{
+                            backgroundColor: '#FFFFFF',
+                            borderWidth: 1.5,
+                            borderColor: '#D8C5B2',
+                            borderRadius: 10,
+                            paddingHorizontal: 12,
+                            paddingVertical: 9,
+                            fontSize: 14,
+                            fontWeight: '700',
+                            color: '#2C1E14',
+                            minWidth: 0,
+                          }}
                           value={
-                            activeColor.name.trim().toLowerCase() === 'chưa chọn màu'
+                            activeColor.name.trim().toLowerCase() ===
+                            'chưa chọn màu'
                               ? ''
                               : activeColor.name
                           }
                           onChangeText={(txt) =>
                             handleUpdateActiveColor({ name: txt })
                           }
-                          placeholder="Chạm màu bên dưới hoặc tự gõ tên mẫu này..."
-                          placeholderTextColor={COLORS.lightText}
+                          placeholder="Gõ tên mẫu (VD: Bé Hướng Dương, Cừu Trắng, Kem Sữa...)"
+                          placeholderTextColor="#A3907E"
                         />
-                        <TouchableOpacity
-                          style={styles.pickColorImgBtn}
-                          onPress={() => {
-                            setActiveSlot({ type: 'color', index: safeColorIdx });
-                            handlePickCurrentSlotPhoto(false);
-                          }}>
-                          <ImageIcon size={13} color="#4A3728" />
-                          <Text style={styles.pickColorImgBtnText}>
-                            {activeColor.image ? 'Đổi ảnh' : 'Chọn ảnh'}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.deleteMiniBtn}
-                          onPress={() => handleRemoveColorOption(safeColorIdx)}>
-                          <Trash2 size={14} color={COLORS.error} />
-                        </TouchableOpacity>
                       </View>
 
-                      {/* Per-variant individual price row */}
-                      <View style={styles.activeColorInputRow}>
-                        <Text
+                      {/* 2. Variant Price Input + Quick Price Chips */}
+                      <View style={{ gap: 5 }}>
+                        <View
                           style={{
-                            fontSize: 12,
-                            fontWeight: '800',
-                            color: '#6E4F37',
-                            flexShrink: 0,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 6,
                           }}>
-                          💰 Giá mẫu #{safeColorIdx + 1} (VNĐ) *:
-                        </Text>
-                        <TextInput
-                          style={[
-                            styles.activeColorNameInput,
-                            {
-                              borderColor:
-                                activeColor.price && Number(activeColor.price) > 0
-                                  ? '#B58969'
-                                  : '#F59E0B',
-                              backgroundColor: '#FFFDF9',
-                              color: '#6E4F37',
-                              fontWeight: '800',
-                            },
-                          ]}
-                          value={
-                            activeColor.price && Number(activeColor.price) > 0
-                              ? String(activeColor.price)
-                              : ''
-                          }
-                          onChangeText={(txt) => {
-                            const digits = txt.replace(/[^0-9]/g, '');
-                            handleUpdateActiveColor({
-                              price: digits ? Number(digits) : undefined,
-                            });
-                          }}
-                          placeholder="Nhập giá riêng mẫu này (VD: 45000)"
-                          placeholderTextColor={COLORS.lightText}
-                          keyboardType="numeric"
-                        />
-                        {activeColor.price && Number(activeColor.price) > 0 ? (
                           <Text
                             style={{
                               fontSize: 12,
                               fontWeight: '800',
-                              color: '#3D2B1F',
-                              flexShrink: 0,
+                              color: '#4A3728',
                             }}>
-                            {Number(activeColor.price).toLocaleString('vi-VN')}₫
+                            💰 Giá bán mẫu #{safeColorIdx + 1} (VNĐ) *:
                           </Text>
-                        ) : null}
-                        {colorOptions.length > 1 &&
-                        activeColor.price &&
-                        Number(activeColor.price) > 0 ? (
-                          <TouchableOpacity
-                            style={styles.useSwatchNameMiniBtn}
-                            onPress={() => {
-                              const currentPrice = Number(activeColor.price);
-                              setColorOptions((prev) =>
-                                prev.map((item) =>
-                                  !item.price || Number(item.price) <= 0
-                                    ? { ...item, price: currentPrice }
-                                    : item
-                                )
-                              );
-                            }}
-                            activeOpacity={0.8}>
-                            <Text style={styles.useSwatchNameMiniBtnText}>
-                              Điền cho ảnh chưa có giá
+                          {activeColor.price && Number(activeColor.price) > 0 ? (
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                fontWeight: '900',
+                                color: '#B45309',
+                              }}>
+                              = {Number(activeColor.price).toLocaleString('vi-VN')}₫
                             </Text>
-                          </TouchableOpacity>
-                        ) : null}
+                          ) : null}
+                        </View>
+
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}>
+                          <TextInput
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              backgroundColor: '#FFFFFF',
+                              borderWidth: 1.5,
+                              borderColor:
+                                activeColor.price &&
+                                Number(activeColor.price) > 0
+                                  ? '#B58969'
+                                  : '#F59E0B',
+                              borderRadius: 10,
+                              paddingHorizontal: 12,
+                              paddingVertical: 9,
+                              fontSize: 14,
+                              fontWeight: '800',
+                              color: '#3B281E',
+                            }}
+                            value={
+                              activeColor.price && Number(activeColor.price) > 0
+                                ? String(activeColor.price)
+                                : ''
+                            }
+                            onChangeText={(txt) => {
+                              const digits = txt.replace(/[^0-9]/g, '');
+                              handleUpdateActiveColor({
+                                price: digits ? Number(digits) : undefined,
+                              });
+                            }}
+                            placeholder="Nhập giá bán (VD: 45000)"
+                            placeholderTextColor="#A3907E"
+                            keyboardType="numeric"
+                          />
+
+                          {colorOptions.length > 1 &&
+                          activeColor.price &&
+                          Number(activeColor.price) > 0 ? (
+                            <TouchableOpacity
+                              style={{
+                                backgroundColor: '#EFE4D6',
+                                borderWidth: 1,
+                                borderColor: '#D6C2AD',
+                                borderRadius: 10,
+                                paddingHorizontal: 10,
+                                paddingVertical: 9,
+                              }}
+                              onPress={() => {
+                                const currentPrice = Number(activeColor.price);
+                                setColorOptions((prev) =>
+                                  prev.map((item) => ({
+                                    ...item,
+                                    price: currentPrice,
+                                  }))
+                                );
+                              }}
+                              activeOpacity={0.85}>
+                              <Text
+                                style={{
+                                  fontSize: 11.5,
+                                  fontWeight: '800',
+                                  color: '#4A3728',
+                                }}>
+                                Áp giá này cho cả {colorOptions.length} mẫu
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+
+                        {/* 1-Tap Quick Price Pills */}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 5,
+                            marginTop: 2,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '700',
+                              color: '#7A6552',
+                              marginRight: 2,
+                            }}>
+                            Chọn nhanh:
+                          </Text>
+                          {[35000, 45000, 49000, 55000, 65000, 85000, 125000].map(
+                            (pVal) => {
+                              const isCurrentPrice =
+                                Number(activeColor.price) === pVal;
+                              return (
+                                <TouchableOpacity
+                                  key={pVal}
+                                  onPress={() =>
+                                    handleUpdateActiveColor({ price: pVal })
+                                  }
+                                  style={{
+                                    backgroundColor: isCurrentPrice
+                                      ? '#4A3427'
+                                      : '#FFFDF9',
+                                    borderWidth: 1,
+                                    borderColor: isCurrentPrice
+                                      ? '#4A3427'
+                                      : '#DBCAB8',
+                                    borderRadius: 999,
+                                    paddingHorizontal: 9,
+                                    paddingVertical: 4,
+                                  }}>
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: '800',
+                                      color: isCurrentPrice
+                                        ? '#FFFDF9'
+                                        : '#5C4033',
+                                    }}>
+                                    {pVal / 1000}k
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            }
+                          )}
+                        </View>
                       </View>
                     </View>
                   </View>
 
-                  <View style={styles.paletteHeaderRow}>
-                    <Text style={styles.paletteSubLabel}>
-                      Bước 2 — Chọn màu đại diện cho ảnh này ({COLOR_SWATCHES.length} màu len hoặc tự chọn mã màu):
-                    </Text>
-                    {Platform.OS === 'web' &&
-                      React.createElement(
-                        'label',
-                        {
-                          style: {
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            backgroundColor: '#EFE6DA',
-                            padding: '4px 10px',
-                            borderRadius: 999,
-                            border: '1px solid #DBCAB8',
-                            cursor: 'pointer',
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            color: '#4A3728',
-                          },
-                        },
-                        React.createElement('input', {
-                          type: 'color',
-                          value:
-                            /^#[0-9a-fA-F]{6}$/.test(activeColor.hex || '')
-                              ? activeColor.hex
-                              : '#F5EBE0',
-                          onChange: (e: any) => {
-                            const nextHex = e?.target?.value;
-                            if (nextHex) {
-                              handleUpdateActiveColor({ hex: nextHex });
-                            }
-                          },
-                          style: {
-                            width: 18,
-                            height: 18,
-                            border: 'none',
-                            padding: 0,
-                            background: 'transparent',
-                            cursor: 'pointer',
-                          },
-                        }),
-                        '🎨 Tự chọn màu bất kỳ'
-                      )}
-                  </View>
-
-                  <View style={styles.swatchesGridWrap}>
-                    {COLOR_SWATCHES.map((sw) => {
-                      const isCurrent =
-                        (activeColor.hex || '').toLowerCase() ===
-                        sw.hex.toLowerCase();
-                      return (
-                        <TouchableOpacity
-                          key={`${sw.name}_${sw.hex}`}
+                  {/* Collapsible Color Swatch Picker (Compact by default!) */}
+                  <View
+                    style={{
+                      borderTopWidth: 1,
+                      borderTopColor: '#E8D8C8',
+                      paddingTop: 10,
+                      gap: 8,
+                    }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                      }}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}>
+                        <View
                           style={[
-                            styles.swatchChipBtn,
-                            isCurrent && styles.swatchChipBtnSelected,
+                            styles.colorDotLarge,
+                            {
+                              width: 18,
+                              height: 18,
+                              borderRadius: 9,
+                              backgroundColor: activeColor.hex || '#F5EBE0',
+                            },
                           ]}
-                          onPress={() => handleSelectSwatchFromPalette(sw)}
-                          activeOpacity={0.8}>
-                          <View
-                            style={[
-                              styles.swatchCircle,
-                              { backgroundColor: sw.hex },
-                              isCurrent && styles.swatchCircleSelected,
-                            ]}
-                          />
+                        />
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '800',
+                            color: '#4A3728',
+                          }}>
+                          🎨 Chọn nhanh màu len (Tùy chọn):
+                        </Text>
+                      </View>
+
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}>
+                        <TouchableOpacity
+                          onPress={() => setShowAllSwatches((prev) => !prev)}
+                          style={{
+                            backgroundColor: showAllSwatches
+                              ? '#4A3427'
+                              : '#EFE6DA',
+                            borderWidth: 1,
+                            borderColor: showAllSwatches
+                              ? '#4A3427'
+                              : '#DBCAB8',
+                            borderRadius: 999,
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                          }}>
                           <Text
-                            style={[
-                              styles.swatchChipText,
-                              isCurrent && styles.swatchChipTextSelected,
-                            ]}>
-                            {isCurrent ? `✓ ${sw.name}` : sw.name}
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: '800',
+                              color: showAllSwatches ? '#FFFDF9' : '#4A3728',
+                            }}>
+                            {showAllSwatches
+                              ? '▲ Thu gọn bảng 34 màu'
+                              : `▾ Mở đủ ${COLOR_SWATCHES.length} màu len`}
                           </Text>
                         </TouchableOpacity>
-                      );
-                    })}
+
+                        {Platform.OS === 'web' &&
+                          React.createElement(
+                            'label',
+                            {
+                              style: {
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                backgroundColor: '#FFFDF9',
+                                padding: '4px 10px',
+                                borderRadius: 999,
+                                border: '1px solid #DBCAB8',
+                                cursor: 'pointer',
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                color: '#4A3728',
+                              },
+                            },
+                            React.createElement('input', {
+                              type: 'color',
+                              value:
+                                /^#[0-9a-fA-F]{6}$/.test(activeColor.hex || '')
+                                  ? activeColor.hex
+                                  : '#F5EBE0',
+                              onChange: (e: any) => {
+                                const nextHex = e?.target?.value;
+                                if (nextHex) {
+                                  handleUpdateActiveColor({ hex: nextHex });
+                                }
+                              },
+                              style: {
+                                width: 16,
+                                height: 16,
+                                border: 'none',
+                                padding: 0,
+                                background: 'transparent',
+                                cursor: 'pointer',
+                              },
+                            }),
+                            'Tự chọn mã màu'
+                          )}
+                      </View>
+                    </View>
+
+                    {/* Show 8 popular swatches when collapsed, or all 34 when expanded */}
+                    <View style={styles.swatchesGridWrap}>
+                      {(showAllSwatches
+                        ? COLOR_SWATCHES
+                        : COLOR_SWATCHES.slice(0, 8)
+                      ).map((sw) => {
+                        const isCurrent =
+                          (activeColor.hex || '').toLowerCase() ===
+                          sw.hex.toLowerCase();
+                        return (
+                          <TouchableOpacity
+                            key={`${sw.name}_${sw.hex}`}
+                            style={[
+                              styles.swatchChipBtn,
+                              isCurrent && styles.swatchChipBtnSelected,
+                            ]}
+                            onPress={() => handleSelectSwatchFromPalette(sw)}
+                            activeOpacity={0.8}>
+                            <View
+                              style={[
+                                styles.swatchCircle,
+                                { backgroundColor: sw.hex },
+                                isCurrent && styles.swatchCircleSelected,
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.swatchChipText,
+                                isCurrent && styles.swatchChipTextSelected,
+                              ]}>
+                              {isCurrent ? `✓ ${sw.name}` : sw.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
                 </View>
               )}
@@ -2939,11 +3197,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
-    paddingBottom: 110,
+    paddingBottom: 150,
   },
   scrollContentMobile: {
     paddingHorizontal: 12,
-    paddingBottom: 120,
+    paddingBottom: 155,
   },
   topBar: {
     flexDirection: 'row',
