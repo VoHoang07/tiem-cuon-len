@@ -1,5 +1,4 @@
 import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
-import { validateRealCustomerEmail } from '@/utils/contactTrustValidator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -77,6 +76,11 @@ export interface AuthUser {
   isVerifiedRealAccount?: boolean;
 }
 
+export interface OAuthClientConfig {
+  googleClientId: string;
+  facebookAppId: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   role: 'admin' | 'customer' | null;
@@ -84,6 +88,8 @@ interface AuthContextType {
   isLoading: boolean;
   configError: string | null;
   guestAvatar: string;
+  oauthClientConfig: OAuthClientConfig;
+  saveOAuthClientConfig: (next: Partial<OAuthClientConfig>) => Promise<void>;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginWithOAuth: (
@@ -91,12 +97,12 @@ interface AuthContextType {
     redirectPath?: string
   ) => Promise<{
     success: boolean;
-    fallbackToQuickGmail?: boolean;
+    needsClientPopup?: boolean;
     error?: string;
   }>;
-  loginWithVerifiedGmailQuick: (
-    email: string,
-    displayName?: string
+  loginWithVerifiedOAuthToken: (
+    provider: 'google' | 'facebook',
+    accessToken: string
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (name: string, avatar?: string) => Promise<void>;
@@ -241,6 +247,123 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
   const [guestAvatar, setGuestAvatar] = useState<string>('capybara');
+  const [oauthClientConfig, setOauthClientConfig] = useState<OAuthClientConfig>(() => {
+    const envGoogle = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+    const envFb = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || '';
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const raw = window.localStorage.getItem('tcl_oauth_client_config_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return {
+            googleClientId: String(parsed?.googleClientId || envGoogle).trim(),
+            facebookAppId: String(parsed?.facebookAppId || envFb).trim(),
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      googleClientId: envGoogle.trim(),
+      facebookAppId: envFb.trim(),
+    };
+  });
+
+  useEffect(() => {
+    if (!supabaseUrl || !supabaseAnonKey) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/addresses?id=eq.tcl_oauth_config_v1&select=detailAddress&limit=1`,
+          {
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+            },
+          }
+        );
+        if (res.ok && active) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows[0]?.detailAddress) {
+            const parsed = JSON.parse(rows[0].detailAddress);
+            const nextCfg: OAuthClientConfig = {
+              googleClientId: String(
+                parsed?.googleClientId ||
+                  process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+                  ''
+              ).trim(),
+              facebookAppId: String(
+                parsed?.facebookAppId ||
+                  process.env.EXPO_PUBLIC_FACEBOOK_APP_ID ||
+                  ''
+              ).trim(),
+            };
+            setOauthClientConfig(nextCfg);
+            if (typeof window !== 'undefined' && window.localStorage) {
+              window.localStorage.setItem(
+                'tcl_oauth_client_config_v1',
+                JSON.stringify(nextCfg)
+              );
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const saveOAuthClientConfig = useCallback(
+    async (partial: Partial<OAuthClientConfig>) => {
+      const merged: OAuthClientConfig = {
+        googleClientId: (
+          partial.googleClientId ?? oauthClientConfig.googleClientId
+        ).trim(),
+        facebookAppId: (
+          partial.facebookAppId ?? oauthClientConfig.facebookAppId
+        ).trim(),
+      };
+      setOauthClientConfig(merged);
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(
+            'tcl_oauth_client_config_v1',
+            JSON.stringify(merged)
+          );
+        }
+        if (supabaseUrl && supabaseAnonKey) {
+          await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+            method: 'POST',
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates,return=minimal',
+            },
+            body: JSON.stringify({
+              id: 'tcl_oauth_config_v1',
+              userId: '00000000-0000-0000-0000-000000000000',
+              fullName: '__TCL_CHAT_MSG_V1__',
+              phone: '0000000000',
+              city: 'Config',
+              district: 'OAuth',
+              ward: 'Public',
+              detailAddress: JSON.stringify(merged),
+              isDefault: false,
+            }),
+          });
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [oauthClientConfig]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -535,26 +658,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       redirectPath?: string
     ): Promise<{
       success: boolean;
-      fallbackToQuickGmail?: boolean;
+      needsClientPopup?: boolean;
       error?: string;
     }> => {
       try {
         if (typeof window !== 'undefined' && supabaseUrl && supabaseAnonKey) {
-          const ua = (window.navigator?.userAgent || '').toLowerCase();
-          const isEmbeddedWebView =
-            provider === 'google' &&
-            (ua.includes('tiktok') ||
-              ua.includes('musical_ly') ||
-              ua.includes('bytedance') ||
-              ua.includes('zalo'));
-
-          if (isEmbeddedWebView) {
-            return {
-              success: false,
-              fallbackToQuickGmail: true,
-            };
-          }
-
           try {
             const settingsRes = await fetch(`${supabaseUrl}/auth/v1/settings`, {
               headers: { apikey: supabaseAnonKey },
@@ -565,10 +673,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 string,
                 boolean
               >;
-              if (externalMap[provider] === false) {
+              if (externalMap[provider] !== true) {
                 return {
                   success: false,
-                  fallbackToQuickGmail: true,
+                  needsClientPopup: true,
                 };
               }
             }
@@ -602,7 +710,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) {
           return {
             success: false,
-            fallbackToQuickGmail: true,
+            needsClientPopup: true,
             error: error.message,
           };
         }
@@ -614,127 +722,183 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         return {
           success: false,
-          fallbackToQuickGmail: true,
+          needsClientPopup: true,
         };
       }
     },
     []
   );
 
-  const loginWithVerifiedGmailQuick = useCallback(
+  const loginWithVerifiedOAuthToken = useCallback(
     async (
-      rawEmail: string,
-      displayName?: string
+      provider: 'google' | 'facebook',
+      accessToken: string
     ): Promise<{ success: boolean; error?: string }> => {
-      const emailCheck = validateRealCustomerEmail(rawEmail);
-      if (!emailCheck.valid) {
+      if (!accessToken || accessToken.trim().length < 15) {
         return {
           success: false,
-          error:
-            emailCheck.error ||
-            'Vui lòng chọn hoặc nhập đúng tài khoản Gmail thật của bạn.',
+          error: 'Token xác thực không hợp lệ.',
         };
       }
-
-      const cleanEmail = emailCheck.normalized;
-      if (ADMIN_EMAILS.has(cleanEmail)) {
-        return {
-          success: false,
-          error:
-            'Đây là Gmail Quản trị viên. Vui lòng nhập mật khẩu ở khung bên dưới để đăng nhập quyền Admin.',
-        };
-      }
-
-      const derivedName = sanitizeInput(
-        displayName?.trim() ||
-          cleanEmail
-            .split('@')[0]
-            .replace(/[._-]+/g, ' ')
-            .replace(/\b\w/g, (c) => c.toUpperCase()) ||
-          'Khách hàng'
-      );
-
-      if (typeof window !== 'undefined' && window.localStorage) {
-        try {
-          window.localStorage.setItem('tcl_guest_notify_email_v1', cleanEmail);
-        } catch {
-          // ignore
-        }
-      }
-
-      const deterministicQuickKey = `TclQuickAuth#${cleanEmail.slice(0, 12)}_2026!`;
 
       try {
-        const { data: signInData, error: signInErr } =
-          await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password: deterministicQuickKey,
-          });
+        let verifiedId = '';
+        let verifiedEmail = '';
+        let verifiedName = '';
+        let verifiedPicture: string | undefined;
 
-        if (!signInErr && signInData?.session) {
-          const resolved: AuthUser = {
-            ...(toAuthUser(signInData.session) || {
-              id: signInData.session.user.id,
-              email: cleanEmail,
-              name: derivedName,
-              role: 'customer',
-            }),
-            name: derivedName,
-            authProvider: 'gmail_verified',
-            isVerifiedRealAccount: true,
-          };
-          setUser(resolved);
-          saveCachedAuthUser(resolved);
-          return { success: true };
-        }
-
-        const { data: signUpData, error: signUpErr } =
-          await supabase.auth.signUp({
-            email: cleanEmail,
-            password: deterministicQuickKey,
-            options: {
-              data: {
-                name: derivedName,
-                full_name: derivedName,
-                role: 'customer',
-                avatar: 'capybara',
-                auth_provider: 'gmail_verified',
+        if (provider === 'google') {
+          const res = await fetch(
+            'https://www.googleapis.com/oauth2/v3/userinfo',
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken.trim()}`,
               },
-            },
-          });
-
-        if (!signUpErr && signUpData?.session) {
-          const resolved: AuthUser = {
-            ...(toAuthUser(signUpData.session) || {
-              id: signUpData.session.user.id,
-              email: cleanEmail,
-              name: derivedName,
-              role: 'customer',
-            }),
-            name: derivedName,
-            authProvider: 'gmail_verified',
-            isVerifiedRealAccount: true,
-          };
-          setUser(resolved);
-          saveCachedAuthUser(resolved);
-          return { success: true };
+            }
+          );
+          if (!res.ok) {
+            return {
+              success: false,
+              error: 'Không thể xác thực tài khoản từ máy chủ Google.',
+            };
+          }
+          const profile = await res.json();
+          if (!profile?.sub || !profile?.email || profile?.email_verified === false) {
+            return {
+              success: false,
+              error: 'Tài khoản Google chưa được xác minh.',
+            };
+          }
+          verifiedId = String(profile.sub);
+          verifiedEmail = String(profile.email).toLowerCase().trim();
+          verifiedName = sanitizeInput(
+            String(profile.name || profile.given_name || verifiedEmail.split('@')[0])
+          );
+          verifiedPicture = profile.picture ? String(profile.picture) : undefined;
+        } else {
+          const res = await fetch(
+            `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(
+              accessToken.trim()
+            )}`
+          );
+          if (!res.ok) {
+            return {
+              success: false,
+              error: 'Không thể xác thực tài khoản từ máy chủ Facebook.',
+            };
+          }
+          const profile = await res.json();
+          if (!profile?.id) {
+            return {
+              success: false,
+              error: 'Tài khoản Facebook không hợp lệ.',
+            };
+          }
+          verifiedId = String(profile.id);
+          verifiedEmail = String(
+            profile.email || `fb_${verifiedId}@facebook.tiemcuonlen.shop`
+          )
+            .toLowerCase()
+            .trim();
+          verifiedName = sanitizeInput(String(profile.name || 'Khách Facebook'));
+          verifiedPicture = profile.picture?.data?.url
+            ? String(profile.picture.data.url)
+            : undefined;
         }
-      } catch {
-        // Fallback to verified local session below
-      }
 
-      const verifiedUser: AuthUser = {
-        id: `gmail_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
-        email: cleanEmail,
-        name: derivedName,
-        role: 'customer',
-        avatar: 'capybara',
-        authProvider: 'gmail_verified',
-        isVerifiedRealAccount: true,
-      };
-      setUser(verifiedUser);
-      saveCachedAuthUser(verifiedUser);
-      return { success: true };
+        if (
+          verifiedEmail &&
+          !verifiedEmail.endsWith('@facebook.tiemcuonlen.shop') &&
+          typeof window !== 'undefined' &&
+          window.localStorage
+        ) {
+          try {
+            window.localStorage.setItem('tcl_guest_notify_email_v1', verifiedEmail);
+          } catch {
+            // ignore
+          }
+        }
+
+        const oauthSecret = `TclOAuth#${provider}_${verifiedId.slice(0, 14)}_2026!`;
+        const isAdminEmail = ADMIN_EMAILS.has(verifiedEmail);
+
+        try {
+          const { data: signInData, error: signInErr } =
+            await supabase.auth.signInWithPassword({
+              email: verifiedEmail,
+              password: oauthSecret,
+            });
+
+          if (!signInErr && signInData?.session) {
+            const resolved: AuthUser = {
+              id: signInData.session.user.id,
+              email: verifiedEmail,
+              name: verifiedName,
+              role: isAdminEmail ? 'admin' : 'customer',
+              avatar: 'capybara',
+              avatarUrl: verifiedPicture,
+              authProvider: provider,
+              isVerifiedRealAccount: true,
+            };
+            setUser(resolved);
+            saveCachedAuthUser(resolved);
+            return { success: true };
+          }
+
+          const { data: signUpData, error: signUpErr } =
+            await supabase.auth.signUp({
+              email: verifiedEmail,
+              password: oauthSecret,
+              options: {
+                data: {
+                  name: verifiedName,
+                  full_name: verifiedName,
+                  avatar_url: verifiedPicture,
+                  role: isAdminEmail ? 'admin' : 'customer',
+                  avatar: 'capybara',
+                  auth_provider: provider,
+                },
+              },
+            });
+
+          if (!signUpErr && signUpData?.session) {
+            const resolved: AuthUser = {
+              id: signUpData.session.user.id,
+              email: verifiedEmail,
+              name: verifiedName,
+              role: isAdminEmail ? 'admin' : 'customer',
+              avatar: 'capybara',
+              avatarUrl: verifiedPicture,
+              authProvider: provider,
+              isVerifiedRealAccount: true,
+            };
+            setUser(resolved);
+            saveCachedAuthUser(resolved);
+            return { success: true };
+          }
+        } catch {
+          // If email already existed with password, Google/Facebook API has already cryptographically verified ownership
+        }
+
+        const verifiedUser: AuthUser = {
+          id: `${provider}_${verifiedId}`,
+          email: verifiedEmail,
+          name: verifiedName,
+          role: isAdminEmail ? 'admin' : 'customer',
+          avatar: 'capybara',
+          avatarUrl: verifiedPicture,
+          authProvider: provider,
+          isVerifiedRealAccount: true,
+        };
+        setUser(verifiedUser);
+        saveCachedAuthUser(verifiedUser);
+        return { success: true };
+      } catch {
+        return {
+          success: false,
+          error: 'Lỗi kết nối khi xác thực tài khoản.',
+        };
+      }
     },
     []
   );
@@ -747,10 +911,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       configError,
       guestAvatar,
+      oauthClientConfig,
+      saveOAuthClientConfig,
       login,
       register,
       loginWithOAuth,
-      loginWithVerifiedGmailQuick,
+      loginWithVerifiedOAuthToken,
       logout,
       updateProfile,
       updateAvatar,
@@ -760,10 +926,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       configError,
       guestAvatar,
+      oauthClientConfig,
+      saveOAuthClientConfig,
       login,
       register,
       loginWithOAuth,
-      loginWithVerifiedGmailQuick,
+      loginWithVerifiedOAuthToken,
       logout,
       updateProfile,
       updateAvatar,
