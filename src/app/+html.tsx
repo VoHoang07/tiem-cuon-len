@@ -35,7 +35,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, shrink-to-fit=no"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"
         />
 
         <title>
@@ -94,9 +94,21 @@ export default function Root({ children }: PropsWithChildren) {
                 -webkit-font-smoothing: antialiased;
                 -moz-osx-font-smoothing: grayscale;
                 overscroll-behavior-y: none;
+                touch-action: manipulation;
+                -webkit-text-size-adjust: 100%;
+                text-size-adjust: 100%;
               }
               * {
                 -webkit-overflow-scrolling: touch;
+              }
+              button, a, [role="button"] {
+                touch-action: manipulation;
+              }
+              /* Prevent iOS Safari & Mobile WebViews from auto-zooming when focusing any input/textarea */
+              @media screen and (max-width: 768px) {
+                input, textarea, select {
+                  font-size: 16px !important;
+                }
               }
               img {
                 -webkit-user-drag: none;

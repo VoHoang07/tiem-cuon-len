@@ -444,10 +444,10 @@ export function ShopChatWidget() {
                       borderColor: '#FCD34D',
                       borderRadius: 8,
                       paddingHorizontal: 9,
-                      paddingVertical: 5,
-                      fontSize: 12,
+                      paddingVertical: 6,
+                      fontSize: 16,
                       color: '#3B281E',
-                    }}
+                      }}
                     placeholder="Nhập Gmail của bạn (VD: tenban@gmail.com)..."
                     placeholderTextColor="#A1887F"
                     value={guestEmailDraft}
@@ -1365,14 +1365,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     paddingHorizontal: 8,
-    height: 28,
+    height: 34,
     gap: 5,
     borderWidth: 1,
     borderColor: '#DFCBB5',
   },
   pickerSearchInput: {
     flex: 1,
-    fontSize: 11.5,
+    fontSize: 16,
     color: '#2C1E14',
     paddingVertical: 0,
   },
@@ -1526,7 +1526,7 @@ const styles = StyleSheet.create({
 
   /* Bottom Input Bar */
   inputBar: {
-    height: 54,
+    height: 58,
     flexShrink: 0,
     flexGrow: 0,
     flexDirection: 'row',
@@ -1541,9 +1541,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    height: 36,
+    height: 40,
     paddingHorizontal: 10,
-    borderRadius: 18,
+    borderRadius: 20,
     backgroundColor: '#F3ECE2',
     borderWidth: 1,
     borderColor: '#D8C3AD',
@@ -1559,19 +1559,19 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    height: 36,
+    height: 40,
     backgroundColor: '#FAF5EE',
-    borderRadius: 18,
+    borderRadius: 20,
     paddingHorizontal: 13,
-    fontSize: 12.5,
+    fontSize: 16,
     color: '#2C1E14',
     borderWidth: 1,
     borderColor: '#E2D2C0',
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#3D2B1F',
     alignItems: 'center',
     justifyContent: 'center',
