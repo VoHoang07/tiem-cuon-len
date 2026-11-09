@@ -1,5 +1,5 @@
-import { Platform, Dimensions } from 'react-native';
 import { supabase } from '@/services/supabase';
+import { Dimensions, Platform } from 'react-native';
 
 export type SecurityEventType =
   | 'PAGE_VISIT'
@@ -47,6 +47,276 @@ const LOCAL_AUDIT_KEY = 'tcl_security_audit_logs_v1';
 const LOCAL_BLOCKLIST_KEY = 'tcl_security_blocklist_v1';
 const LOCAL_RATE_LIMIT_PREFIX = 'tcl_ratelimit_v2_';
 const LOCAL_TELEMETRY_CACHE_KEY = 'tcl_client_telemetry_v1';
+const FIRST_TOUCH_SOURCE_KEY = 'tcl_first_touch_source_v2';
+const SELF_REPORTED_SOURCE_KEY = 'tcl_self_reported_source_v1';
+
+export type TrafficChannelCategory =
+  | 'tiktok'
+  | 'google_search'
+  | 'copy_paste_direct'
+  | 'social_zalo_fb_ig'
+  | 'other_referral';
+
+export interface TrafficSourceClassification {
+  category: TrafficChannelCategory;
+  badgeLabel: string;
+  detailLabel: string;
+  bg: string;
+  color: string;
+}
+
+export function getVisitorSelfReportedSource(): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(SELF_REPORTED_SOURCE_KEY) || '';
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+export function setVisitorSelfReportedSource(sourceLabel: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(SELF_REPORTED_SOURCE_KEY, sourceLabel);
+      window.localStorage.setItem(
+        FIRST_TOUCH_SOURCE_KEY,
+        `[Khách xác nhận: ${sourceLabel}]`
+      );
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Captures and persists the visitor's VERY FIRST external entry source
+ * so navigating internally (/ -> /login -> /checkout) never overwrites how they found the shop.
+ */
+export function getOrCaptureVisitorTrafficSource(): string {
+  try {
+    if (typeof window === 'undefined') return 'Direct';
+
+    const selfReported = getVisitorSelfReportedSource();
+    const urlSearch = (window.location?.search || '').toLowerCase();
+    const ua = getClientUserAgent();
+    const rawRef = (typeof document !== 'undefined' && document.referrer) || '';
+    const refLower = rawRef.toLowerCase();
+    const isInternalRef =
+      refLower.includes('tiemcuonlen.shop') ||
+      refLower.includes('localhost') ||
+      refLower.includes('127.0.0.1');
+
+    // 1. Check URL query tags first (?s=tt1, ?s=tt2, ttclid, fbclid, gclid, utm_source)
+    let detectedNow = '';
+    if (
+      urlSearch.includes('s=tt1') ||
+      urlSearch.includes('tt=1') ||
+      urlSearch.includes('tiktok1')
+    ) {
+      detectedNow = '🎵 TikTok Kênh 1 (?s=tt1)';
+    } else if (
+      urlSearch.includes('s=tt2') ||
+      urlSearch.includes('tt=2') ||
+      urlSearch.includes('tiktok2')
+    ) {
+      detectedNow = '🎵 TikTok Kênh 2 (?s=tt2)';
+    } else if (urlSearch.includes('ttclid') || urlSearch.includes('tiktok')) {
+      detectedNow = '🎵 TikTok (Bấm link từ TikTok)';
+    } else if (
+      urlSearch.includes('fbclid') ||
+      urlSearch.includes('utm_source=fb') ||
+      urlSearch.includes('facebook')
+    ) {
+      detectedNow = '📘 Facebook / Messenger';
+    } else if (urlSearch.includes('gclid') || urlSearch.includes('utm_source=google')) {
+      detectedNow = '🔍 Google Search / Đề xuất';
+    } else if (urlSearch.includes('zalo')) {
+      detectedNow = '💬 Zalo';
+    }
+
+    // 2. Check In-App Browser User-Agent signatures
+    if (!detectedNow) {
+      if (/BytedanceWebview|musical_ly|TikTok|ByteLocale/i.test(ua)) {
+        detectedNow = '🎵 Mở trực tiếp trong App TikTok';
+      } else if (/FBAN|FBAV|Messenger/i.test(ua)) {
+        detectedNow = '📘 Mở trong App Facebook / Messenger';
+      } else if (/Zalo/i.test(ua)) {
+        detectedNow = '💬 Mở trong App Zalo';
+      } else if (/Instagram|Barcelona/i.test(ua)) {
+        detectedNow = '🌸 Mở trong App Instagram / Threads';
+      } else if (/GSA\//i.test(ua)) {
+        detectedNow = '🔍 App Google Search trên Điện thoại';
+      }
+    }
+
+    // 3. Check external document.referrer (ignoring internal tiemcuonlen.shop pages)
+    if (!detectedNow && rawRef && !isInternalRef) {
+      if (refLower.includes('google.')) {
+        detectedNow = `🔍 Tìm kiếm Google (${rawRef.slice(0, 80)})`;
+      } else if (
+        refLower.includes('bing.com') ||
+        refLower.includes('coccoc.com') ||
+        refLower.includes('yahoo.com') ||
+        refLower.includes('duckduckgo.com')
+      ) {
+        detectedNow = `🔍 Tìm kiếm Web (${rawRef.slice(0, 80)})`;
+      } else if (refLower.includes('tiktok.com')) {
+        detectedNow = `🎵 TikTok Web (${rawRef.slice(0, 80)})`;
+      } else if (refLower.includes('facebook.com') || refLower.includes('fb.com')) {
+        detectedNow = `📘 Facebook (${rawRef.slice(0, 80)})`;
+      } else if (refLower.includes('instagram.com') || refLower.includes('threads.net')) {
+        detectedNow = `🌸 Instagram / Threads (${rawRef.slice(0, 80)})`;
+      } else if (refLower.includes('zalo.me')) {
+        detectedNow = `💬 Zalo (${rawRef.slice(0, 80)})`;
+      } else {
+        detectedNow = `🌐 Web giới thiệu: ${rawRef.slice(0, 100)}`;
+      }
+    }
+
+    if (detectedNow) {
+      window.localStorage?.setItem(FIRST_TOUCH_SOURCE_KEY, detectedNow);
+      return selfReported
+        ? `${detectedNow} • [Khách chọn: ${selfReported}]`
+        : detectedNow;
+    }
+
+    // 4. Read previously saved first-touch source from this visitor's browser
+    const savedFirstTouch = window.localStorage?.getItem(FIRST_TOUCH_SOURCE_KEY);
+    if (savedFirstTouch && !savedFirstTouch.includes('tiemcuonlen.shop')) {
+      return selfReported && !savedFirstTouch.includes(selfReported)
+        ? `${savedFirstTouch} • [Khách chọn: ${selfReported}]`
+        : savedFirstTouch;
+    }
+
+    // 5. No external referrer -> Visitor copied & pasted "tiemcuonlen.shop" (e.g. from TikTok text) or typed directly
+    const isMobileUa = /iPhone|iPad|iPod|Android/i.test(ua);
+    const isIos = /iPhone|iPad|iPod/i.test(ua);
+    const fallbackDirect = isMobileUa
+      ? `📋 Copy/Dán link trên ĐT (${isIos ? 'iPhone Safari/Chrome' : 'Android Chrome'} — Thường copy từ chữ TikTok)`
+      : '📋 Copy/Dán link hoặc Gõ trực tiếp trên Máy tính';
+
+    window.localStorage?.setItem(FIRST_TOUCH_SOURCE_KEY, fallbackDirect);
+    return selfReported
+      ? `${fallbackDirect} • [Khách chọn: ${selfReported}]`
+      : fallbackDirect;
+  } catch {
+    return 'Direct';
+  }
+}
+
+/**
+ * Classifies any SecurityAuditEntry (including historical logs) into a human-friendly Traffic Source badge
+ */
+export function classifyAuditEntryTrafficSource(
+  entry: SecurityAuditEntry
+): TrafficSourceClassification {
+  const ref = String(entry.referer || '').trim();
+  const refLower = ref.toLowerCase();
+  const ua = String(entry.userAgent || '');
+  const detailsSource = String(
+    (entry.details && (entry.details as any).trafficSource) ||
+      (entry.details && (entry.details as any).howFoundShop) ||
+      ''
+  ).toLowerCase();
+  const combined = `${refLower} ${detailsSource}`;
+
+  // 1. TikTok (In-App, URL param, or customer self-reported TikTok)
+  if (
+    combined.includes('tiktok') ||
+    combined.includes('tt1') ||
+    combined.includes('tt2') ||
+    /BytedanceWebview|musical_ly|TikTok|ByteLocale/i.test(ua)
+  ) {
+    return {
+      category: 'tiktok',
+      badgeLabel: '🎵 Nguồn: TikTok',
+      detailLabel:
+        ref && !refLower.includes('tiemcuonlen.shop')
+          ? ref
+          : 'Khách vào từ TikTok (App TikTok hoặc xác nhận từ kênh TikTok)',
+      bg: '#FCE7F3',
+      color: '#9D174D',
+    };
+  }
+
+  // 2. Google Search / Cốc Cốc / Bing Organic Search
+  if (
+    combined.includes('google') ||
+    combined.includes('tìm kiếm') ||
+    combined.includes('coccoc') ||
+    combined.includes('bing.com') ||
+    combined.includes('yahoo.com') ||
+    /GSA\/|coc_coc_browser/i.test(ua)
+  ) {
+    return {
+      category: 'google_search',
+      badgeLabel: '🔍 Nguồn: Tìm kiếm Google / Web',
+      detailLabel:
+        ref && !refLower.includes('tiemcuonlen.shop')
+          ? ref
+          : 'Khách tự tìm kiếm từ khóa len trên Google / Cốc Cốc rồi bấm vào shop',
+      bg: '#DCFCE7',
+      color: '#166534',
+    };
+  }
+
+  // 3. Zalo / Facebook / Instagram / Messenger
+  if (
+    combined.includes('facebook') ||
+    combined.includes('zalo') ||
+    combined.includes('instagram') ||
+    combined.includes('threads') ||
+    combined.includes('bạn bè') ||
+    /FBAN|FBAV|Messenger|Zalo|Instagram|Barcelona/i.test(ua)
+  ) {
+    return {
+      category: 'social_zalo_fb_ig',
+      badgeLabel: '💬 Nguồn: Zalo / Facebook / IG',
+      detailLabel:
+        ref && !refLower.includes('tiemcuonlen.shop')
+          ? ref
+          : 'Mở từ tin nhắn Zalo, Facebook, Messenger hoặc Instagram',
+      bg: '#E0F2FE',
+      color: '#075985',
+    };
+  }
+
+  // 4. External website referral (not tiemcuonlen.shop)
+  if (
+    ref &&
+    ref !== 'Direct' &&
+    !refLower.includes('tiemcuonlen.shop') &&
+    !refLower.includes('localhost') &&
+    !refLower.startsWith('📋')
+  ) {
+    return {
+      category: 'other_referral',
+      badgeLabel: '🌐 Nguồn: Link giới thiệu ngoài',
+      detailLabel: ref,
+      bg: '#F3E8FF',
+      color: '#6B21A8',
+    };
+  }
+
+  // 5. Copy/Paste text link (e.g. copied text "tiemcuonlen.shop" from TikTok bio/caption) or Direct type
+  const isMobileUa = /iPhone|iPad|iPod|Android/i.test(ua);
+  const isIos = /iPhone|iPad|iPod/i.test(ua);
+  return {
+    category: 'copy_paste_direct',
+    badgeLabel: isMobileUa
+      ? '📋 Copy/Dán link trên Điện thoại (Từ text TikTok / Gõ trực tiếp)'
+      : '📋 Copy/Dán link hoặc Gõ trực tiếp trên Máy tính',
+    detailLabel: isMobileUa
+      ? `Khách copy chữ "tiemcuonlen.shop" (từ TikTok) rồi dán vào ${
+          isIos ? 'Safari/Chrome iPhone' : 'Chrome Android'
+        }`
+      : 'Khách dán link hoặc gõ trực tiếp tiemcuonlen.shop trên trình duyệt máy tính',
+    bg: '#FEF3C7',
+    color: '#92400E',
+  };
+}
 
 interface ClientTelemetryCache {
   ip: string;
@@ -405,11 +675,11 @@ export async function recordSecurityAudit(params: {
     userAgent: getClientUserAgent(),
     screenSize: getDeviceScreenSize(),
     language: getClientLanguage(),
-    referer:
-      typeof document !== 'undefined' && document.referrer
-        ? document.referrer.slice(0, 180)
-        : 'Direct',
-    details: params.details || {},
+    referer: getOrCaptureVisitorTrafficSource(),
+    details: {
+      ...(params.details || {}),
+      trafficSource: getOrCaptureVisitorTrafficSource(),
+    },
     timestamp: nowIso,
   };
 

@@ -23,8 +23,11 @@ import { validateVietnamRealPhone } from '@/utils/contactTrustValidator';
 import { formatVND } from '@/utils/formatCurrency';
 import {
     checkRateLimit,
+    getOrCaptureVisitorTrafficSource,
+    getVisitorSelfReportedSource,
     isCurrentIpBlocked,
     recordSecurityAudit,
+    setVisitorSelfReportedSource,
     validateHiddenBotField,
 } from '@/utils/securityGuard';
 import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
@@ -122,6 +125,9 @@ export default function CheckoutScreen() {
   const [buyNowGiftOverride, setBuyNowGiftOverride] = useState<boolean | null>(null);
   const [buyNowGiftNote, setBuyNowGiftNote] = useState<string>(
     giftCardNote ? String(giftCardNote) : ''
+  );
+  const [howFoundShop, setHowFoundShop] = useState<string>(() =>
+    getVisitorSelfReportedSource()
   );
 
   useEffect(() => {
@@ -669,6 +675,7 @@ export default function CheckoutScreen() {
     const combinedAddressNote = [
       selectedAddress.note?.trim(),
       giftNotesSummary,
+      howFoundShop ? `📍 Nguồn khách: ${howFoundShop}` : null,
     ]
       .filter(Boolean)
       .join(' — ');
@@ -757,8 +764,9 @@ export default function CheckoutScreen() {
         itemCount: checkoutItems.length,
         shippingMethod: shippingMethodLabel,
         paymentMethod: selectedPayment.title,
+        howFoundShop: howFoundShop || getOrCaptureVisitorTrafficSource(),
       },
-    });
+      });
 
     if (selectedPayment.type === 'cod') {
       // COD order is finalized immediately -> notify shop owner & clear cart
@@ -1489,6 +1497,70 @@ export default function CheckoutScreen() {
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>{CHECKOUT_TOTAL}</Text>
                 <Text style={styles.totalValue}>{formatVND(checkoutTotal)}</Text>
+              </View>
+
+              {/* 1-Tap Source Attribution Selector */}
+              <View
+                style={{
+                  marginTop: 10,
+                  marginBottom: 4,
+                  backgroundColor: '#FAF6F0',
+                  borderWidth: 1,
+                  borderColor: '#E8DACB',
+                  borderRadius: 11,
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  gap: 6,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '800',
+                    color: '#5C4332',
+                  }}>
+                  ✨ Bạn biết đến Tiệm Cuộn Len qua đâu? (Chạm nhẹ 1 mục):
+                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: 6,
+                  }}>
+                  {[
+                    '🎵 TikTok (Copy link từ kênh)',
+                    '🔍 Tự tìm trên Google',
+                    '💬 Bạn bè / Zalo',
+                    '📘 Facebook / IG',
+                  ].map((opt) => {
+                    const active = howFoundShop === opt;
+                    return (
+                      <TouchableOpacity
+                        key={opt}
+                        onPress={() => {
+                          setHowFoundShop(opt);
+                          setVisitorSelfReportedSource(opt);
+                        }}
+                        activeOpacity={0.8}
+                        style={{
+                          backgroundColor: active ? '#4A3427' : '#FFFFFF',
+                          borderWidth: 1,
+                          borderColor: active ? '#4A3427' : '#DCCAB8',
+                          borderRadius: 999,
+                          paddingHorizontal: 9,
+                          paddingVertical: 5,
+                        }}>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '700',
+                            color: active ? '#FFFDF9' : '#5C4332',
+                          }}>
+                          {opt}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
 
               {/* Pay Button inside Summary Card on Desktop, or below on Mobile */}

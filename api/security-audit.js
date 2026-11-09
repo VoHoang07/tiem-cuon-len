@@ -359,7 +359,10 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       userAgent: telemetry.userAgent || sanitizeTextServer(body.userAgent || '', 260),
       screenSize: sanitizeTextServer(body.screenSize || '', 40),
       language: sanitizeTextServer(body.language || 'vi-VN', 30),
-      referer: telemetry.referer || sanitizeTextServer(body.referer || 'Direct', 200),
+      referer:
+        sanitizeTextServer(body.referer || '', 220) ||
+        telemetry.referer ||
+        'Direct',
       details: body.details && typeof body.details === 'object' ? body.details : {},
       timestamp: nowIso,
     }),

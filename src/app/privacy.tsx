@@ -1,44 +1,45 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  useWindowDimensions,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  Home,
-  Shield,
-  ShieldCheck,
-  ShieldAlert,
-  Lock,
-  RefreshCw,
-  Trash2,
-  Ban,
-  CheckCircle2,
-  Globe,
-  Clock,
-  Smartphone,
-  Search,
-  Activity,
-} from 'lucide-react-native';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import {
-  fetchSecurityDashboardData,
-  blockIpAddress,
-  unblockIpAddress,
-  clearSecurityAuditLogs,
-  type SecurityAuditEntry,
-  type BlockedIpEntry,
+    blockIpAddress,
+    classifyAuditEntryTrafficSource,
+    clearSecurityAuditLogs,
+    fetchSecurityDashboardData,
+    unblockIpAddress,
+    type BlockedIpEntry,
+    type SecurityAuditEntry,
 } from '@/utils/securityGuard';
+import { useRouter } from 'expo-router';
+import {
+    Activity,
+    Ban,
+    CheckCircle2,
+    ChevronLeft,
+    Clock,
+    Globe,
+    Home,
+    Lock,
+    RefreshCw,
+    Search,
+    Shield,
+    ShieldAlert,
+    ShieldCheck,
+    Smartphone,
+    Trash2,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type LogFilter = 'all' | 'alerts' | 'auth' | 'orders' | 'visits';
 
@@ -163,12 +164,44 @@ export default function PrivacyScreen() {
 
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        const hay = `${item.ip} ${item.location} ${item.userEmail} ${item.path} ${item.eventType} ${item.userAgent}`.toLowerCase();
+        const srcInfo = classifyAuditEntryTrafficSource(item);
+        const hay = `${item.ip} ${item.location} ${item.userEmail} ${item.path} ${item.eventType} ${item.userAgent} ${item.referer} ${srcInfo.badgeLabel} ${srcInfo.detailLabel}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
-    });
-  }, [logs, filter, searchQuery]);
+      });
+      }, [logs, filter, searchQuery]);
+
+      const trafficBreakdown = useMemo(() => {
+      let copyPasteMobile = 0;
+      let copyPasteDesktop = 0;
+      let googleSearch = 0;
+      let tiktokDirect = 0;
+      let socialZaloFbIg = 0;
+
+      for (const l of logs) {
+      const classified = classifyAuditEntryTrafficSource(l);
+      if (classified.category === 'google_search') {
+        googleSearch += 1;
+      } else if (classified.category === 'tiktok') {
+        tiktokDirect += 1;
+      } else if (classified.category === 'social_zalo_fb_ig') {
+        socialZaloFbIg += 1;
+      } else {
+        const isMobileUa = /iPhone|iPad|iPod|Android/i.test(l.userAgent || '');
+        if (isMobileUa) copyPasteMobile += 1;
+        else copyPasteDesktop += 1;
+      }
+      }
+
+      return {
+      copyPasteMobile,
+      copyPasteDesktop,
+      googleSearch,
+      tiktokDirect,
+      socialZaloFbIg,
+      };
+      }, [logs]);
 
   const alertCount = useMemo(
     () =>
@@ -337,7 +370,198 @@ export default function PrivacyScreen() {
                   </Text>
                   <Text style={styles.metricLabel}>IP đang bị chặn</Text>
                 </View>
-              </View>
+                </View>
+
+                {/* Traffic Source Attribution Card (Where Customers Come From) */}
+                <View style={[styles.adminCard, isMobile && styles.cardMobile]}>
+                <View style={styles.sectionHeaderRow}>
+                  <View style={styles.sectionTitleWrap}>
+                    <Globe size={18} color="#047857" />
+                    <Text style={styles.sectionTitle}>
+                      📊 Phân Tích Nguồn Khách Truy Cập (Khách Vào Web Bằng Cách Nào?)
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: 10,
+                    marginTop: 10,
+                  }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      minWidth: 165,
+                      backgroundColor: '#FFFBEB',
+                      borderWidth: 1,
+                      borderColor: '#FDE68A',
+                      borderRadius: 12,
+                      padding: 12,
+                      gap: 4,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: '900',
+                        color: '#92400E',
+                      }}>
+                      {trafficBreakdown.copyPasteMobile} lượt
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: '#78350F',
+                      }}>
+                      📋 Copy/Dán link trên Điện thoại
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: '#92400E',
+                        lineHeight: 15,
+                      }}>
+                      Khách copy chữ "tiemcuonlen.shop" từ TikTok rồi dán vào Safari/Chrome ĐT
+                    </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      flex: 1,
+                      minWidth: 165,
+                      backgroundColor: '#ECFDF5',
+                      borderWidth: 1,
+                      borderColor: '#A7F3D0',
+                      borderRadius: 12,
+                      padding: 12,
+                      gap: 4,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: '900',
+                        color: '#065F46',
+                      }}>
+                      {trafficBreakdown.googleSearch} lượt
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: '#064E3B',
+                      }}>
+                      🔍 Tự tìm kiếm Google / Cốc Cốc
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: '#047857',
+                        lineHeight: 15,
+                      }}>
+                      Khách search từ khóa sản phẩm len trên Google & bấm vào đề xuất của shop
+                    </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      flex: 1,
+                      minWidth: 165,
+                      backgroundColor: '#FDF2F8',
+                      borderWidth: 1,
+                      borderColor: '#FBCFE8',
+                      borderRadius: 12,
+                      padding: 12,
+                      gap: 4,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: '900',
+                        color: '#9D174D',
+                      }}>
+                      {trafficBreakdown.tiktokDirect} lượt
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: '#831843',
+                      }}>
+                      🎵 TikTok (Mở từ App / Xác nhận)
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: '#9D174D',
+                        lineHeight: 15,
+                      }}>
+                      Khách mở trong App TikTok, link ?s=tt1 / ?s=tt2 hoặc chọn TikTok khi đặt đơn
+                    </Text>
+                  </View>
+
+                  <View
+                    style={{
+                      flex: 1,
+                      minWidth: 165,
+                      backgroundColor: '#F0F9FF',
+                      borderWidth: 1,
+                      borderColor: '#BAE6FD',
+                      borderRadius: 12,
+                      padding: 12,
+                      gap: 4,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: '900',
+                        color: '#075985',
+                      }}>
+                      {trafficBreakdown.socialZaloFbIg +
+                        trafficBreakdown.copyPasteDesktop}{' '}
+                      lượt
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: '#0C4A6E',
+                      }}>
+                      💻 Máy tính & Zalo / FB / IG
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: '#0369A1',
+                        lineHeight: 15,
+                      }}>
+                      {trafficBreakdown.copyPasteDesktop} lượt gõ/dán trên Máy tính •{' '}
+                      {trafficBreakdown.socialZaloFbIg} lượt từ Zalo/FB/IG
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={{
+                    marginTop: 10,
+                    backgroundColor: '#F8F5F0',
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderWidth: 1,
+                    borderColor: '#E6D9C8',
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      color: '#5C4332',
+                      lineHeight: 17,
+                    }}>
+                    💡 <Text style={{ fontWeight: '800' }}>Mẹo phân biệt chính xác 2 kênh TikTok của bạn (dạng chữ thường):</Text> Kênh 1 bạn có thể ghi <Text style={{ fontWeight: '800' }}>tiemcuonlen.shop</Text>, Kênh 2 ghi <Text style={{ fontWeight: '800' }}>tiemcuonlen.shop?s=tt2</Text> — hoặc xem mục khách tự chọn <Text style={{ fontWeight: '800' }}>"Biết Tiệm qua đâu"</Text> ngay trong chi tiết mỗi đơn hàng bên dưới!
+                  </Text>
+                </View>
+                </View>
 
               {/* IP Blocklist Management Card */}
               <View style={[styles.adminCard, isMobile && styles.cardMobile]}>
@@ -566,9 +790,40 @@ export default function PrivacyScreen() {
                           )}
 
                           <View style={styles.logBottomActions}>
-                            <Text style={styles.refererText} numberOfLines={1}>
-                              Nguồn: {item.referer || 'Direct'}
-                            </Text>
+                            {(() => {
+                              const srcBadge = classifyAuditEntryTrafficSource(item);
+                              return (
+                                <View
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    gap: 3,
+                                  }}>
+                                  <View
+                                    style={{
+                                      alignSelf: 'flex-start',
+                                      backgroundColor: srcBadge.bg,
+                                      paddingHorizontal: 9,
+                                      paddingVertical: 4,
+                                      borderRadius: 999,
+                                    }}>
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: '800',
+                                        color: srcBadge.color,
+                                      }}>
+                                      {srcBadge.badgeLabel}
+                                    </Text>
+                                  </View>
+                                  <Text
+                                    style={styles.refererText}
+                                    numberOfLines={2}>
+                                    Chi tiết nguồn: {srcBadge.detailLabel}
+                                  </Text>
+                                </View>
+                              );
+                            })()}
                             {item.ip && item.ip !== 'unknown' && (
                               <TouchableOpacity
                                 style={[
