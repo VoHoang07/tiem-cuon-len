@@ -21,6 +21,7 @@ export interface PromoEvaluationResult {
 const SAVED_WALLET_CODES_KEY = 'tcl_saved_voucher_wallet_v1';
 const ACTIVE_PROMO_CODE_KEY = 'tcl_selected_promo_code_v1';
 const ADMIN_CUSTOM_VOUCHERS_KEY = 'tcl_admin_vouchers_config_v1';
+export const PROMO_OPT_OUT_SENTINEL = '__NONE__';
 
 /**
  * Tiered Profit-Protected Grand Opening Vouchers:
@@ -199,7 +200,7 @@ export function evaluatePromoCode(
   const code = String(rawCode || '')
     .trim()
     .toUpperCase();
-  if (!code) {
+  if (!code || code === PROMO_OPT_OUT_SENTINEL) {
     return {
       valid: false,
       code: '',

@@ -1,5 +1,6 @@
 import { formatVND } from '@/utils/formatCurrency';
 import {
+    PROMO_OPT_OUT_SENTINEL,
     evaluatePromoCode,
     getActivePromoVouchers,
     getBestApplicableVoucher,
@@ -10,7 +11,7 @@ import {
     type PromoVoucher,
 } from '@/utils/promoEngine';
 import { Check, Gift, Sparkles, Tag, X } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     StyleSheet,
     Text,
@@ -36,6 +37,7 @@ export function PromoMilestoneAndPickerCard({
   );
   const [manualInput, setManualInput] = useState('');
   const [manualError, setManualError] = useState<string | null>(null);
+  const userManualChoiceRef = useRef<boolean>(false);
 
   useEffect(() => {
     const unsub = subscribePromoChanges(() => {
@@ -45,27 +47,39 @@ export function PromoMilestoneAndPickerCard({
     return unsub;
   }, []);
 
-  // Auto-select the best eligible voucher if none selected or if subtotal unlocks a better tier
+  // Auto-select the best eligible voucher ONLY when the user has not explicitly opted out (`__NONE__`)
+  // and has not manually picked another valid voucher.
   useEffect(() => {
-    const best = getBestApplicableVoucher(subtotal);
-    if (!selectedCode && best) {
-      setSelectedPromoCode(best.code);
-      setSelectedCodeState(best.code);
+    if (selectedCode === PROMO_OPT_OUT_SENTINEL) {
       return;
     }
-    if (selectedCode) {
-      const currentEval = evaluatePromoCode(selectedCode, subtotal);
-      if (!currentEval.valid && best) {
-        setSelectedPromoCode(best.code);
-        setSelectedCodeState(best.code);
-      } else if (
-        currentEval.valid &&
-        best &&
-        best.discountAmount > currentEval.discountAmount
-      ) {
+
+    const best = getBestApplicableVoucher(subtotal);
+    if (!selectedCode) {
+      if (best) {
         setSelectedPromoCode(best.code);
         setSelectedCodeState(best.code);
       }
+      return;
+    }
+
+    const currentEval = evaluatePromoCode(selectedCode, subtotal);
+    // If subtotal dropped below the currently selected voucher's minimum, fall back to the best eligible one
+    if (!currentEval.valid) {
+      const fallback = best ? best.code : '';
+      setSelectedPromoCode(fallback);
+      setSelectedCodeState(fallback);
+      return;
+    }
+
+    // Only auto-upgrade to a higher tier if the user hasn't manually picked a specific voucher
+    if (
+      !userManualChoiceRef.current &&
+      best &&
+      best.discountAmount > currentEval.discountAmount
+    ) {
+      setSelectedPromoCode(best.code);
+      setSelectedCodeState(best.code);
     }
   }, [subtotal, selectedCode]);
 
@@ -91,6 +105,39 @@ export function PromoMilestoneAndPickerCard({
     return Math.min(100, Math.max(4, Math.round((subtotal / maxTarget) * 100)));
   }, [subtotal]);
 
+  const handleClearSelection = () => {
+    userManualChoiceRef.current = true;
+    setManualError(null);
+    setSelectedPromoCode(PROMO_OPT_OUT_SENTINEL);
+    setSelectedCodeState(PROMO_OPT_OUT_SENTINEL);
+  };
+
+  const handleSelectChip = (v: PromoVoucher) => {
+    const eligible = subtotal >= v.minOrderSubtotal;
+    const isCurrentlyActive = evalResult.valid && evalResult.code === v.code;
+
+    // Clicking an already active voucher toggles it OFF (same as Bỏ chọn)
+    if (isCurrentlyActive) {
+      handleClearSelection();
+      return;
+    }
+
+    if (!eligible) {
+      const shortfall = Math.max(0, v.minOrderSubtotal - subtotal);
+      setManualError(
+        `Mã ${v.code} áp dụng cho đơn từ ${formatVND(
+          v.minOrderSubtotal
+        )} (Cần mua thêm ${formatVND(shortfall)} nữa).`
+      );
+      return;
+    }
+
+    userManualChoiceRef.current = true;
+    setManualError(null);
+    setSelectedPromoCode(v.code);
+    setSelectedCodeState(v.code);
+  };
+
   const handleApplyManual = () => {
     const cleaned = manualInput.trim().toUpperCase();
     if (!cleaned) return;
@@ -101,6 +148,7 @@ export function PromoMilestoneAndPickerCard({
       );
       return;
     }
+    userManualChoiceRef.current = true;
     setManualError(null);
     setManualInput('');
     setSelectedPromoCode(res.code);
@@ -159,24 +207,28 @@ export function PromoMilestoneAndPickerCard({
         </View>
       </View>
 
-      {/* 1-Tap Quick Voucher Chips */}
+      {/* 1-Tap Quick Voucher Chips (2x2 Balanced Grid) */}
       <View style={styles.pickerSection}>
         <View style={styles.pickerHeaderRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-            <Tag size={14} color="#6E4F37" />
+            <Tag size={13} color="#6E4F37" />
             <Text style={styles.pickerLabel}>
-              Chọn nhanh Mã Giảm Giá Khai Trương:
+              Chọn Mã Giảm Giá Khai Trương:
             </Text>
           </View>
-          {evalResult.valid && (
+          {evalResult.valid ? (
             <TouchableOpacity
-              onPress={() => {
-                setSelectedPromoCode('');
-                setSelectedCodeState('');
-              }}>
-              <Text style={styles.clearCodeText}>Bỏ chọn</Text>
+              style={styles.clearCodePill}
+              onPress={handleClearSelection}
+              activeOpacity={0.75}>
+              <X size={11} color="#B91C1C" />
+              <Text style={styles.clearCodeText}>Bỏ chọn mã</Text>
             </TouchableOpacity>
-          )}
+          ) : selectedCode === PROMO_OPT_OUT_SENTINEL ? (
+            <Text style={{ fontSize: 10.5, color: '#8C7A6B', fontWeight: '700' }}>
+              Đang không dùng mã
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.chipsWrap}>
@@ -193,32 +245,22 @@ export function PromoMilestoneAndPickerCard({
                   active && styles.voucherChipActive,
                   !eligible && styles.voucherChipLocked,
                 ]}
-                onPress={() => {
-                  if (!eligible) {
-                    setManualError(
-                      `Mã ${v.code} áp dụng cho đơn từ ${formatVND(
-                        v.minOrderSubtotal
-                      )} (Chỉ thiếu ${formatVND(shortfall)} nữa!).`
-                    );
-                    return;
-                  }
-                  setManualError(null);
-                  setSelectedPromoCode(v.code);
-                  setSelectedCodeState(v.code);
-                }}
+                onPress={() => handleSelectChip(v)}
                 activeOpacity={0.8}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      gap: 5,
+                      justifyContent: 'space-between',
+                      gap: 4,
                     }}>
                     <Text
                       style={[
                         styles.chipCode,
                         active && { color: '#FFFDF9' },
-                      ]}>
+                      ]}
+                      numberOfLines={1}>
                       🎟️ {v.code}
                     </Text>
                     <Text
@@ -226,7 +268,7 @@ export function PromoMilestoneAndPickerCard({
                         styles.chipDiscount,
                         active && { color: '#FDE68A' },
                       ]}>
-                      (-{formatVND(v.discountAmount)})
+                      -{Math.round(v.discountAmount / 1000)}k
                     </Text>
                   </View>
                   <Text
@@ -235,16 +277,18 @@ export function PromoMilestoneAndPickerCard({
                       active && { color: '#F5EFE6' },
                     ]}
                     numberOfLines={1}>
-                    {eligible
-                      ? `✓ Đủ điều kiện (Đơn ≥${Math.round(
+                    {active
+                      ? '✓ Đang dùng (Chạm để bỏ)'
+                      : eligible
+                      ? `✓ Đủ điều kiện (≥${Math.round(
                           v.minOrderSubtotal / 1000
                         )}k)`
-                      : `Cần thêm ${formatVND(shortfall)} (Đơn ≥${Math.round(
+                      : `Thêm ${formatVND(shortfall)} (≥${Math.round(
                           v.minOrderSubtotal / 1000
                         )}k)`}
                   </Text>
                 </View>
-                {active && <Check size={15} color="#FDE68A" strokeWidth={2.8} />}
+                {active && <Check size={14} color="#FDE68A" strokeWidth={2.8} />}
               </TouchableOpacity>
             );
           })}
@@ -254,7 +298,7 @@ export function PromoMilestoneAndPickerCard({
         <View style={styles.manualRow}>
           <TextInput
             style={styles.manualInput}
-            placeholder="Nhập mã giảm giá (VD: KHAITRUONG20K)..."
+            placeholder="Nhập mã giảm giá (VD: CHAOBAN10K)..."
             placeholderTextColor="#A1887F"
             value={manualInput}
             onChangeText={(txt) => {
@@ -284,7 +328,7 @@ export function PromoMilestoneAndPickerCard({
 
         {evalResult.valid && evalResult.voucher ? (
           <View style={styles.appliedBanner}>
-            <Gift size={15} color="#065F46" />
+            <Gift size={14} color="#065F46" />
             <Text style={styles.appliedBannerText}>
               Đã áp mã <Text style={{ fontWeight: '900' }}>{evalResult.code}</Text> — Giảm trực tiếp{' '}
               <Text style={{ fontWeight: '900' }}>
@@ -307,16 +351,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#EBD7BF',
     borderRadius: 14,
-    padding: 12,
-    gap: 10,
+    padding: 11,
+    gap: 9,
   },
   milestoneBox: {
     backgroundColor: '#FFFBEB',
     borderWidth: 1,
     borderColor: '#FDE68A',
     borderRadius: 10,
-    padding: 10,
-    gap: 7,
+    padding: 9,
+    gap: 6,
   },
   milestoneHeader: {
     flexDirection: 'row',
@@ -328,10 +372,10 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '800',
     color: '#92400E',
-    lineHeight: 16,
+    lineHeight: 15.5,
   },
   progressTrack: {
-    height: 7,
+    height: 6,
     backgroundColor: '#FDE68A',
     borderRadius: 999,
     overflow: 'hidden',
@@ -353,8 +397,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   milestoneDot: {
-    width: 14,
-    height: 14,
+    width: 13,
+    height: 13,
     borderRadius: 7,
     backgroundColor: '#D6C5B3',
     alignItems: 'center',
@@ -364,7 +408,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#16A34A',
   },
   milestoneStepText: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '700',
     color: '#8C7A6B',
   },
@@ -373,7 +417,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   pickerSection: {
-    gap: 8,
+    gap: 7,
   },
   pickerHeaderRow: {
     flexDirection: 'row',
@@ -385,20 +429,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#3B281E',
   },
+  clearCodePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
   clearCodeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#991B1B',
-    textDecorationLine: 'underline',
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#B91C1C',
   },
   chipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 7,
+    justifyContent: 'space-between',
+    gap: 6,
   },
   voucherChip: {
-    flexGrow: 1,
-    minWidth: 145,
+    width: '48.6%' as any,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -406,30 +460,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DFCBB5',
     borderRadius: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 7,
-    gap: 6,
+    gap: 4,
   },
   voucherChipActive: {
     backgroundColor: '#4A3427',
     borderColor: '#4A3427',
   },
   voucherChipLocked: {
-    opacity: 0.68,
+    opacity: 0.65,
     backgroundColor: '#F5F2EE',
   },
   chipCode: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '900',
     color: '#3B281E',
   },
   chipDiscount: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#BE185D',
+    fontSize: 10.5,
+    fontWeight: '900',
+    color: '#9E3B46',
   },
   chipSub: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '600',
     color: '#6E5643',
     marginTop: 2,
@@ -447,18 +501,18 @@ const styles = StyleSheet.create({
     borderColor: '#DFCBB5',
     borderRadius: 9,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6.5,
     fontSize: 12,
     color: '#3B281E',
   },
   applyBtn: {
     backgroundColor: '#6E4F37',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7.5,
     borderRadius: 9,
   },
   applyBtnText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '800',
     color: '#FFFDF9',
   },
@@ -489,11 +543,11 @@ const styles = StyleSheet.create({
     borderColor: '#A7F3D0',
     borderRadius: 9,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6.5,
   },
   appliedBannerText: {
     flex: 1,
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '700',
     color: '#065F46',
   },
