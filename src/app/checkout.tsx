@@ -1039,70 +1039,16 @@ export default function CheckoutScreen() {
                             paddingTop: 7,
                             borderTopWidth: 1,
                             borderTopColor: pCheck.valid ? '#A7F3D0' : '#FECACA',
-                            gap: 5,
+                            gap: 4,
                           }}>
-                          <View
+                          <Text
                             style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              flexWrap: 'wrap',
-                              gap: 6,
+                              fontSize: 11.5,
+                              fontWeight: '800',
+                              color: '#065F46',
                             }}>
-                            <Text
-                              style={{
-                                fontSize: 11.5,
-                                fontWeight: '800',
-                                color: '#065F46',
-                              }}>
-                              📧 Gmail xác thực tài khoản thật & nhận mã vận đơn:
-                            </Text>
-                            {user?.email ? (
-                              <View
-                                style={{
-                                  backgroundColor: '#D1FAE5',
-                                  borderWidth: 1,
-                                  borderColor: '#34D399',
-                                  borderRadius: 999,
-                                  paddingHorizontal: 8,
-                                  paddingVertical: 2,
-                                }}>
-                                <Text
-                                  style={{
-                                    fontSize: 10.5,
-                                    fontWeight: '800',
-                                    color: '#065F46',
-                                  }}>
-                                  ✓ Đã xác thực Acc thật ({user.authProvider === 'facebook' ? 'Facebook' : 'Google / Gmail'})
-                                </Text>
-                              </View>
-                            ) : (
-                              <TouchableOpacity
-                                onPress={() =>
-                                  router.push({
-                                    pathname: '/login',
-                                    params: { redirect: '/checkout' },
-                                  })
-                                }
-                                style={{
-                                  backgroundColor: '#FFFDF9',
-                                  borderWidth: 1,
-                                  borderColor: '#059669',
-                                  borderRadius: 999,
-                                  paddingHorizontal: 9,
-                                  paddingVertical: 3,
-                                }}>
-                                <Text
-                                  style={{
-                                    fontSize: 10.5,
-                                    fontWeight: '800',
-                                    color: '#047857',
-                                  }}>
-                                  ⚡ Liên kết Google / Facebook 1 chạm ›
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
+                            📧 Gmail nhận hóa đơn xác nhận & báo mã vận đơn tự động:
+                          </Text>
                           <TextInput
                             style={{
                               backgroundColor: '#FFFFFF',
@@ -1115,7 +1061,7 @@ export default function CheckoutScreen() {
                               color: '#1E293B',
                               minWidth: 0,
                             }}
-                            placeholder="Chạm để chọn Gmail có sẵn trên máy (VD: tenban@gmail.com)..."
+                            placeholder="Nhập Gmail của bạn (VD: tenban@gmail.com)..."
                             placeholderTextColor="#94A3B8"
                             value={customerEmailInput}
                             onChangeText={setCustomerEmailInput}

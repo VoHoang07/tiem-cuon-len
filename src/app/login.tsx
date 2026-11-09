@@ -426,9 +426,9 @@ export default function LoginScreen() {
 
                 {/* Divider */}
                 <View style={[styles.dividerRow, { marginTop: 2, marginBottom: 12 }]}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>hoặc đăng nhập bằng mật khẩu</Text>
-                <View style={styles.dividerLine} />
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>hoặc</Text>
+                  <View style={styles.dividerLine} />
                 </View>
 
                 {/* Form */}

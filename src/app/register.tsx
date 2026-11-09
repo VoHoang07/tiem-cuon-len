@@ -378,9 +378,9 @@ export default function RegisterScreen() {
                 />
 
                 <View style={[styles.dividerRow, { marginTop: 2, marginBottom: 12 }]}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>hoặc tự tạo tài khoản mới</Text>
-                <View style={styles.dividerLine} />
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>hoặc</Text>
+                  <View style={styles.dividerLine} />
                 </View>
 
                 <View style={styles.formSection}>
