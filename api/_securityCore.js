@@ -399,6 +399,63 @@ async function verifySupabaseUser(req) {
   }
 }
 
+const EXACT_COMBO2_PRICE_MAP_SERVER = {
+  35000: 65000,
+  39000: 69000,
+  45000: 79000,
+  49000: 89000,
+  55000: 99000,
+  59000: 109000,
+  65000: 119000,
+  69000: 129000,
+  75000: 139000,
+  79000: 145000,
+  85000: 155000,
+  89000: 159000,
+  95000: 175000,
+  99000: 179000,
+  115000: 209000,
+  125000: 229000,
+  129000: 239000,
+  130000: 239000,
+  135000: 249000,
+  139000: 259000,
+  145000: 269000,
+  149000: 279000,
+  155000: 289000,
+  159000: 295000,
+  165000: 309000,
+  169000: 315000,
+  170000: 319000,
+  179000: 329000,
+  189000: 349000,
+  199000: 369000,
+  229000: 429000,
+  249000: 469000,
+  255000: 479000,
+  269000: 499000,
+  270000: 499000,
+  289000: 539000,
+  345000: 649000,
+  365000: 689000,
+};
+
+function calculateSmartCombo2PriceServer(unitPrice) {
+  const cleanUnit = Math.max(1000, Math.round(Number(unitPrice) || 0));
+  if (EXACT_COMBO2_PRICE_MAP_SERVER[cleanUnit]) {
+    return EXACT_COMBO2_PRICE_MAP_SERVER[cleanUnit];
+  }
+  const twoTotal = cleanUnit * 2;
+  if (twoTotal <= 40000) {
+    return Math.max(1000, twoTotal - 3000);
+  }
+  const discounted = Math.round((twoTotal * 0.925) / 10000) * 10000 - 1000;
+  if (discounted >= twoTotal) {
+    return Math.max(1000, twoTotal - 9000);
+  }
+  return Math.max(1000, discounted);
+}
+
 /**
  * Resolves authoritative product prices from the Supabase `products` table + server catalog
  */
@@ -406,6 +463,7 @@ async function resolveAuthoritativeProductPrices(baseIds) {
   const priceMap = new Map();
   for (const [k, v] of Object.entries(STATIC_CATALOG_PRICES)) {
     priceMap.set(k, v);
+    priceMap.set(`${k}__c_combo_2`, calculateSmartCombo2PriceServer(v));
   }
 
   const cleanIds = Array.from(
@@ -431,13 +489,27 @@ async function resolveAuthoritativeProductPrices(baseIds) {
         for (const row of rows) {
           if (row && row.id && Number(row.price) > 0) {
             const baseIdStr = String(row.id);
-            priceMap.set(baseIdStr, Number(row.price));
+            const basePriceNum = Number(row.price);
+            priceMap.set(baseIdStr, basePriceNum);
+            priceMap.set(
+              `${baseIdStr}__c_combo_2`,
+              calculateSmartCombo2PriceServer(basePriceNum)
+            );
             if (Array.isArray(row.tags)) {
               for (const tag of row.tags) {
                 if (typeof tag === 'string' && tag.startsWith('__tcl_variants_v1__:')) {
                   try {
                     const parsedMeta = JSON.parse(tag.slice('__tcl_variants_v1__:'.length));
                     if (parsedMeta && Array.isArray(parsedMeta.colorOptions)) {
+                      const firstVariantPrice = Number(
+                        parsedMeta.colorOptions[0] && parsedMeta.colorOptions[0].price
+                      );
+                      if (firstVariantPrice > 0) {
+                        priceMap.set(
+                          `${baseIdStr}__c_combo_2`,
+                          calculateSmartCombo2PriceServer(firstVariantPrice)
+                        );
+                      }
                       for (const co of parsedMeta.colorOptions) {
                         const vPrice = Number(co && co.price);
                         if (vPrice > 0) {

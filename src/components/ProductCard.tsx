@@ -9,6 +9,7 @@ import {
     ProductAccessoryOption,
     ProductColorOption,
 } from '@/types/product';
+import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { useRouter } from 'expo-router';
@@ -104,16 +105,8 @@ export const ProductCard = memo(function ProductCard({
   const [quickPreviewGiftBox, setQuickPreviewGiftBox] = useState<boolean>(false);
 
   const colorOptions: ProductColorOption[] = useMemo(
-    () =>
-      (product.colorOptions ?? []).filter((c) => {
-        const lower = (c.name || '').toLowerCase();
-        return (
-          !lower.includes('hộp quà') &&
-          !lower.includes('thư tay') &&
-          !lower.includes('set quà')
-        );
-      }),
-    [product.colorOptions]
+    () => getProductColorOptionsWithCombo(product),
+    [product]
   );
   const activeQuickColor: ProductColorOption | null =
     colorOptions.find((c) => c.id === quickColorId) ?? colorOptions[0] ?? null;

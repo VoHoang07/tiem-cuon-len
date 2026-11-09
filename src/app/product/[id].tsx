@@ -18,6 +18,10 @@ import {
     ProductGalleryItem,
     Review,
 } from '@/types/product';
+import {
+    getProductColorOptionsWithCombo,
+    isComboColorOption,
+} from '@/utils/comboPricing';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -108,6 +112,7 @@ export default function ProductDetailScreen() {
   const [selectedColorId, setSelectedColorId] = useState<string | null>(null);
   const [selectedAccessoryId, setSelectedAccessoryId] = useState<string | null>(null);
   const [giftCardNote, setGiftCardNote] = useState('');
+  const [comboNote, setComboNote] = useState('');
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -140,16 +145,12 @@ export default function ProductDetailScreen() {
   }, [id, initialColorId, initialAccessoryId, initialQty, initialGiftNote]);
 
   const colorOptions: ProductColorOption[] = useMemo(
-    () =>
-      (product?.colorOptions ?? []).filter((c) => {
-        const lower = (c.name || '').toLowerCase();
-        return (
-          !lower.includes('hộp quà') &&
-          !lower.includes('thư tay') &&
-          !lower.includes('set quà')
-        );
-      }),
+    () => getProductColorOptionsWithCombo(product),
     [product]
+  );
+  const singleModelOptions: ProductColorOption[] = useMemo(
+    () => colorOptions.filter((c) => !isComboColorOption(c)),
+    [colorOptions]
   );
   const accessoryOptions: ProductAccessoryOption[] = useMemo(
     () => [
@@ -364,6 +365,19 @@ export default function ProductDetailScreen() {
       : product.price;
   const effectivePrice = baseVariantPrice + accessoryDelta;
 
+  const isComboActive = isComboColorOption(activeColor);
+  const singleRefPrice =
+    singleModelOptions[0]?.price && Number(singleModelOptions[0].price) > 0
+      ? Number(singleModelOptions[0].price)
+      : product.price;
+  const comboSavings = isComboActive
+    ? Math.max(0, singleRefPrice * 2 - baseVariantPrice)
+    : 0;
+  const resolvedColorDisplayName =
+    isComboActive && comboNote.trim()
+      ? `${activeColor?.name ?? '🎁 Combo 2 Mẫu'}: ${comboNote.trim()}`.slice(0, 78)
+      : activeColor?.name ?? product.color;
+
   const buildVariantProduct = (): Product => {
     const colorId = activeColor?.id ?? 'c1';
     const accId = activeAccessory?.id ?? 'no_box';
@@ -373,9 +387,9 @@ export default function ProductDetailScreen() {
       ...product,
       id: variantId,
       baseProductId: product.id,
-      color: activeColor ? activeColor.name : product.color,
+      color: resolvedColorDisplayName,
       selectedColorId: activeColor?.id,
-      selectedColorName: activeColor?.name ?? product.color,
+      selectedColorName: resolvedColorDisplayName,
       selectedColorHex: activeColor?.hex,
       selectedAccessoryId: accId,
       selectedAccessoryName: isGiftSet
@@ -468,7 +482,7 @@ export default function ProductDetailScreen() {
         productId: product.id,
         quantity: String(quantity),
         selectedColorId: activeColor?.id ?? '',
-        selectedColor: activeColor?.name ?? product.color,
+        selectedColor: resolvedColorDisplayName,
         selectedAccessoryId: activeAccessory?.id ?? 'no_box',
         selectedAccessory: isGiftSet
           ? '🎁 Set Quà Tặng Đặc Biệt (+25.000₫)'
@@ -877,6 +891,26 @@ export default function ProductDetailScreen() {
             {/* Calm Price Row */}
             <View style={styles.priceRow}>
               <Text style={styles.priceText}>{formatVND(effectivePrice)}</Text>
+              {isComboActive && comboSavings > 0 && (
+                <View
+                  style={{
+                    backgroundColor: '#FEF3C7',
+                    borderWidth: 1,
+                    borderColor: '#F59E0B',
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 999,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '800',
+                      color: '#B45309',
+                    }}>
+                    🔥 Tiết kiệm {formatVND(comboSavings)} so với mua lẻ 2 mẫu
+                  </Text>
+                </View>
+              )}
               {accessoryDelta > 0 && (
                 <Text style={styles.priceDeltaNote}>
                   (Đã gồm +{formatVND(accessoryDelta)} {activeAccessory?.name})
@@ -925,12 +959,102 @@ export default function ProductDetailScreen() {
                             ? `${c.name} • ${formatVND(Number(c.price))}`
                             : c.name}
                         </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
+                        </TouchableOpacity>
+                        );
+                        })}
+                        </View>
+
+                        {isComboActive && (
+                        <View
+                        style={{
+                        marginTop: 6,
+                        backgroundColor: '#FFFBEB',
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#FDE68A',
+                        padding: 12,
+                        gap: 7,
+                        }}>
+                        <Text
+                        style={{
+                        fontSize: 12.5,
+                        fontWeight: '700',
+                        color: '#92400E',
+                        }}>
+                        💝 Chọn 2 mẫu bạn muốn phối trong Combo (chạm để chọn nhanh hoặc tự nhập):
+                        </Text>
+                        {singleModelOptions.length >= 2 && (
+                        <View
+                        style={{
+                          flexDirection: 'row',
+                          flexWrap: 'wrap',
+                          gap: 6,
+                        }}>
+                        {singleModelOptions.map((m) => (
+                          <TouchableOpacity
+                            key={`combo_pick_${m.id}`}
+                            onPress={() => {
+                              setComboNote((prev) => {
+                                const parts = prev
+                                  .split('+')
+                                  .map((s) => s.trim())
+                                  .filter(Boolean);
+                                if (parts.length >= 2) {
+                                  return `${parts[1]} + ${m.name}`;
+                                }
+                                if (parts.length === 1) {
+                                  return `${parts[0]} + ${m.name}`;
+                                }
+                                return m.name;
+                              });
+                            }}
+                            activeOpacity={0.78}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              borderRadius: 999,
+                              backgroundColor: '#FFFFFF',
+                              borderWidth: 1,
+                              borderColor: '#F59E0B',
+                            }}>
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '700',
+                                color: '#78350F',
+                              }}>
+                              + {m.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                        </View>
+                        )}
+                        <TextInput
+                        style={{
+                        backgroundColor: '#FFFFFF',
+                        borderWidth: 1,
+                        borderColor: '#FCD34D',
+                        borderRadius: 9,
+                        paddingHorizontal: 11,
+                        paddingVertical: 8,
+                        fontSize: 13,
+                        color: '#3B2A1E',
+                        minWidth: 0,
+                        }}
+                        placeholder={
+                        singleModelOptions.length >= 2
+                          ? `VD: ${singleModelOptions[0]?.name} + ${singleModelOptions[1]?.name}`
+                          : 'Nhập 2 mẫu / màu bạn muốn phối trong Combo...'
+                        }
+                        placeholderTextColor="#A3907E"
+                        value={comboNote}
+                        onChangeText={setComboNote}
+                        maxLength={55}
+                        />
+                        </View>
+                        )}
+                        </View>
+                        )}
 
             {/* 2. Packaging / Gift Box Variant Cards & Personalization Note */}
             <View style={styles.selectorGroup}>

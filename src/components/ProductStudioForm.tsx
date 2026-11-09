@@ -8,6 +8,11 @@ import {
     ProductGalleryItem,
 } from '@/types/product';
 import {
+    calculateSmartCombo2Price,
+    DEFAULT_COMBO_OPTION_ID,
+    isComboColorOption,
+} from '@/utils/comboPricing';
+import {
     generateUuidFilename,
     MAX_PROCESSED_DATA_URI_BYTES,
     validateBase64ImageUpload,
@@ -2152,7 +2157,65 @@ export function ProductStudioForm({
                     </Text>
                   </TouchableOpacity>
                 ) : null}
-              </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.addOptionPill,
+                    {
+                      backgroundColor: '#FFF7ED',
+                      borderColor: '#EA580C',
+                      borderStyle: 'solid',
+                    },
+                  ]}
+                  onPress={() => {
+                    const existingIdx = colorOptions.findIndex((c) =>
+                      isComboColorOption(c)
+                    );
+                    if (existingIdx !== -1) {
+                      setActiveSlot({ type: 'color', index: existingIdx });
+                      return;
+                    }
+                    const refUnit =
+                      Number(colorOptions[0]?.price) ||
+                      Number(price.replace(/\D/g, '')) ||
+                      49000;
+                    const suggestedComboPrice =
+                      calculateSmartCombo2Price(refUnit);
+                    const comboImg =
+                      coverImage ||
+                      colorOptions[0]?.image ||
+                      initialProduct?.image ||
+                      undefined;
+                    const nextList: ProductColorOption[] = [
+                      ...colorOptions,
+                      {
+                        id: DEFAULT_COMBO_OPTION_ID,
+                        name:
+                          colorOptions.length >= 2
+                            ? '🎁 Combo 2 Mẫu Tự Chọn'
+                            : '🎁 Combo 2 Sản Phẩm (Tiết kiệm)',
+                        hex: '#D97706',
+                        image: comboImg,
+                        price: suggestedComboPrice,
+                      },
+                    ];
+                    setColorOptions(nextList);
+                    setActiveSlot({
+                      type: 'color',
+                      index: nextList.length - 1,
+                    });
+                  }}
+                  activeOpacity={0.8}>
+                  <Sparkles size={13} color="#C2410C" />
+                  <Text
+                    style={[
+                      styles.addOptionPillText,
+                      { color: '#C2410C', fontWeight: '800' },
+                    ]}>
+                    🎁 + Tạo phân loại Combo 2 mẫu (Tự tính giá ưu đãi)
+                  </Text>
+                </TouchableOpacity>
+                </View>
 
               {/* STEP 2: List of uploaded photos to pick a color & price for each */}
               {colorOptions.length > 0 && (

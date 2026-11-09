@@ -1,19 +1,20 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from 'react';
-import { Platform, AppState } from 'react-native';
-import { Product, CartItem } from '@/types/product';
+import { MOCK_PRODUCTS } from '@/data/products';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 import { useProducts } from '@/store/ProductContext';
-import { MOCK_PRODUCTS } from '@/data/products';
+import { CartItem, Product } from '@/types/product';
+import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from 'react';
+import { AppState, Platform } from 'react-native';
 
 interface CartContextType {
   cart: CartItem[];
@@ -86,7 +87,7 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     };
   }
 
-  const colorOptions = source.colorOptions || mock?.colorOptions;
+  const colorOptions = getProductColorOptionsWithCombo(source);
 
   const colorOpt =
     colorOptions?.find((c) => c.id === parsedColorId) ||

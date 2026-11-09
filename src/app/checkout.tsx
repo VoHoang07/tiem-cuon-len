@@ -1,60 +1,59 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Image,
-  TextInput,
-  Animated,
-  useWindowDimensions,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  Check,
-  MapPin,
-  ChevronRight,
-  Building2,
-  Smartphone,
-  Wallet,
-  Truck,
-  Home,
-  Zap,
-  Store,
-  Settings,
-  MessageCircle,
-} from 'lucide-react-native';
-import { useShop } from '@/store/ShopContext';
-import { useAuth } from '@/store/AuthContext';
-import { useOrders } from '@/store/OrderContext';
-import { useAddresses } from '@/store/AddressContext';
-import { usePaymentMethods } from '@/store/PaymentMethodsContext';
-import { useChat } from '@/store/ChatContext';
-import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
-import { formatVND } from '@/utils/formatCurrency';
-import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
-import {
-  CHECKOUT_TITLE,
-  CHECKOUT_DELIVERY,
-  CHECKOUT_PAYMENT,
-  CHECKOUT_ORDER_SUMMARY,
-  CHECKOUT_TOTAL,
-  CHECKOUT_SUCCESS_TITLE,
-  CHECKOUT_SUCCESS_TEXT,
-} from '@/constants/strings';
 import { HiddenBotField } from '@/components/HiddenBotField';
 import {
-  checkRateLimit,
-  validateHiddenBotField,
-  isCurrentIpBlocked,
-  recordSecurityAudit,
+    CHECKOUT_DELIVERY,
+    CHECKOUT_ORDER_SUMMARY,
+    CHECKOUT_PAYMENT,
+    CHECKOUT_TITLE,
+    CHECKOUT_TOTAL
+} from '@/constants/strings';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import { useAddresses } from '@/store/AddressContext';
+import { useAuth } from '@/store/AuthContext';
+import { useChat } from '@/store/ChatContext';
+import { useOrders } from '@/store/OrderContext';
+import { usePaymentMethods } from '@/store/PaymentMethodsContext';
+import { useShop } from '@/store/ShopContext';
+import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
+import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
+import { formatVND } from '@/utils/formatCurrency';
+import {
+    checkRateLimit,
+    isCurrentIpBlocked,
+    recordSecurityAudit,
+    validateHiddenBotField,
 } from '@/utils/securityGuard';
+import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+    Building2,
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Home,
+    MapPin,
+    MessageCircle,
+    Settings,
+    Smartphone,
+    Store,
+    Truck,
+    Wallet,
+    Zap,
+} from 'lucide-react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const CHECKOUT_SESSION_KEY = '__tcl_checkout_session_v1';
 
@@ -136,12 +135,13 @@ export default function CheckoutScreen() {
     if (!isBuyNow || !productId) return null;
     const base = products.find((p) => p.id === productId) ?? null;
     if (!base) return null;
+    const baseColorOptions = getProductColorOptionsWithCombo(base);
     const matchedColor =
-      base.colorOptions?.find((c) => c.id === selectedColorId) ||
-      base.colorOptions?.find(
+      baseColorOptions.find((c) => c.id === selectedColorId) ||
+      baseColorOptions.find(
         (c) => c.name.toLowerCase() === (selectedColor || '').trim().toLowerCase()
       ) ||
-      base.colorOptions?.[0];
+      baseColorOptions[0];
 
     const defaultIsGiftBox =
       selectedAccessoryId === 'gift_box_letter' ||
