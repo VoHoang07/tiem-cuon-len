@@ -242,13 +242,17 @@ function purgeLocalSupabaseSessionTokens() {
   }
 }
 
+const DEFAULT_GOOGLE_CLIENT_ID =
+  '18270939685-6b7grv7i462e2t9tracev3g74h1kc4a6.apps.googleusercontent.com';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => loadCachedAuthUser());
   const [isLoading, setIsLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
   const [guestAvatar, setGuestAvatar] = useState<string>('capybara');
   const [oauthClientConfig, setOauthClientConfig] = useState<OAuthClientConfig>(() => {
-    const envGoogle = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+    const envGoogle =
+      process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
     const envFb = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID || '';
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -292,7 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               googleClientId: String(
                 parsed?.googleClientId ||
                   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
-                  ''
+                  DEFAULT_GOOGLE_CLIENT_ID
               ).trim(),
               facebookAppId: String(
                 parsed?.facebookAppId ||
