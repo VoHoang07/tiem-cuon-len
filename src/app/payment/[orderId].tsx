@@ -1,43 +1,43 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Linking,
-  Modal,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  CheckCheck,
-  Copy,
-  CheckCircle,
-  Clock,
-  ShieldCheck,
-  Zap,
-  RefreshCw,
-  Download,
-  Smartphone,
-  X,
-  ArrowUpRight,
-} from 'lucide-react-native';
+import { getOrderStatusLabel } from '@/constants/orderStatus';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
+import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
-import { useAuth } from '@/store/AuthContext';
 import { useShop } from '@/store/ShopContext';
-import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
 import { type PaymentMethod } from '@/types/payment-method';
-import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
-import { getOrderStatusLabel } from '@/constants/orderStatus';
 import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
+import * as Clipboard from 'expo-clipboard';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+    ArrowUpRight,
+    CheckCheck,
+    CheckCircle,
+    ChevronLeft,
+    Clock,
+    Copy,
+    Download,
+    RefreshCw,
+    ShieldCheck,
+    Smartphone,
+    X,
+    Zap,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface VietQRBankApp {
   appId: string;
@@ -309,6 +309,7 @@ export default function PaymentScreen() {
     useState<VietQRBankApp | null>(null);
   const [downloadingQr, setDownloadingQr] = useState(false);
   const [qrSavedSuccess, setQrSavedSuccess] = useState(false);
+  const notifiedOrderIdRef = React.useRef<string | null>(null);
 
   const paymentMethod: PaymentMethod | undefined =
     enabledMethods.find((m) => m.title === order?.paymentMethod) ??
@@ -452,9 +453,11 @@ export default function PaymentScreen() {
     return () => clearInterval(tick);
   }, [order, confirmed]);
 
-  // Only send email notification & clear cart AFTER payment is confirmed
+  // Only send email notification & clear cart ONCE AFTER payment is confirmed
   useEffect(() => {
-    if (!confirmed || !order) return;
+    if (!confirmed || !order?.id) return;
+    if (notifiedOrderIdRef.current === order.id) return;
+    notifiedOrderIdRef.current = order.id;
     sendOrderNotificationForOrder(order).catch(() => {});
     if (paramBuyNow !== '1') {
       clearCart();

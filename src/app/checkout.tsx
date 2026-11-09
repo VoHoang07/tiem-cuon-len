@@ -32,7 +32,6 @@ import {
     setVisitorSelfReportedSource,
     validateHiddenBotField,
 } from '@/utils/securityGuard';
-import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
     Building2,
@@ -807,8 +806,7 @@ export default function CheckoutScreen() {
       });
 
     if (selectedPayment.type === 'cod') {
-      // COD order is finalized immediately -> notify shop owner & clear cart
-      sendOrderNotificationForOrder(order).catch(() => {});
+      // Server-side `action: 'create'` in `/api/orders-guard` already dispatches the email once for COD orders
       if (!isBuyNow) clearCart();
       setSubmitted(true);
     } else {

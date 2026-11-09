@@ -792,14 +792,24 @@ function withGlobalErrorHandler(routeName, handlerFn) {
   };
 }
 
+const notifiedOrderIdsCache = new Map();
+
 /**
- * Sends order notification email from the Server so EmailJS keys never leak to the Client bundle
+ * Sends order notification email from the Server so EmailJS keys never leak to the Client bundle.
+ * Strictly deduplicated (1 single EmailJS API call per order) so the owner never receives duplicate emails.
  */
 async function sendOrderNotificationServer(order) {
   if (!order || !order.id) return false;
   if (!SERVER_EMAILJS_SERVICE_ID || !SERVER_EMAILJS_TEMPLATE_ID || !SERVER_EMAILJS_PUBLIC_KEY) {
     return false;
   }
+
+  const orderKey = String(order.id).trim();
+  const prevSentAt = notifiedOrderIdsCache.get(orderKey);
+  if (prevSentAt && Date.now() - prevSentAt < 10 * 60 * 1000) {
+    return true;
+  }
+  notifiedOrderIdsCache.set(orderKey, Date.now());
 
   try {
     const addr = order.shippingAddress || {};
@@ -812,13 +822,16 @@ async function sendOrderNotificationServer(order) {
       const qty = Number(ci.quantity) || 1;
       const unitPrice = Number(ci.price || (ci.product && ci.product.price) || 0);
       return `${idx + 1}. ${pName} x${qty} — ${formatPrice(unitPrice * qty)}`;
-      });
-      if (addr.promoCode && Number(addr.discountAmount) > 0) {
+    });
+    if (addr.promoCode && Number(addr.discountAmount) > 0) {
       itemLines.push(
         `🎟️ Mã giảm giá (${addr.promoCode}): -${formatPrice(addr.discountAmount)}`
       );
-      }
-      itemLines.push(`🚚 Vận chuyển: ${shippingMethod} — ${formatPrice(shippingFee)}`);
+    }
+    itemLines.push(`🚚 Vận chuyển: ${shippingMethod} — ${formatPrice(shippingFee)}`);
+    if (addr.note) {
+      itemLines.push(`💌 Ghi chú / Thiệp: ${addr.note}`);
+    }
 
     const orderDate = new Date(order.createdAt || Date.now()).toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
@@ -832,7 +845,9 @@ async function sendOrderNotificationServer(order) {
     const baseTemplateParams = {
       order_id: String(order.id),
       customer_name: String(addr.fullName || 'Khách hàng'),
-      customer_phone: String(addr.phone || ''),
+      customer_phone: String(
+        addr.email ? `${addr.phone || ''} • ${addr.email}` : addr.phone || ''
+      ),
       customer_address: [addr.detailAddress, addr.ward, addr.district, addr.city]
         .filter(Boolean)
         .join(', '),
@@ -841,75 +856,30 @@ async function sendOrderNotificationServer(order) {
       payment_method: `${order.paymentMethod || ''} • ${shippingMethod}`,
       order_date: orderDate,
       subject: `🧶 Đơn hàng mới #${order.id} — ${addr.fullName || 'Khách hàng'}`,
+      email: SERVER_OWNER_NOTIFY_EMAILS.join(', '),
     };
 
-    const results = await Promise.all(
-      SERVER_OWNER_NOTIFY_EMAILS.map((recipientEmail) =>
-        fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Origin: 'https://www.tiemcuonlen.shop',
-          },
-          body: JSON.stringify({
-            service_id: SERVER_EMAILJS_SERVICE_ID,
-            template_id: SERVER_EMAILJS_TEMPLATE_ID,
-            user_id: SERVER_EMAILJS_PUBLIC_KEY,
-            template_params: {
-              ...baseTemplateParams,
-              email: recipientEmail,
-            },
-          }),
-        })
-          .then((r) => r.ok)
-          .catch(() => false)
-      )
-    );
+    // Single EmailJS dispatch per order (prevents duplicate emails when EmailJS template has hardcoded To/BCC)
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://www.tiemcuonlen.shop',
+      },
+      body: JSON.stringify({
+        service_id: SERVER_EMAILJS_SERVICE_ID,
+        template_id: SERVER_EMAILJS_TEMPLATE_ID,
+        user_id: SERVER_EMAILJS_PUBLIC_KEY,
+        template_params: baseTemplateParams,
+      }),
+    });
 
-    // Also send warm Order Confirmation Email directly to the Customer's Gmail if available
-    const candidateCustEmail = String(addr.email || order.customerEmail || '')
-      .trim()
-      .toLowerCase();
-    const isRealCustomerEmail =
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateCustEmail) &&
-      !candidateCustEmail.endsWith('@guest.tiemcuonlen.vn') &&
-      !candidateCustEmail.endsWith('@phone.tiemcuonlen.vn') &&
-      !SERVER_OWNER_NOTIFY_EMAILS.includes(candidateCustEmail);
-
-    if (isRealCustomerEmail) {
-      const custLines = [
-        `💝 Cảm ơn ${addr.fullName || 'bạn'} đã đặt hàng tại Tiệm Cuộn Len!`,
-        `📦 Chi tiết đơn hàng #${order.id}:`,
-        ...itemLines,
-        addr.note ? `💌 Ghi chú / Lời chúc trên thiệp: "${addr.note}"` : null,
-        `👉 Xem tiến độ đơn hàng trực tuyến: https://www.tiemcuonlen.shop/orders/${order.id}`,
-      ].filter(Boolean);
-
-      await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://www.tiemcuonlen.shop',
-        },
-        body: JSON.stringify({
-          service_id: SERVER_EMAILJS_SERVICE_ID,
-          template_id: SERVER_EMAILJS_TEMPLATE_ID,
-          user_id: SERVER_EMAILJS_PUBLIC_KEY,
-          template_params: {
-            ...baseTemplateParams,
-            items_list: custLines.join('\n'),
-            subject: `🧶 Xác nhận đơn hàng #${order.id} tại Tiệm Cuộn Len`,
-            email: candidateCustEmail,
-          },
-        }),
-      }).catch(() => false);
-    }
-
-    return results.some(Boolean);
-    } catch {
+    return res.ok;
+  } catch {
+    notifiedOrderIdsCache.delete(orderKey);
     return false;
-    }
-    }
+  }
+}
 
     /**
      * Sends automated lifecycle emails to the Customer when:
@@ -933,7 +903,8 @@ async function sendOrderNotificationServer(order) {
       const isRealCustomerEmail =
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateCustEmail) &&
         !candidateCustEmail.endsWith('@guest.tiemcuonlen.vn') &&
-        !candidateCustEmail.endsWith('@phone.tiemcuonlen.vn');
+        !candidateCustEmail.endsWith('@phone.tiemcuonlen.vn') &&
+        !SERVER_OWNER_NOTIFY_EMAILS.includes(candidateCustEmail);
 
       if (!isRealCustomerEmail) return false;
 
@@ -1140,29 +1111,23 @@ async function sendOrderNotificationServer(order) {
         subject: `💬 Tin nhắn mới từ ${customerName}: "${messageText.slice(0, 42)}"`,
       };
 
-      const results = await Promise.all(
-        SERVER_OWNER_NOTIFY_EMAILS.map((recipientEmail) =>
-          fetch('https://api.emailjs.com/api/v1.0/email/send', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Origin: 'https://www.tiemcuonlen.shop',
-            },
-            body: JSON.stringify({
-              service_id: SERVER_EMAILJS_SERVICE_ID,
-              template_id: SERVER_EMAILJS_TEMPLATE_ID,
-              user_id: SERVER_EMAILJS_PUBLIC_KEY,
-              template_params: {
-                ...baseTemplateParams,
-                email: recipientEmail,
-              },
-            }),
-          })
-            .then((r) => r.ok)
-            .catch(() => false)
-        )
-      );
-      if (results.some(Boolean)) sentAny = true;
+      const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://www.tiemcuonlen.shop',
+        },
+        body: JSON.stringify({
+          service_id: SERVER_EMAILJS_SERVICE_ID,
+          template_id: SERVER_EMAILJS_TEMPLATE_ID,
+          user_id: SERVER_EMAILJS_PUBLIC_KEY,
+          template_params: {
+            ...baseTemplateParams,
+            email: SERVER_OWNER_NOTIFY_EMAILS.join(', '),
+          },
+        }),
+      });
+      if (res.ok) sentAny = true;
     } catch {
       // ignore
     }

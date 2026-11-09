@@ -186,6 +186,10 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
 
     if (amountValid) {
       newStatus = 'Đang xử lý';
+      const updatedAddr = {
+        ...(matchedOrder.shippingAddress || {}),
+        emailNotifiedAt: new Date().toISOString(),
+      };
       const patchRes = await fetch(
         `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(matchedOrder.id)}`,
         {
@@ -195,12 +199,19 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
             Authorization: `Bearer ${SUPABASE_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ status: newStatus }),
+          body: JSON.stringify({
+            status: newStatus,
+            shippingAddress: updatedAddr,
+          }),
         }
       );
       orderUpdated = patchRes.ok;
       if (orderUpdated) {
-        await sendOrderNotificationServer({ ...matchedOrder, status: newStatus });
+        await sendOrderNotificationServer({
+          ...matchedOrder,
+          status: newStatus,
+          shippingAddress: updatedAddr,
+        });
       }
     }
   }

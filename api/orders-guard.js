@@ -351,11 +351,12 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         note: rawAddr.note ? sanitizeTextServer(rawAddr.note, 500) : undefined,
         promoCode: promoResult.promoCode || undefined,
         discountAmount: authoritativeDiscount > 0 ? authoritativeDiscount : undefined,
-      },
-      paymentMethod,
-      status: authoritativeStatus,
-      createdAt: new Date().toISOString(),
-    };
+        emailNotifiedAt: isCod ? new Date().toISOString() : undefined,
+        },
+        paymentMethod,
+        status: authoritativeStatus,
+        createdAt: new Date().toISOString(),
+        };
 
     const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=id`, {
       method: 'POST',
@@ -412,7 +413,40 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       return res.status(403).json({ success: false, error: 'Forbidden (Anti-IDOR).' });
     }
 
-    const sent = await sendOrderNotificationServer(existingOrder);
+    // Persistent Idempotency Check: never send duplicate email if already notified
+    if (
+      existingOrder.shippingAddress &&
+      existingOrder.shippingAddress.emailNotifiedAt
+    ) {
+      return res.status(200).json({
+        success: true,
+        sent: true,
+        deduplicated: true,
+      });
+    }
+
+    const updatedAddr = {
+      ...(existingOrder.shippingAddress || {}),
+      emailNotifiedAt: new Date().toISOString(),
+    };
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ shippingAddress: updatedAddr }),
+      }
+    );
+
+    const sent = await sendOrderNotificationServer({
+      ...existingOrder,
+      shippingAddress: updatedAddr,
+    });
     return res.status(200).json({ success: true, sent });
   }
 
