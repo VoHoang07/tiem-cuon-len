@@ -254,6 +254,21 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     ]);
 
     const city = sanitizeTextServer(rawAddr.city, 80);
+    const cleanPhone = sanitizeTextServer(rawAddr.phone, 20)
+      .replace(/[\s.\-()]/g, '')
+      .replace(/^\+?84/, '0');
+    const validPrefixes = /^(03[2-9]|05[25689]|07[06-9]|08[1-689]|09[0-46-9])\d{7}$/;
+    const isRepeatingDigits = /(\d)\1{4,}/.test(cleanPhone);
+    const isSequentialDigits = /(012345|123456|234567|345678|456789|987654|876543|765432|654321|543210)/.test(
+      cleanPhone
+    );
+    if (!validPrefixes.test(cleanPhone) || isRepeatingDigits || isSequentialDigits) {
+      return res.status(400).json({
+        success: false,
+        error:
+          'Số điện thoại nhận hàng chưa chính xác (cần đúng 10 số nhà mạng Viettel, Vina, Mobi...). Bạn yên tâm nhập SĐT thật để Shipper gọi giao hàng nhé!',
+      });
+    }
     const shippingMethod = sanitizeTextServer(rawAddr.shippingMethod || '', 120);
     const isPickupOrExpress =
       shippingMethod.toLowerCase().includes('ghé tiệm') ||
@@ -295,7 +310,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         id: sanitizeTextServer(rawAddr.id || `addr_${Date.now()}`, 60),
         userId: authUser.id,
         fullName: sanitizeTextServer(rawAddr.fullName, 80),
-        phone: sanitizeTextServer(rawAddr.phone, 20).replace(/[^0-9+]/g, ''),
+        phone: cleanPhone,
         city,
         district: sanitizeTextServer(rawAddr.district, 80),
         ward: sanitizeTextServer(rawAddr.ward, 80),

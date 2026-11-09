@@ -4,8 +4,12 @@
  */
 
 import {
-  validateBase64ImageUpload,
-  MAX_PROCESSED_DATA_URI_BYTES,
+    validateRealCustomerEmail,
+    validateVietnamRealPhone,
+} from './contactTrustValidator';
+import {
+    MAX_PROCESSED_DATA_URI_BYTES,
+    validateBase64ImageUpload,
 } from './fileUploadGuard';
 
 export interface ValidationResult<T> {
@@ -169,6 +173,13 @@ export function validateRegisterSchema(raw: unknown): ValidationResult<Validated
   if (!email || !EMAIL_REGEX.test(email)) {
     return { success: false, error: 'Địa chỉ email không hợp lệ.' };
   }
+  const emailCheck = validateRealCustomerEmail(email);
+  if (!emailCheck.valid) {
+    return {
+      success: false,
+      error: emailCheck.error || 'Vui lòng nhập đúng Gmail thật đang sử dụng.',
+    };
+  }
   if (password.length < 6) {
     return { success: false, error: 'Mật khẩu phải có ít nhất 6 ký tự.' };
   }
@@ -219,9 +230,16 @@ export function validateAddressSchema(raw: unknown): ValidationResult<ValidatedA
   if (fullName.startsWith('__TCL_')) {
     return { success: false, error: 'Tên người nhận chứa tiền tố hệ thống không hợp lệ.' };
   }
-  if (!phone || (!VN_PHONE_REGEX.test(phone) && phone.length < 9)) {
-    return { success: false, error: 'Số điện thoại người nhận không hợp lệ (cần 10 chữ số).' };
+  const phoneCheck = validateVietnamRealPhone(phone);
+  if (!phoneCheck.valid) {
+    return {
+      success: false,
+      error:
+        phoneCheck.error ||
+        'Số điện thoại người nhận không hợp lệ (cần đúng 10 số nhà mạng Viettel, Vina, Mobi...).',
+    };
   }
+  const normalizedPhone = phoneCheck.normalized;
   if (!city) {
     return { success: false, error: 'Vui lòng chọn hoặc nhập Tỉnh/Thành phố.' };
   }
@@ -233,7 +251,7 @@ export function validateAddressSchema(raw: unknown): ValidationResult<ValidatedA
     success: true,
     data: {
       fullName,
-      phone,
+      phone: normalizedPhone,
       city,
       district,
       ward,

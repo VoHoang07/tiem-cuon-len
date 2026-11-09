@@ -17,6 +17,7 @@ import {
 } from '@/hooks/useAutoLocation';
 import { useAddresses } from '@/store/AddressContext';
 import { useAuth } from '@/store/AuthContext';
+import { validateVietnamRealPhone } from '@/utils/contactTrustValidator';
 import { validateAddressSchema } from '@/utils/schemaValidator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -81,6 +82,8 @@ export default function AddAddressScreen() {
     existing?.fullName ?? savedDraft?.fullName ?? user?.name ?? ''
   );
   const [phone, setPhone] = useState(existing?.phone ?? savedDraft?.phone ?? '');
+  const phoneTrust = useMemo(() => validateVietnamRealPhone(phone), [phone]);
+  const phoneDigitsOnly = phone.replace(/[^0-9]/g, '');
   const [city, setCity] = useState(existing?.city ?? savedDraft?.city ?? '');
   const [district, setDistrict] = useState(
     existing?.district ?? savedDraft?.district ?? ''
@@ -689,15 +692,21 @@ export default function AddAddressScreen() {
             <View
               style={[
                 styles.inputBox,
-                showErrorShake &&
-                  phone.replace(/[^0-9]/g, '').length < 9 &&
-                  styles.inputBoxError,
+                (showErrorShake && !phoneTrust.valid) ||
+                (phoneDigitsOnly.length >= 10 && !phoneTrust.valid)
+                  ? styles.inputBoxError
+                  : phoneTrust.valid
+                  ? { borderColor: '#16A34A', backgroundColor: '#F0FDF4' }
+                  : null,
               ]}>
               <Phone
                 size={17}
                 color={
-                  showErrorShake && phone.replace(/[^0-9]/g, '').length < 9
+                  (showErrorShake && !phoneTrust.valid) ||
+                  (phoneDigitsOnly.length >= 10 && !phoneTrust.valid)
                     ? '#DC2626'
+                    : phoneTrust.valid
+                    ? '#16A34A'
                     : '#9C8B7A'
                 }
               />
@@ -708,10 +717,86 @@ export default function AddAddressScreen() {
                   setPhone(txt);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                placeholder="VD: 0912 345 678"
+                placeholder="VD: 0912 345 678 (Viettel, Vina, Mobi...)"
                 placeholderTextColor="#B5A698"
                 keyboardType="phone-pad"
+                maxLength={12}
               />
+            </View>
+
+            {/* Real-time Carrier Verification or Anti-Fake Phone Feedback */}
+            {phoneTrust.valid ? (
+              <View
+                style={{
+                  marginTop: 7,
+                  backgroundColor: '#ECFDF5',
+                  borderWidth: 1,
+                  borderColor: '#A7F3D0',
+                  borderRadius: 9,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '800',
+                    color: '#065F46',
+                  }}>
+                  ✅ SĐT nhà mạng {phoneTrust.carrier} hợp lệ — Shipper sẽ gọi số này khi giao hàng tận tay bạn
+                </Text>
+              </View>
+            ) : phoneDigitsOnly.length >= 10 && phoneTrust.error ? (
+              <View
+                style={{
+                  marginTop: 7,
+                  backgroundColor: '#FEF2F2',
+                  borderWidth: 1,
+                  borderColor: '#FECACA',
+                  borderRadius: 9,
+                  paddingHorizontal: 10,
+                  paddingVertical: 7,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '700',
+                    color: '#B91C1C',
+                    lineHeight: 16,
+                  }}>
+                  ⚠️ {phoneTrust.error}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Customer Privacy & COD Open-Box Inspection Trust Shield */}
+            <View
+              style={{
+                marginTop: 9,
+                backgroundColor: '#FFFBEB',
+                borderWidth: 1,
+                borderColor: '#FDE68A',
+                borderRadius: 10,
+                paddingHorizontal: 11,
+                paddingVertical: 8,
+                gap: 3,
+              }}>
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: '800',
+                  color: '#92400E',
+                }}>
+                🛡️ Cam kết bảo vệ khách hàng từ Tiệm Cuộn Len:
+              </Text>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: '#78350F',
+                  lineHeight: 16,
+                }}>
+                • <Text style={{ fontWeight: '800' }}>Được Đồng Kiểm 100%:</Text> Bạn được mở hộp kiểm tra đúng mẫu len, đúng màu mới thanh toán cho Shipper.{'\n'}
+                • <Text style={{ fontWeight: '800' }}>Bảo mật SĐT tuyệt đối:</Text> SĐT chỉ dùng để Bưu tá gọi giao hàng — Tiệm cam kết <Text style={{ fontWeight: '800' }}>không bao giờ gọi làm phiền/quảng cáo</Text>.
+              </Text>
             </View>
           </View>
         </Animated.View>

@@ -19,6 +19,7 @@ import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { useShop } from '@/store/ShopContext';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
 import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
+import { validateVietnamRealPhone } from '@/utils/contactTrustValidator';
 import { formatVND } from '@/utils/formatCurrency';
 import {
     checkRateLimit,
@@ -555,6 +556,17 @@ export default function CheckoutScreen() {
       triggerAddressShake();
       return;
     }
+    const phoneCheck = validateVietnamRealPhone(selectedAddress.phone || '');
+    if (!phoneCheck.valid) {
+      triggerAddressShake();
+      Alert.alert(
+        'Cần cập nhật Số điện thoại thật',
+        phoneCheck.error ||
+          'Vui lòng cập nhật số điện thoại thật đang hoạt động để Bưu tá gọi giao hàng (cho phép Mở hộp kiểm tra hàng trước khi thanh toán).'
+      );
+      router.push(`/addresses/add?id=${encodeURIComponent(selectedAddress.id)}` as any);
+      return;
+    }
     if (shippingOption === 'express' && !expressFeeConfirmed && !bypassExpressCheck) {
       setShowExpressCard(true);
       return;
@@ -927,8 +939,47 @@ export default function CheckoutScreen() {
                         </Text>
                       </View>
                       <ChevronRight size={20} color={COLORS.lightText} />
-                    </View>
-                  </TouchableOpacity>
+                      </View>
+                      </TouchableOpacity>
+
+                      {/* Phone Carrier Verification & Buyer Protection Shield */}
+                      {(() => {
+                      const pCheck = validateVietnamRealPhone(
+                      selectedAddress?.phone || ''
+                      );
+                      return (
+                      <View
+                        style={{
+                          marginTop: 8,
+                          backgroundColor: pCheck.valid ? '#ECFDF5' : '#FEF2F2',
+                          borderWidth: 1,
+                          borderColor: pCheck.valid ? '#A7F3D0' : '#FECACA',
+                          borderRadius: 10,
+                          paddingHorizontal: 11,
+                          paddingVertical: 8,
+                          gap: 4,
+                        }}>
+                        <Text
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: '800',
+                            color: pCheck.valid ? '#065F46' : '#B91C1C',
+                          }}>
+                          {pCheck.valid
+                            ? `✅ SĐT ${pCheck.carrier} (${pCheck.normalized}) — Shipper sẽ gọi số này khi giao hàng`
+                            : `⚠️ SĐT (${selectedAddress?.phone}) chưa hợp lệ — Bấm "Thay đổi" để nhập SĐT thật nhận hàng`}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: pCheck.valid ? '#047857' : '#991B1B',
+                            lineHeight: 15,
+                          }}>
+                          🛡️ <Text style={{ fontWeight: '800' }}>Cam kết Đồng Kiểm 100%:</Text> Bạn được mở hộp kiểm tra đúng mẫu len trước khi thanh toán. SĐT của bạn được bảo mật tuyệt đối, không gọi quảng cáo.
+                        </Text>
+                      </View>
+                      );
+                      })()}
 
                   {userAddresses.length > 1 && (
                     <View style={styles.addressList}>

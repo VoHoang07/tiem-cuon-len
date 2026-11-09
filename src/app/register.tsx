@@ -2,6 +2,7 @@ import { BrandLogo } from '@/components/BrandLogo';
 import { HiddenBotField } from '@/components/HiddenBotField';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
+import { validateRealCustomerEmail } from '@/utils/contactTrustValidator';
 import { validateRegisterSchema } from '@/utils/schemaValidator';
 import {
     checkRateLimit,
@@ -46,6 +47,7 @@ export default function RegisterScreen() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const emailTrust = React.useMemo(() => validateRealCustomerEmail(email), [email]);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [botTrap, setBotTrap] = useState('');
@@ -405,25 +407,35 @@ export default function RegisterScreen() {
 
                 {/* Email */}
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Email</Text>
+                  <Text style={styles.fieldLabel}>Email (Gmail nhận thông báo đơn hàng)</Text>
                   <View
                     style={[
                       styles.inputContainer,
                       focusedField === 'email' && styles.inputContainerFocused,
+                      emailTrust.valid && {
+                        borderColor: '#16A34A',
+                        backgroundColor: '#F0FDF4',
+                      },
                     ]}>
                     <View
                       style={[
                         styles.iconBadge,
-                        focusedField === 'email' && styles.iconBadgeFocused,
+                        focusedField === 'email' && styles.inputContainerFocused,
                       ]}>
                       <Mail
                         size={18}
-                        color={focusedField === 'email' ? COLORS.primary : COLORS.lightText}
+                        color={
+                          emailTrust.valid
+                            ? '#16A34A'
+                            : focusedField === 'email'
+                            ? COLORS.primary
+                            : COLORS.lightText
+                        }
                       />
                     </View>
                     <TextInput
                       style={styles.input}
-                      placeholder="Nhập email của bạn"
+                      placeholder="VD: tenban@gmail.com (tối thiểu 6 ký tự)"
                       placeholderTextColor={COLORS.lightText}
                       value={email}
                       onChangeText={setEmail}
@@ -435,8 +447,63 @@ export default function RegisterScreen() {
                       autoComplete="off"
                       returnKeyType="go"
                       onSubmitEditing={handleRegister}
-                      />
+                    />
                   </View>
+
+                  {emailTrust.suggestion ? (
+                    <TouchableOpacity
+                      onPress={() => setEmail(emailTrust.suggestion!)}
+                      activeOpacity={0.85}
+                      style={{
+                        marginTop: 6,
+                        backgroundColor: '#FEF3C7',
+                        borderWidth: 1,
+                        borderColor: '#F59E0B',
+                        borderRadius: 9,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: '800',
+                          color: '#92400E',
+                        }}>
+                        ✨ Bấm để sửa nhanh thành: {emailTrust.suggestion}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : emailTrust.valid ? (
+                    <Text
+                      style={{
+                        marginTop: 5,
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: '#15803D',
+                      }}>
+                      ✅ Gmail hợp lệ — Tự động nhận mã vận đơn & báo tin nhắn khi Tiệm trả lời
+                    </Text>
+                  ) : email.trim().includes('@') && emailTrust.error ? (
+                    <Text
+                      style={{
+                        marginTop: 5,
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: '#DC2626',
+                        lineHeight: 15,
+                      }}>
+                      ⚠️ {emailTrust.error}
+                    </Text>
+                  ) : (
+                    <Text
+                      style={{
+                        marginTop: 5,
+                        fontSize: 11,
+                        color: '#6E5643',
+                        lineHeight: 15,
+                      }}>
+                      🔒 Cam kết bảo mật 100%: Gmail chỉ dùng để gửi mã vận đơn & báo khi Tiệm trả lời tin nhắn, không gửi quảng cáo rác.
+                    </Text>
+                  )}
                 </View>
 
                 {/* Password */}

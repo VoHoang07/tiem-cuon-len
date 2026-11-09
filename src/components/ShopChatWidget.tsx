@@ -9,6 +9,7 @@ import {
     requestChatNotificationPermission,
     showSystemChatNotification,
 } from '@/utils/chatNotifier';
+import { validateRealCustomerEmail } from '@/utils/contactTrustValidator';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import { usePathname, useRouter } from 'expo-router';
@@ -87,24 +88,35 @@ export function ShopChatWidget() {
     const [showProductPicker, setShowProductPicker] = useState(false);
     const [pickerSearch, setPickerSearch] = useState('');
     const [guestEmailDraft, setGuestEmailDraft] = useState('');
+    const [guestEmailError, setGuestEmailError] = useState<string | null>(null);
     const [isEditingGuestEmail, setIsEditingGuestEmail] = useState(false);
     const [notifPerm, setNotifPerm] = useState<string>(() =>
-    getChatNotificationPermission()
+      getChatNotificationPermission()
     );
 
     useEffect(() => {
-    if (isOpen) {
-      setNotifPerm(getChatNotificationPermission());
-      setGuestEmailDraft(customerNotifyEmail || '');
-    }
+      if (isOpen) {
+        setNotifPerm(getChatNotificationPermission());
+        setGuestEmailDraft(customerNotifyEmail || '');
+        setGuestEmailError(null);
+      }
     }, [isOpen, customerNotifyEmail]);
 
     const handleSaveGuestEmail = () => {
-    const trimmed = guestEmailDraft.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return;
-    saveCustomerNotifyEmail(trimmed);
-    setIsEditingGuestEmail(false);
-    playChatNotificationChime();
+      const check = validateRealCustomerEmail(guestEmailDraft);
+      if (!check.valid) {
+        if (check.suggestion) {
+          setGuestEmailDraft(check.suggestion);
+        }
+        setGuestEmailError(
+          check.error || 'Vui lòng nhập đúng Gmail thật để nhận thông báo.'
+        );
+        return;
+      }
+      setGuestEmailError(null);
+      saveCustomerNotifyEmail(check.normalized);
+      setIsEditingGuestEmail(false);
+      playChatNotificationChime();
     };
 
     const handleEnableBrowserNotify = async () => {
@@ -458,8 +470,18 @@ export function ShopChatWidget() {
                       Lưu
                     </Text>
                   </TouchableOpacity>
-                </View>
-              </View>
+                  </View>
+                  {guestEmailError ? (
+                  <Text
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: '700',
+                      color: '#DC2626',
+                    }}>
+                    ⚠️ {guestEmailError}
+                  </Text>
+                  ) : null}
+                  </View>
             )
             ) : activeAdminConversation ? (
             <View
