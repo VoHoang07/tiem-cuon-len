@@ -68,7 +68,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const PD_BUY_NOW = 'Mua ngay';
 const MAX_WIDTH = 1040;
-export const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-letter.jpg';
+export const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-ver2.jpg';
 
 function resolveImgUri(src: any): string | null {
   if (!src) return null;
@@ -256,14 +256,16 @@ export default function ProductDetailScreen() {
       colorOptions.forEach((c, idx) => {
         const img = c.image || product.image;
         if (img) {
+          const lowerName = (c.name || '').toLowerCase();
           const isGiftNamed =
-            (c.name || '').toLowerCase().includes('hộp quà') ||
-            (c.name || '').toLowerCase().includes('thư tay');
+            lowerName.includes('hộp quà') ||
+            lowerName.includes('thư tay') ||
+            lowerName.includes('set quà');
           items.push({
             id: `g_color_${c.id || idx}`,
-            label: c.name,
-            angleTag: c.name,
-            image: img,
+            label: isGiftNamed ? '🎁 Set Quà Tặng Đặc Biệt' : c.name,
+            angleTag: isGiftNamed ? '🎁 Set Quà Tặng Đặc Biệt' : c.name,
+            image: isGiftNamed ? DEFAULT_GIFT_BOX_IMAGE : img,
             colorId: isGiftNamed ? undefined : c.id,
             accessoryId: isGiftNamed ? 'gift_box_letter' : undefined,
             zoomMode: 'normal',
@@ -287,13 +289,19 @@ export default function ProductDetailScreen() {
     if (product.gallery && product.gallery.length > 0) {
       product.gallery.forEach((g, idx) => {
         if (g.image && g.zoomMode !== 'closeup') {
+          const lowerLabel = `${g.label || ''} ${g.angleTag || ''}`.toLowerCase();
           const isGiftGallery =
             g.accessoryId === 'gift_box_letter' ||
-            (g.label || '').toLowerCase().includes('hộp quà') ||
-            (g.angleTag || '').toLowerCase().includes('hộp quà');
+            lowerLabel.includes('hộp quà') ||
+            lowerLabel.includes('thư tay') ||
+            lowerLabel.includes('set quà') ||
+            String(g.image).includes('gift-box');
           items.push({
             ...g,
             id: g.id || `g_extra_${idx}`,
+            label: isGiftGallery ? '🎁 Set Quà Tặng Đặc Biệt' : g.label,
+            angleTag: isGiftGallery ? '🎁 Set Quà Tặng Đặc Biệt' : g.angleTag,
+            image: isGiftGallery ? DEFAULT_GIFT_BOX_IMAGE : g.image,
             accessoryId: isGiftGallery ? 'gift_box_letter' : g.accessoryId,
           });
         }

@@ -39,7 +39,7 @@ import {
     View,
 } from 'react-native';
 
-const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-letter.jpg';
+const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-ver2.jpg';
 
 const PACKAGING_OPTIONS: ProductAccessoryOption[] = [
   {

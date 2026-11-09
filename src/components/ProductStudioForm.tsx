@@ -2288,7 +2288,50 @@ export function ProductStudioForm({
                         activeColor.price
                       ).toLocaleString('vi-VN')}₫`}
                     </Text>
-              ) : null}
+                    ) : null}
+                    {previewPackagingId === 'gift_box_letter' && (
+                    <View
+                    style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginTop: 6,
+                    padding: 8,
+                    borderRadius: 10,
+                    backgroundColor: '#FFFBEB',
+                    borderWidth: 1,
+                    borderColor: '#FDE68A',
+                    }}>
+                    <Image
+                    source={{ uri: '/gift-box-ver2.jpg' }}
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 8,
+                      backgroundColor: '#F5EDE2',
+                    }}
+                    resizeMode="cover"
+                    />
+                    <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color: '#78350F',
+                      }}>
+                      🎁 Đã gắn tự động ảnh Hộp Quà Ver 2 cho sản phẩm này
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 10.5,
+                        color: '#92400E',
+                        marginTop: 2,
+                      }}>
+                      Khách bấm chọn &ldquo;Set Quà Tặng Đặc Biệt (+25.000₫)&rdquo; sẽ xem được ngay ảnh hộp quà mới này.
+                    </Text>
+                    </View>
+                    </View>
+                    )}
             </View>
 
             {/* Description with inline AI generator button */}
