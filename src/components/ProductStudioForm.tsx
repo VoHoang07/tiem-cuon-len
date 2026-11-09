@@ -34,6 +34,13 @@ import {
     saveAdminDraft,
     saveWorkingDraft,
 } from '@/utils/productDraftStore';
+import {
+    CoverCollageLayout,
+    generateAutoCoverCollage,
+    processProductPhotoStudio,
+    STUDIO_RETOUCH_PRESETS,
+    StudioRetouchPreset,
+} from '@/utils/studioPhotoProcessor';
 import * as ImagePicker from 'expo-image-picker';
 import {
     Camera,
@@ -175,176 +182,37 @@ function encodeCanvasHd(canvas: HTMLCanvasElement, quality: number = 0.94): stri
   return canvas.toDataURL('image/jpeg', quality);
 }
 
+let currentDefaultStudioPreset: StudioRetouchPreset = 'vivid_stitch_1x1';
+const rawPhotoBackupMemory = new Map<string, string>();
+
 /**
  * Optimizes any uploaded photo (1:1, 3:4, 4:3, 9:16, 16:9, or small image) on Web
- * into a razor-sharp 1440x1440 (1:1 Square) Ultra-HD WebP/JPEG (quality 0.94).
- * - Progressive 2x halving prevents downscaling aliasing ("vỡ hạt").
- * - Rectangular photos are automatically framed into a 1:1 1440x1440 square
- *   (either full-fit with soft studio ambient backdrop or 1:1 center-crop).
+ * into a razor-sharp 1440x1440 (1:1 Square) Ultra-HD WebP/JPEG (quality 0.94)
+ * using the AI Studio Retoucher (Unsharp Mask yarn-stitch sharpening + Studio Lighting + Backdrop Framing)
+ * while keeping 100% of the real product intact.
  */
 async function optimizeHdImageIfWeb(
   dataUri: string,
   maxSide: number = 1440,
   quality: number = 0.94,
-  frameMode: 'auto' | 'contain_square' | 'cover_square' = 'auto'
+  frameMode: 'auto' | 'contain_square' | 'cover_square' = 'auto',
+  presetOverride?: StudioRetouchPreset
 ): Promise<string> {
-  if (
-    Platform.OS !== 'web' ||
-    typeof window === 'undefined' ||
-    typeof document === 'undefined'
-  ) {
-    return dataUri;
-  }
-  return new Promise((resolve) => {
-    try {
-      const img = new window.Image();
-      img.onload = () => {
-        const origW = img.width || maxSide;
-        const origH = img.height || maxSide;
-        const aspectDiff = Math.abs(origW - origH) / Math.max(origW, origH);
-
-        // Step 1: Bring image to sharp intermediate resolution via progressive 2x scaling
-        let scaledW = origW;
-        let scaledH = origH;
-        if (origW < 960 && origH < 960) {
-          const upScale = Math.min(3, Math.max(1.5, maxSide / Math.max(origW, origH)));
-          scaledW = Math.round(origW * upScale);
-          scaledH = Math.round(origH * upScale);
-        } else if (origW > maxSide || origH > maxSide) {
-          if (origW >= origH) {
-            scaledH = Math.round((origH * maxSide) / origW);
-            scaledW = maxSide;
-          } else {
-            scaledW = Math.round((origW * maxSide) / origH);
-            scaledH = maxSide;
-          }
-        }
-
-        let curW = origW;
-        let curH = origH;
-        let stepCanvas = document.createElement('canvas');
-        stepCanvas.width = curW;
-        stepCanvas.height = curH;
-        const stepCtx = stepCanvas.getContext('2d');
-        if (!stepCtx) {
-          resolve(dataUri);
-          return;
-        }
-        stepCtx.imageSmoothingEnabled = true;
-        stepCtx.imageSmoothingQuality = 'high';
-        stepCtx.drawImage(img, 0, 0, curW, curH);
-
-        while (curW * 0.5 > scaledW && curH * 0.5 > scaledH) {
-          const nextW = Math.max(scaledW, Math.round(curW * 0.5));
-          const nextH = Math.max(scaledH, Math.round(curH * 0.5));
-          const nextCanvas = document.createElement('canvas');
-          nextCanvas.width = nextW;
-          nextCanvas.height = nextH;
-          const nextCtx = nextCanvas.getContext('2d');
-          if (!nextCtx) break;
-          nextCtx.imageSmoothingEnabled = true;
-          nextCtx.imageSmoothingQuality = 'high';
-          nextCtx.drawImage(stepCanvas, 0, 0, curW, curH, 0, 0, nextW, nextH);
-          stepCanvas = nextCanvas;
-          curW = nextW;
-          curH = nextH;
-        }
-
-        const sharpCanvas = document.createElement('canvas');
-        sharpCanvas.width = scaledW;
-        sharpCanvas.height = scaledH;
-        const sharpCtx = sharpCanvas.getContext('2d');
-        if (!sharpCtx) {
-          resolve(dataUri);
-          return;
-        }
-        sharpCtx.imageSmoothingEnabled = true;
-        sharpCtx.imageSmoothingQuality = 'high';
-        try {
-          sharpCtx.filter = 'contrast(1.02) saturate(1.02)';
-        } catch {
-          // ignore if filter unsupported
-        }
-        sharpCtx.drawImage(stepCanvas, 0, 0, curW, curH, 0, 0, scaledW, scaledH);
-        try {
-          sharpCtx.filter = 'none';
-        } catch {
-          // ignore
-        }
-
-        // Step 2: Frame into a standardized 1440x1440 (1:1 Square) Ultra-HD studio canvas
-        const squareSide = maxSide;
-        const outCanvas = document.createElement('canvas');
-        outCanvas.width = squareSide;
-        outCanvas.height = squareSide;
-        const outCtx = outCanvas.getContext('2d');
-        if (!outCtx) {
-          resolve(encodeCanvasHd(sharpCanvas, quality) || dataUri);
-          return;
-        }
-        outCtx.imageSmoothingEnabled = true;
-        outCtx.imageSmoothingQuality = 'high';
-
-        const useCover =
-          frameMode === 'cover_square' ||
-          (frameMode === 'auto' && aspectDiff <= 0.08);
-
-        if (useCover) {
-          // Center-crop to fill 1:1 square edge-to-edge
-          const scaleCover = Math.max(squareSide / scaledW, squareSide / scaledH);
-          const drawW = Math.round(scaledW * scaleCover);
-          const drawH = Math.round(scaledH * scaleCover);
-          const offsetX = Math.round((squareSide - drawW) / 2);
-          const offsetY = Math.round((squareSide - drawH) / 2);
-          outCtx.fillStyle = '#FAF6F0';
-          outCtx.fillRect(0, 0, squareSide, squareSide);
-          outCtx.drawImage(sharpCanvas, offsetX, offsetY, drawW, drawH);
-        } else {
-          // Rectangular photo (3:4, 4:3, 9:16, 16:9): Fit 100% of the photo inside 1:1 square
-          // with a soft blurred studio ambient backdrop so nothing is ever cut off!
-          const corner = sharpCtx.getImageData(
-            Math.min(6, scaledW - 1),
-            Math.min(6, scaledH - 1),
-            1,
-            1
-          ).data;
-          outCtx.fillStyle = `rgb(${corner[0]}, ${corner[1]}, ${corner[2]})`;
-          outCtx.fillRect(0, 0, squareSide, squareSide);
-
-          try {
-            const bgScale = Math.max(squareSide / scaledW, squareSide / scaledH) * 1.08;
-            const bgW = Math.round(scaledW * bgScale);
-            const bgH = Math.round(scaledH * bgScale);
-            outCtx.filter = 'blur(32px) brightness(1.02)';
-            outCtx.drawImage(
-              sharpCanvas,
-              Math.round((squareSide - bgW) / 2),
-              Math.round((squareSide - bgH) / 2),
-              bgW,
-              bgH
-            );
-            outCtx.filter = 'none';
-          } catch {
-            // Fallback solid corner color already filled
-          }
-
-          const scaleContain = Math.min(squareSide / scaledW, squareSide / scaledH);
-          const drawW = Math.round(scaledW * scaleContain);
-          const drawH = Math.round(scaledH * scaleContain);
-          const offsetX = Math.round((squareSide - drawW) / 2);
-          const offsetY = Math.round((squareSide - drawH) / 2);
-          outCtx.drawImage(sharpCanvas, offsetX, offsetY, drawW, drawH);
-        }
-
-        const out = encodeCanvasHd(outCanvas, quality);
-        resolve(out || dataUri);
-      };
-      img.onerror = () => resolve(dataUri);
-      img.src = dataUri;
-    } catch {
-      resolve(dataUri);
-    }
+  const sourceRaw = rawPhotoBackupMemory.get(dataUri) || dataUri;
+  const out = await processProductPhotoStudio(sourceRaw, {
+    maxSide,
+    quality,
+    frameMode,
+    preset: presetOverride ?? currentDefaultStudioPreset,
   });
+  if (out && out !== sourceRaw) {
+    if (rawPhotoBackupMemory.size > 40) {
+      const firstKey = rawPhotoBackupMemory.keys().next().value;
+      if (firstKey) rawPhotoBackupMemory.delete(firstKey);
+    }
+    rawPhotoBackupMemory.set(out, sourceRaw);
+  }
+  return out;
 }
 
 async function pickMultipleHdImages(): Promise<{
@@ -652,6 +520,8 @@ export function ProductStudioForm({
   const [savedDrafts, setSavedDrafts] = useState<AdminProductDraft[]>([]);
   const [draftStatusMsg, setDraftStatusMsg] = useState<string | null>(null);
   const [frameFitMode, setFrameFitMode] = useState<'contain_square' | 'cover_square'>('contain_square');
+  const [studioPreset, setStudioPreset] = useState<StudioRetouchPreset>('vivid_stitch_1x1');
+  const [isStudioBusy, setIsStudioBusy] = useState<boolean>(false);
   const [previewPackagingId, setPreviewPackagingId] = useState<'no_box' | 'gift_box_letter'>('no_box');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const draftHydratedRef = useRef(false);
@@ -947,11 +817,140 @@ export function ProductStudioForm({
 
     const next = [...baseList, ...newItems];
     setColorOptions(next);
-    if (!coverImage && newItems[0]?.image) {
+    if (!coverImage && next.length >= 2) {
+      // Automatically merge variant photos into a 1440x1440 Studio Cover Collage!
+      const collageItems = next
+        .filter((c) => Boolean(c.image))
+        .map((c) => ({ image: c.image as string, name: c.name }));
+      const autoCollage = await generateAutoCoverCollage(collageItems, {
+        layout: 'grid_auto',
+        productTitle: name.trim(),
+        preset: studioPreset,
+      });
+      if (autoCollage) {
+        setCoverImage(autoCollage);
+        setDraftStatusMsg('✨ Đã tự động làm nét các mẫu & ghép Ảnh Bìa tổng hợp');
+      } else if (newItems[0]?.image) {
+        setCoverImage(newItems[0].image);
+      }
+    } else if (!coverImage && newItems[0]?.image) {
       setCoverImage(newItems[0].image);
     }
     setActiveSlot({ type: 'color', index: firstNewIdx });
-  };
+    };
+
+    const handleSelectStudioPreset = async (preset: StudioRetouchPreset) => {
+    currentDefaultStudioPreset = preset;
+    setStudioPreset(preset);
+    const rawCurrent = resolveImgUri(currentDisplayImage);
+    if (!rawCurrent) return;
+    setIsStudioBusy(true);
+    try {
+      const processed = await optimizeHdImageIfWeb(
+        rawCurrent,
+        1440,
+        0.94,
+        frameFitMode,
+        preset
+      );
+      if (activeSlot.type === 'cover') {
+        setCoverImage(processed);
+      } else if (activeSlot.type === 'extra') {
+        const next = [...extraPhotos];
+        next[activeSlot.index] = processed;
+        setExtraPhotos(next);
+      } else {
+        const next = colorOptions.map((c, i) =>
+          i === safeColorIdx ? { ...c, image: processed } : c
+        );
+        setColorOptions(next);
+      }
+      setDraftStatusMsg('✨ Đã làm nét & ghép phông Studio cho ảnh đang chọn');
+    } finally {
+      setIsStudioBusy(false);
+    }
+    };
+
+    const handleApplyPresetToAllPhotos = async () => {
+    if (colorOptions.length === 0 && !coverImage) return;
+    setIsStudioBusy(true);
+    try {
+      const updatedColors: ProductColorOption[] = [];
+      for (const c of colorOptions) {
+        if (c.image) {
+          const nextUri = await optimizeHdImageIfWeb(
+            c.image,
+            1440,
+            0.94,
+            frameFitMode,
+            studioPreset
+          );
+          updatedColors.push({ ...c, image: nextUri });
+        } else {
+          updatedColors.push(c);
+        }
+      }
+      setColorOptions(updatedColors);
+      if (updatedColors.filter((c) => Boolean(c.image)).length >= 2) {
+        const collage = await generateAutoCoverCollage(
+          updatedColors
+            .filter((c) => Boolean(c.image))
+            .map((c) => ({ image: c.image as string, name: c.name })),
+          {
+            layout: 'grid_auto',
+            productTitle: name.trim(),
+            preset: studioPreset,
+          }
+        );
+        if (collage) setCoverImage(collage);
+      } else if (coverImage) {
+        const nextCover = await optimizeHdImageIfWeb(
+          coverImage,
+          1440,
+          0.94,
+          frameFitMode,
+          studioPreset
+        );
+        setCoverImage(nextCover);
+      }
+      setDraftStatusMsg(
+        `✨ Đã làm nét & ghép phông Studio đồng bộ cho toàn bộ ${updatedColors.length} mẫu!`
+      );
+    } finally {
+      setIsStudioBusy(false);
+    }
+    };
+
+    const handleGenerateCoverCollage = async (layout: CoverCollageLayout) => {
+    const validVariantItems = colorOptions
+      .filter((c) => Boolean(c.image))
+      .map((c) => ({ image: c.image as string, name: c.name }));
+    if (validVariantItems.length === 0 && coverImage) {
+      validVariantItems.push({ image: coverImage, name: name.trim() });
+    }
+    if (validVariantItems.length === 0) {
+      Alert.alert(
+        'Chưa có ảnh mẫu',
+        'Hãy tải ít nhất 2 ảnh mẫu phân loại lên trước để hệ thống tự động ghép thành Ảnh Bìa tổng hợp!'
+      );
+      return;
+    }
+    setIsStudioBusy(true);
+    try {
+      const collage = await generateAutoCoverCollage(validVariantItems, {
+        layout,
+        productTitle: name.trim(),
+        preset: studioPreset,
+      });
+      if (collage) {
+        setCoverImage(collage);
+        setActiveSlot({ type: 'cover' });
+        setDraftStatusMsg('🪄 Đã tự động ghép Ảnh Bìa tổng hợp từ các mẫu phân loại!');
+      }
+    } finally {
+      setIsStudioBusy(false);
+    }
+    };
 
   const handleCaptureNewColorPhoto = async () => {
     const uri = await pickHdImage(true);
@@ -1463,11 +1462,219 @@ export function ProductStudioForm({
               </View>
             </View>
 
-            {/* Frame Aspect Ratio & Ultra-HD Hint Badge */}
-            <View style={styles.frameSpecHintBox}>
-              <Text style={styles.frameSpecHintText}>
-                📐 Khung ảnh chuẩn đẹp nhất: <Text style={{ fontWeight: '800', color: '#3D2B1F' }}>Vuông 1:1 (1440×1440 px)</Text> — Hệ thống tự động nâng nét Ultra-HD & căn vừa đẹp mọi ảnh chụp dọc 3:4, ngang 4:3 hoặc 9:16.
-              </Text>
+            {/* AI Studio Retouch, Smart Backdrop & 1-Click Cover Collage Toolbar */}
+            <View
+              style={{
+                backgroundColor: '#FFFDF9',
+                borderRadius: 14,
+                borderWidth: 1.5,
+                borderColor: '#E6D5C3',
+                padding: 12,
+                gap: 10,
+                marginBottom: 8,
+              }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={15} color="#B45309" />
+                  <Text
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: '800',
+                      color: '#3B281E',
+                    }}>
+                    🪄 Phòng Lab Ảnh Studio Tự Động (Giữ nguyên 100% sản phẩm thật)
+                  </Text>
+                </View>
+                {isStudioBusy && (
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '800',
+                      color: '#D97706',
+                    }}>
+                    ⏳ Đang xử lý Studio HD...
+                  </Text>
+                )}
+              </View>
+
+              {/* Row 1: Studio Backdrop & Yarn-Stitch Sharpening Presets */}
+              <View style={{ gap: 5 }}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '700',
+                    color: '#6E5643',
+                  }}>
+                  1. Chọn chế độ Làm nét mũi len & Ghép phông nền Studio:
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                  {STUDIO_RETOUCH_PRESETS.map((p) => {
+                    const active = studioPreset === p.id;
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        onPress={() => void handleSelectStudioPreset(p.id)}
+                        disabled={isStudioBusy}
+                        activeOpacity={0.82}
+                        style={{
+                          paddingHorizontal: 11,
+                          paddingVertical: 6.5,
+                          borderRadius: 999,
+                          backgroundColor: active ? '#4A3427' : '#F7EFE6',
+                          borderWidth: 1,
+                          borderColor: active ? '#4A3427' : '#E2D2C1',
+                        }}>
+                        <Text
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: '800',
+                            color: active ? '#FFFDF9' : '#4A3427',
+                          }}>
+                          {p.shortLabel}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {colorOptions.length > 1 && (
+                  <TouchableOpacity
+                    onPress={() => void handleApplyPresetToAllPhotos()}
+                    disabled={isStudioBusy}
+                    activeOpacity={0.85}
+                    style={{
+                      marginTop: 2,
+                      backgroundColor: '#FEF3C7',
+                      borderWidth: 1,
+                      borderColor: '#F59E0B',
+                      borderRadius: 9,
+                      paddingVertical: 7,
+                      paddingHorizontal: 10,
+                      alignItems: 'center',
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color: '#92400E',
+                      }}>
+                      ⚡ Áp dụng phông & làm nét này cho TẤT CẢ {colorOptions.length} ảnh mẫu cùng lúc
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Row 2: 1-Click Auto Cover Collage from Variant Photos */}
+              <View
+                style={{
+                  borderTopWidth: 1,
+                  borderTopColor: '#EFE4D8',
+                  paddingTop: 8,
+                  gap: 6,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '700',
+                    color: '#6E5643',
+                  }}>
+                  2. Tự động gộp các ảnh mẫu thành Ảnh Bìa Chính (Không cần ghép tay):
+                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: 6,
+                  }}>
+                  <TouchableOpacity
+                    onPress={() => void handleGenerateCoverCollage('grid_auto')}
+                    disabled={isStudioBusy}
+                    activeOpacity={0.82}
+                    style={{
+                      flex: 1,
+                      minWidth: 115,
+                      backgroundColor: '#4A3427',
+                      borderRadius: 9,
+                      paddingVertical: 7.5,
+                      paddingHorizontal: 9,
+                      alignItems: 'center',
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color: '#FFFDF9',
+                      }}
+                      numberOfLines={1}>
+                      🔲 Ghép Lưới (2–9 mẫu)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => void handleGenerateCoverCollage('hero_strip')}
+                    disabled={isStudioBusy}
+                    activeOpacity={0.82}
+                    style={{
+                      flex: 1,
+                      minWidth: 125,
+                      backgroundColor: '#F7EFE6',
+                      borderWidth: 1,
+                      borderColor: '#D6C3B0',
+                      borderRadius: 9,
+                      paddingVertical: 7.5,
+                      paddingHorizontal: 9,
+                      alignItems: 'center',
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color: '#4A3427',
+                      }}
+                      numberOfLines={1}>
+                      🌟 1 Lớn + Dãy Mẫu Nhỏ
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() =>
+                      void handleGenerateCoverCollage('polaroid_fan')
+                    }
+                    disabled={isStudioBusy}
+                    activeOpacity={0.82}
+                    style={{
+                      flex: 1,
+                      minWidth: 115,
+                      backgroundColor: '#F7EFE6',
+                      borderWidth: 1,
+                      borderColor: '#D6C3B0',
+                      borderRadius: 9,
+                      paddingVertical: 7.5,
+                      paddingHorizontal: 9,
+                      alignItems: 'center',
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color: '#4A3427',
+                      }}
+                      numberOfLines={1}>
+                      🃏 Polaroid Xếp Quạt
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
 
             {/* Thumbnail Strip: 1. Cover Photo + 2. Color Thumbnails + 3. Extra Angle Thumbnails + Add Button */}
