@@ -1,17 +1,24 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from 'react';
-import { ChatMessage, ChatConversation, PingedProduct } from '@/types/chat';
-import { Product } from '@/types/product';
+import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
-import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
+import { ChatConversation, ChatMessage, PingedProduct } from '@/types/chat';
+import { Product } from '@/types/product';
+import {
+    playChatNotificationChime,
+    queueServerChatPushToOwner,
+    registerChatServiceWorker,
+    showSystemChatNotification,
+    updateTabTitleForUnreadChat,
+} from '@/utils/chatNotifier';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from 'react';
 
 const CHAT_STORAGE_KEY = 'tcl_chat_messages_v2';
 const GUEST_ID_KEY = 'tcl_chat_guest_id_v2';
@@ -195,6 +202,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const lastNewestCustomerMsgIdRef = useRef<string | null>(null);
   const deletedConvIdsRef = useRef<Set<string>>(new Set());
   const lastSentAtRef = useRef<number>(0);
+  const knownMessageIdsRef = useRef<Set<string>>(
+    new Set(loadLocalMessages().map((m) => m.id))
+  );
+  const initialRemoteSyncDoneRef = useRef<boolean>(false);
+
+  // Register Service Worker so clicking an OS notification focuses tab & opens that conversation
+  useEffect(() => {
+    void registerChatServiceWorker((clickedConvId) => {
+      setIsOpen(true);
+      if (clickedConvId) {
+        setActiveConversationId(clickedConvId);
+      }
+    });
+  }, []);
 
   // Determine active Client conversation ID and persist it for seamless testing
   const myConversationId = useMemo(() => {
@@ -221,9 +242,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [user, role, guestId]);
 
   // Fetch all chat messages from Supabase REST table (`addresses` with `fullName = __TCL_CHAT_V2__`)
+  // Note: For Admin, keep polling even when tab is minimized (`visibilityState === 'hidden'`) so OS push & chime fire in background!
   const fetchRemoteMessages = useCallback(async () => {
     if (!supabaseUrl || !supabaseAnonKey) return;
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    if (
+      !isAdmin &&
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'hidden'
+    ) {
+      return;
+    }
     try {
       const res = await fetch(
         `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}&select=*`,
@@ -258,16 +286,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             now - new Date(m.createdAt).getTime() < 10000
         );
         const merged = mergeMessageLists(localInFlight, remoteList);
+        if (!initialRemoteSyncDoneRef.current) {
+          initialRemoteSyncDoneRef.current = true;
+          for (const m of merged) {
+            knownMessageIdsRef.current.add(m.id);
+          }
+        }
         if (messagesSignature(merged) === messagesSignature(prev)) {
           return prev;
         }
         saveLocalMessages(merged);
         return merged;
-      });
-    } catch {
-      // ignore network errors
-    }
-  }, []);
+        });
+        } catch {
+        // ignore network errors
+        }
+        }, [isAdmin]);
 
   // Push a single message to Supabase REST table
   const pushMessageToSupabase = useCallback(async (msg: ChatMessage) => {
@@ -423,7 +457,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let lastFetchTs = Date.now();
     fetchRemoteMessages();
-    const intervalMs = isOpen ? 15000 : 90000;
+    const intervalMs = isAdmin ? 15000 : isOpen ? 15000 : 60000;
     const timer = setInterval(() => {
       lastFetchTs = Date.now();
       fetchRemoteMessages();
@@ -512,7 +546,47 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       lastNewestCustomerMsgIdRef.current = newestCustomerMsg.id;
       setActiveConversationId(newestCustomerMsg.conversationId);
     }
-  }, [isAdmin, conversations, messages, activeConversationId]);
+    }, [isAdmin, conversations, messages, activeConversationId]);
+
+    // Fire Sound Chime + OS System Banner Notification when a new incoming message arrives
+    useEffect(() => {
+    if (!initialRemoteSyncDoneRef.current) return;
+    const brandNewIncoming: ChatMessage[] = [];
+    for (const m of messages) {
+      if (!knownMessageIdsRef.current.has(m.id)) {
+        knownMessageIdsRef.current.add(m.id);
+        if (isAdmin && m.senderRole === 'customer') {
+          brandNewIncoming.push(m);
+        } else if (
+          !isAdmin &&
+          m.senderRole === 'admin' &&
+          m.conversationId === myConversationId
+        ) {
+          brandNewIncoming.push(m);
+        }
+      }
+    }
+
+    if (brandNewIncoming.length > 0) {
+      const latest = brandNewIncoming[brandNewIncoming.length - 1];
+      playChatNotificationChime();
+      void showSystemChatNotification({
+        title: isAdmin
+          ? `💬 Tin nhắn mới từ ${latest.customerName}`
+          : '🧶 Tiệm Cuộn Len vừa trả lời bạn',
+        body: latest.product
+          ? `[${latest.product.name}] ${latest.text}`
+          : latest.text,
+        conversationId: latest.conversationId,
+        onClick: () => {
+          setIsOpen(true);
+          if (isAdmin) {
+            setActiveConversationId(latest.conversationId);
+          }
+        },
+      });
+    }
+    }, [messages, isAdmin, myConversationId]);
 
   const myMessages = useMemo<ChatMessage[]>(() => {
     const conv =
@@ -740,7 +814,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
 
       // 4. Persistent Supabase Postgres REST insert
+      knownMessageIdsRef.current.add(newMsg.id);
       pushMessageToSupabase(newMsg);
+
+      // 5. If Customer sent a message, dispatch Server-side Push/Email to Shop Owner's phone
+      // so the owner gets notified immediately even when `tiemcuonlen.shop` is completely closed!
+      if (!isAdmin) {
+        queueServerChatPushToOwner(newMsg);
+      }
 
       setPendingProduct(null);
     },
@@ -773,6 +854,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       conversations.find((c) => c.conversationId === guestId);
     return myConv ? myConv.unreadForCustomer : 0;
   }, [isAdmin, conversations, myConversationId, guestId]);
+
+  // Blink browser tab title when there are unread messages
+  useEffect(() => {
+    const latestSender = isAdmin
+      ? conversations.find((c) => c.unreadForAdmin > 0)?.customerName
+      : 'Tiệm Cuộn Len';
+    updateTabTitleForUnreadChat(unreadCount, latestSender);
+  }, [unreadCount, isAdmin, conversations]);
 
   const value = useMemo(
     () => ({

@@ -10,13 +10,15 @@ const {
   verifyCsrfRequest,
   verifySupabaseUser,
   withGlobalErrorHandler,
+  sendChatNotificationServer,
   signBlockedIpRecord,
   verifyBlockedIpRecord,
   syncBlockedIpInMemoryCache,
-} = require('./_securityCore');
+  } = require('./_securityCore');
 
-// Sliding-window rate limit memory bucket per serverless instance
-const ipRateWindows = new Map();
+  // Sliding-window rate limit memory bucket per serverless instance
+  const ipRateWindows = new Map();
+  const chatNotifyCooldowns = new Map();
 const RATE_WINDOW_MS = 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 60;
 
@@ -229,9 +231,41 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       );
       return res.status(200).json({ success: true });
     }
-  }
+    }
 
-  // ─── DEFAULT ACTION: RECORD AUDIT EVENT ───────────────────────────────────
+    // ─── LIVE CHAT OWNER NOTIFICATION (WORKS EVEN WHEN ADMIN HAS WEB CLOSED) ──
+    if (action === 'notify_chat') {
+    const cleanChat = stripUnknownFieldsServer(rawBody, [
+      'conversationId',
+      'customerName',
+      'customerEmail',
+      'text',
+      'productName',
+    ]);
+    const text = sanitizeTextServer(cleanChat.text || '', 600);
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'Empty chat message' });
+    }
+    const convKey = `${telemetry.ip}_${sanitizeTextServer(
+      cleanChat.conversationId || 'default',
+      60
+    )}`;
+    const nowTs = Date.now();
+    const lastSent = chatNotifyCooldowns.get(convKey) || 0;
+    if (nowTs - lastSent < 12000) {
+      return res.status(200).json({ success: true, throttled: true });
+    }
+    chatNotifyCooldowns.set(convKey, nowTs);
+    if (chatNotifyCooldowns.size > 500) {
+      const firstK = chatNotifyCooldowns.keys().next().value;
+      if (firstK) chatNotifyCooldowns.delete(firstK);
+    }
+
+    const notified = await sendChatNotificationServer(cleanChat);
+    return res.status(200).json({ success: true, notified });
+    }
+
+    // ─── DEFAULT ACTION: RECORD AUDIT EVENT ───────────────────────────────────
   const body = stripUnknownFieldsServer(rawBody, [
     'eventType',
     'severity',

@@ -1,34 +1,40 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Image,
-  StyleSheet,
-  useWindowDimensions,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
-import {
-  MessageCircle,
-  X,
-  Send,
-  Tag,
-  ExternalLink,
-  CheckCheck,
-  Search,
-  Trash2,
-} from 'lucide-react-native';
+import { COLORS, SHADOWS } from '@/constants/theme';
+import { useAuth } from '@/store/AuthContext';
 import { useChat } from '@/store/ChatContext';
 import { useShop } from '@/store/ShopContext';
-import { useAuth } from '@/store/AuthContext';
-import { COLORS, SHADOWS } from '@/constants/theme';
+import { ChatMessage, PingedProduct } from '@/types/chat';
+import {
+    getChatNotificationPermission,
+    playChatNotificationChime,
+    requestChatNotificationPermission,
+    showSystemChatNotification,
+} from '@/utils/chatNotifier';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
-import { PingedProduct, ChatMessage } from '@/types/chat';
+import { usePathname, useRouter } from 'expo-router';
+import {
+    CheckCheck,
+    ExternalLink,
+    MessageCircle,
+    Search,
+    Send,
+    Tag,
+    Trash2,
+    X,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
 
 const CLIENT_QUICK_PROMPTS = [
   'Mẫu này còn sẵn không shop?',
@@ -78,6 +84,28 @@ export function ShopChatWidget() {
   const [inputText, setInputText] = useState('');
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
+  const [notifPerm, setNotifPerm] = useState<string>(() =>
+    getChatNotificationPermission()
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      setNotifPerm(getChatNotificationPermission());
+    }
+  }, [isOpen]);
+
+  const handleEnableBrowserNotify = async () => {
+    const ok = await requestChatNotificationPermission();
+    setNotifPerm(getChatNotificationPermission());
+    if (ok) {
+      playChatNotificationChime();
+      void showSystemChatNotification({
+        title: '🔔 Đã bật thông báo tin nhắn Tiệm Cuộn Len!',
+        body: 'Khi khách nhắn tin, máy sẽ đổ chuông & hiện thông báo (kể cả khi ẩn tab), đồng thời gửi Email về điện thoại khi tắt web.',
+        conversationId: 'test_notify',
+      });
+    }
+  };
 
   const scrollRef = useRef<ScrollView | null>(null);
 
@@ -268,12 +296,41 @@ export function ShopChatWidget() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => setIsOpen(false)}
-              activeOpacity={0.75}>
-              <X size={18} color="#3D2B1F" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {isAdmin && notifPerm !== 'unsupported' && (
+                <TouchableOpacity
+                  onPress={() => void handleEnableBrowserNotify()}
+                  activeOpacity={0.8}
+                  style={{
+                    backgroundColor:
+                      notifPerm === 'granted' ? '#DCFCE7' : '#FEF3C7',
+                    borderWidth: 1,
+                    borderColor:
+                      notifPerm === 'granted' ? '#86EFAC' : '#F59E0B',
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 999,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: '800',
+                      color: notifPerm === 'granted' ? '#166534' : '#92400E',
+                    }}>
+                    {notifPerm === 'granted'
+                      ? '🔔 Chuông + Email Bật'
+                      : '🔔 Bật chuông báo'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={() => setIsOpen(false)}
+                activeOpacity={0.75}>
+                <X size={18} color="#3D2B1F" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Admin Customer Switcher Bar (Fixed 42px height, never stretches) */}

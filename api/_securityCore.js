@@ -807,33 +807,148 @@ async function sendOrderNotificationServer(order) {
       }),
     });
     return res.ok;
-  } catch {
+    } catch {
     return false;
-  }
-}
+    }
+    }
 
-module.exports = {
-  SUPABASE_URL,
-  SUPABASE_KEY,
-  SUPABASE_SERVICE_KEY,
-  AUDIT_LOG_PARTITION,
-  BLOCKLIST_PARTITION,
-  HOLDER_USER_ID,
-  ADMIN_EMAILS,
-  STATIC_CATALOG_PRICES,
-  extractClientTelemetry,
-  sanitizeTextServer,
-  stripUnknownFieldsServer,
-  applySecureCookiesAndHeaders,
-  verifyCsrfRequest,
-  isIpBlockedOnServer,
-  syncBlockedIpInMemoryCache,
-  verifySupabaseUser,
-  resolveAuthoritativeProductPrices,
-  resolveAuthoritativeShippingConfig,
-  logServerAuditEvent,
-  withGlobalErrorHandler,
-  sendOrderNotificationServer,
-  signBlockedIpRecord,
-  verifyBlockedIpRecord,
-};
+    /**
+    * Sends instant Live Chat notification to Shop Owner's phone/email (EmailJS + optional Telegram Bot)
+    * so the owner is notified immediately even when the website is completely closed.
+    */
+    async function sendChatNotificationServer(chatPayload) {
+    if (!chatPayload || !chatPayload.text) return false;
+
+    const customerName = sanitizeTextServer(
+    chatPayload.customerName || 'Khách hàng',
+    80
+    );
+    const customerEmail = sanitizeTextServer(chatPayload.customerEmail || '', 120);
+    const messageText = sanitizeTextServer(chatPayload.text || '', 600);
+    const productName = sanitizeTextServer(chatPayload.productName || '', 140);
+    const conversationId = sanitizeTextServer(
+    chatPayload.conversationId || 'conv',
+    60
+    );
+
+    const chatDate = new Date().toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    });
+
+    let sentAny = false;
+
+    // 1. Optional Telegram Bot instant push if configured in environment
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || '';
+    const tgChatId = process.env.TELEGRAM_CHAT_ID || '';
+    if (tgToken && tgChatId) {
+    try {
+      const tgText = [
+        `💬 *TIN NHẮN MỚI TỪ KHÁCH HÀNG*`,
+        `👤 Khách: ${customerName}${customerEmail ? ` (${customerEmail})` : ''}`,
+        productName ? `🧶 Sản phẩm quan tâm: ${productName}` : null,
+        `📝 Nội dung:\n"${messageText}"`,
+        `⏰ Thời gian: ${chatDate}`,
+        `👉 Mở web trả lời: https://www.tiemcuonlen.shop`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const tgRes = await fetch(
+        `https://api.telegram.org/bot${tgToken}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: tgChatId,
+            text: tgText,
+          }),
+        }
+      );
+      if (tgRes.ok) sentAny = true;
+    } catch {
+      // continue to EmailJS
+    }
+    }
+
+    // 2. EmailJS push notification to Shop Owner's Gmail (`vohoang1327@gmail.com`)
+    if (
+    SERVER_EMAILJS_SERVICE_ID &&
+    SERVER_EMAILJS_TEMPLATE_ID &&
+    SERVER_EMAILJS_PUBLIC_KEY
+    ) {
+    try {
+      const lines = [`💬 Nội dung khách nhắn:\n"${messageText}"`];
+      if (productName) {
+        lines.push(`🧶 Sản phẩm đính kèm: ${productName}`);
+      }
+      lines.push(`👉 Mở web trả lời ngay: https://www.tiemcuonlen.shop`);
+
+      const shortConv = conversationId.replace(/^user_|^guest_/, '').slice(0, 8);
+      const templateParams = {
+        order_id: `CHAT-${shortConv.toUpperCase()}`,
+        customer_name: `💬 ${customerName}`,
+        customer_phone:
+          customerEmail || 'Khách nhắn trực tiếp trên Web tiemcuonlen.shop',
+        customer_address:
+          'Bấm mở https://www.tiemcuonlen.shop để trả lời khách ngay',
+        items_list: lines.join('\n\n'),
+        total: 'Tin nhắn mới cần tư vấn',
+        payment_method: 'Hộp thư Trực tuyến (Live Chat)',
+        order_date: chatDate,
+        subject: `💬 Tin nhắn mới từ ${customerName}: "${messageText.slice(0, 42)}"`,
+        email: SERVER_OWNER_NOTIFY_EMAIL,
+      };
+
+      const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://www.tiemcuonlen.shop',
+        },
+        body: JSON.stringify({
+          service_id: SERVER_EMAILJS_SERVICE_ID,
+          template_id: SERVER_EMAILJS_TEMPLATE_ID,
+          user_id: SERVER_EMAILJS_PUBLIC_KEY,
+          template_params: templateParams,
+        }),
+      });
+      if (res.ok) sentAny = true;
+    } catch {
+      // ignore
+    }
+    }
+
+    return sentAny;
+    }
+
+    module.exports = {
+    SUPABASE_URL,
+    SUPABASE_KEY,
+    SUPABASE_SERVICE_KEY,
+    AUDIT_LOG_PARTITION,
+    BLOCKLIST_PARTITION,
+    HOLDER_USER_ID,
+    ADMIN_EMAILS,
+    STATIC_CATALOG_PRICES,
+    extractClientTelemetry,
+    sanitizeTextServer,
+    stripUnknownFieldsServer,
+    applySecureCookiesAndHeaders,
+    verifyCsrfRequest,
+    isIpBlockedOnServer,
+    syncBlockedIpInMemoryCache,
+    verifySupabaseUser,
+    resolveAuthoritativeProductPrices,
+    resolveAuthoritativeShippingConfig,
+    logServerAuditEvent,
+    withGlobalErrorHandler,
+    sendOrderNotificationServer,
+    sendChatNotificationServer,
+    signBlockedIpRecord,
+    verifyBlockedIpRecord,
+    };
