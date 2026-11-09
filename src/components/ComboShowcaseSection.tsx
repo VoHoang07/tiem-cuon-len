@@ -1,17 +1,25 @@
+import {
+    ComboSlotSelector,
+    ComboStudioLiveView,
+} from '@/components/ComboStudioLiveView';
 import { SHADOWS } from '@/constants/theme';
 import {
     buildCuratedComboProducts,
     CURATED_COMBO_DEFINITIONS,
     CuratedComboDefinition,
-    getCuratedComboMemberModelChips,
+    getComboSlotCandidates,
 } from '@/data/comboCatalog';
 import { useAuth } from '@/store/AuthContext';
 import { useCart } from '@/store/CartContext';
 import { Product } from '@/types/product';
+import {
+    ComboSlotCandidate,
+    composeComboStudioDataUrl,
+} from '@/utils/comboStudioComposer';
 import { formatVND } from '@/utils/formatCurrency';
 import { useRouter } from 'expo-router';
 import { Check, Minus, Plus, ShoppingCart, Sparkles, X } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Image,
     Modal,
@@ -48,6 +56,9 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
   const [activeComboModalDef, setActiveComboModalDef] =
     useState<CuratedComboDefinition | null>(null);
   const [selectedPkgId, setSelectedPkgId] = useState<string>('');
+  const [modalSlot1Id, setModalSlot1Id] = useState<string | null>(null);
+  const [modalSlot2Id, setModalSlot2Id] = useState<string | null>(null);
+  const [modalComposedImg, setModalComposedImg] = useState<string | null>(null);
   const [comboModelNote, setComboModelNote] = useState<string>('');
   const [enableGiftSet, setEnableGiftSet] = useState<boolean>(false);
   const [giftNote, setGiftNote] = useState<string>('');
@@ -90,10 +101,77 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
     );
   }, [activeComboModalDef, selectedPkgId]);
 
-  const activeMemberChips = useMemo(() => {
-    if (!activeComboModalDef) return [];
-    return getCuratedComboMemberModelChips(activeComboModalDef.id, products);
-  }, [activeComboModalDef, products]);
+  const activeBaseComboProd = useMemo(() => {
+    if (!activeComboModalDef) return null;
+    return (
+      hydratedCombos.find((c) => c.id === activeComboModalDef.id) || null
+    );
+  }, [activeComboModalDef, hydratedCombos]);
+
+  const {
+    slot1Candidates: modalSlot1Candidates,
+    slot2Candidates: modalSlot2Candidates,
+    defaultSlot1: modalDefaultSlot1,
+    defaultSlot2: modalDefaultSlot2,
+  } = useMemo(
+    () =>
+      getComboSlotCandidates(
+        activeBaseComboProd,
+        activeModalPkg?.id,
+        products
+      ),
+    [activeBaseComboProd, activeModalPkg?.id, products]
+  );
+
+  const selectedModalSlot1 = useMemo(
+    () =>
+      modalSlot1Candidates.find((c) => c.id === modalSlot1Id) ||
+      modalDefaultSlot1 ||
+      null,
+    [modalSlot1Candidates, modalSlot1Id, modalDefaultSlot1]
+  );
+  const selectedModalSlot2 = useMemo(
+    () =>
+      modalSlot2Candidates.find((c) => c.id === modalSlot2Id) ||
+      modalDefaultSlot2 ||
+      null,
+    [modalSlot2Candidates, modalSlot2Id, modalDefaultSlot2]
+  );
+
+  useEffect(() => {
+    setModalSlot1Id(modalDefaultSlot1?.id || null);
+    setModalSlot2Id(modalDefaultSlot2?.id || null);
+    if (modalDefaultSlot1 && modalDefaultSlot2) {
+      setComboModelNote(`${modalDefaultSlot1.label} + ${modalDefaultSlot2.label}`);
+    }
+  }, [
+    activeComboModalDef?.id,
+    activeModalPkg?.id,
+    modalDefaultSlot1?.id,
+    modalDefaultSlot2?.id,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedModalSlot1 && !selectedModalSlot2) {
+      setModalComposedImg(null);
+      return;
+    }
+    composeComboStudioDataUrl(
+      selectedModalSlot1,
+      selectedModalSlot2,
+      activeComboModalDef?.themeBadge || '🎁 COMBO TIẾT KIỆM • TIỆM CUỘN LEN'
+    ).then((url) => {
+      if (!cancelled) setModalComposedImg(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedModalSlot1,
+    selectedModalSlot2,
+    activeComboModalDef?.themeBadge,
+  ]);
 
   const buildModalComboProduct = (): Product | null => {
     if (!activeComboModalDef || !activeModalPkg) return null;
@@ -109,6 +187,8 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
       : activeModalPkg.name;
     const primaryProd = byProductId.get(activeModalPkg.primaryProductId);
     const chosenImg =
+      modalComposedImg ||
+      selectedModalSlot1?.image ||
       primaryProd?.image ||
       primaryProd?.colorOptions?.[0]?.image ||
       baseComboProd.image;
@@ -503,9 +583,44 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
               </View>
 
               <ScrollView
-                style={{ maxHeight: 420 }}
+                style={{ maxHeight: 460 }}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ gap: 14, paddingBottom: 8 }}>
+                {/* Live AI Studio Composite Preview of Selected Pair */}
+                <ComboStudioLiveView
+                  compact
+                  slot1={selectedModalSlot1}
+                  slot2={selectedModalSlot2}
+                  themeBadge={activeComboModalDef.themeBadge}
+                  onRandomize={
+                    modalSlot1Candidates.length > 1 ||
+                    modalSlot2Candidates.length > 1
+                      ? () => {
+                          const next1 =
+                            modalSlot1Candidates[
+                              Math.floor(
+                                Math.random() * modalSlot1Candidates.length
+                              )
+                            ] || selectedModalSlot1;
+                          const pool2 =
+                            modalSlot2Candidates.length > 1
+                              ? modalSlot2Candidates.filter(
+                                  (c) => c.id !== next1?.id
+                                )
+                              : modalSlot2Candidates;
+                          const next2 =
+                            pool2[Math.floor(Math.random() * pool2.length)] ||
+                            selectedModalSlot2;
+                          if (next1) setModalSlot1Id(next1.id);
+                          if (next2) setModalSlot2Id(next2.id);
+                          if (next1 && next2) {
+                            setComboModelNote(`${next1.label} + ${next2.label}`);
+                          }
+                        }
+                      : undefined
+                  }
+                />
+
                 {/* Step 1: Select Combo Package */}
                 <View style={{ gap: 6 }}>
                   <Text style={styles.modalStepLabel}>
@@ -549,47 +664,29 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
                   </View>
                 </View>
 
-                {/* Step 2: Quick Pick Specific Models / Colors */}
-                <View style={styles.comboPickerBox}>
-                  <Text style={styles.comboPickerLabel}>
-                    2. Chọn nhanh 2 mẫu / màu bạn muốn phối (chạm để chọn hoặc tự gõ):
-                  </Text>
-                  {activeMemberChips.length > 0 && (
-                    <View style={styles.memberChipWrap}>
-                      {activeMemberChips.map((chipName, idx) => (
-                        <TouchableOpacity
-                          key={`chip_${idx}`}
-                          style={styles.memberChipBtn}
-                          onPress={() => {
-                            setComboModelNote((prev) => {
-                              const parts = prev
-                                .split('+')
-                                .map((s) => s.trim())
-                                .filter(Boolean);
-                              if (parts.length >= 2) {
-                                return `${parts[1]} + ${chipName}`;
-                              }
-                              if (parts.length === 1) {
-                                return `${parts[0]} + ${chipName}`;
-                              }
-                              return chipName;
-                            });
-                          }}
-                          activeOpacity={0.78}>
-                          <Text style={styles.memberChipText}>+ {chipName}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                  <TextInput
-                    style={styles.comboNoteInput}
-                    placeholder="VD: 1 Cung Bạch Dương + 1 Cung Thiên Bình (hoặc 2 mẫu bạn thích)..."
-                    placeholderTextColor="#A3907E"
-                    value={comboModelNote}
-                    onChangeText={setComboModelNote}
-                    maxLength={55}
-                  />
-                </View>
+                {/* Step 2: Visual Slot 1 & Slot 2 Model Picker */}
+                <ComboSlotSelector
+                  slot1Candidates={modalSlot1Candidates}
+                  slot2Candidates={modalSlot2Candidates}
+                  selectedSlot1={selectedModalSlot1}
+                  selectedSlot2={selectedModalSlot2}
+                  onSelectSlot1={(cand: ComboSlotCandidate) => {
+                    setModalSlot1Id(cand.id);
+                    const s2Label = selectedModalSlot2?.label || '';
+                    setComboModelNote(
+                      s2Label ? `${cand.label} + ${s2Label}` : cand.label
+                    );
+                  }}
+                  onSelectSlot2={(cand: ComboSlotCandidate) => {
+                    setModalSlot2Id(cand.id);
+                    const s1Label = selectedModalSlot1?.label || '';
+                    setComboModelNote(
+                      s1Label ? `${s1Label} + ${cand.label}` : cand.label
+                    );
+                  }}
+                  customNote={comboModelNote}
+                  onChangeCustomNote={setComboModelNote}
+                />
 
                 {/* Step 3: Packaging Option */}
                 <View style={{ gap: 6 }}>

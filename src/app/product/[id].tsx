@@ -1,3 +1,7 @@
+import {
+    ComboSlotSelector,
+    ComboStudioLiveView,
+} from '@/components/ComboStudioLiveView';
 import { ProductCard } from '@/components/ProductCard';
 import { PUBLIC_SHOP_URL, ShareModal } from '@/components/ShareModal';
 import {
@@ -9,6 +13,7 @@ import {
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import {
     buildCuratedComboProducts,
+    getComboSlotCandidates,
     getCuratedComboDefinition,
     getCuratedComboMemberModelChips,
     isCuratedComboProductId,
@@ -28,6 +33,10 @@ import {
     getProductColorOptionsWithCombo,
     isComboColorOption,
 } from '@/utils/comboPricing';
+import {
+    ComboSlotCandidate,
+    composeComboStudioDataUrl,
+} from '@/utils/comboStudioComposer';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -119,6 +128,9 @@ export default function ProductDetailScreen() {
   const [selectedAccessoryId, setSelectedAccessoryId] = useState<string | null>(null);
   const [giftCardNote, setGiftCardNote] = useState('');
   const [comboNote, setComboNote] = useState('');
+  const [slot1Id, setSlot1Id] = useState<string | null>(null);
+  const [slot2Id, setSlot2Id] = useState<string | null>(null);
+  const [composedComboImg, setComposedComboImg] = useState<string | null>(null);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -165,6 +177,51 @@ export default function ProductDetailScreen() {
     () => getProductColorOptionsWithCombo(product),
     [product]
   );
+  const effectiveActiveColorId =
+    selectedColorId ?? colorOptions[0]?.id ?? null;
+  const { slot1Candidates, slot2Candidates, defaultSlot1, defaultSlot2 } =
+    useMemo(
+      () =>
+        getComboSlotCandidates(product, effectiveActiveColorId, products),
+      [product, effectiveActiveColorId, products]
+    );
+  const selectedSlot1 = useMemo(
+    () =>
+      slot1Candidates.find((c) => c.id === slot1Id) || defaultSlot1 || null,
+    [slot1Candidates, slot1Id, defaultSlot1]
+  );
+  const selectedSlot2 = useMemo(
+    () =>
+      slot2Candidates.find((c) => c.id === slot2Id) || defaultSlot2 || null,
+    [slot2Candidates, slot2Id, defaultSlot2]
+  );
+
+  useEffect(() => {
+    setSlot1Id(defaultSlot1?.id || null);
+    setSlot2Id(defaultSlot2?.id || null);
+    if (defaultSlot1 && defaultSlot2) {
+      setComboNote(`${defaultSlot1.label} + ${defaultSlot2.label}`);
+    }
+  }, [id, effectiveActiveColorId, defaultSlot1?.id, defaultSlot2?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedSlot1 && !selectedSlot2) {
+      setComposedComboImg(null);
+      return;
+    }
+    composeComboStudioDataUrl(
+      selectedSlot1,
+      selectedSlot2,
+      curatedComboDef?.themeBadge || '🎁 COMBO TIẾT KIỆM • TIỆM CUỘN LEN'
+    ).then((url) => {
+      if (!cancelled) setComposedComboImg(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSlot1, selectedSlot2, curatedComboDef?.themeBadge]);
+
   const singleModelOptions: ProductColorOption[] = useMemo(() => {
     if (product && isCuratedComboProductId(product.id)) {
       const memberChips = getCuratedComboMemberModelChips(product.id, products);
@@ -426,7 +483,10 @@ export default function ProductDetailScreen() {
         : 'Tự dùng / Tiêu chuẩn',
       selectedAccessoryEmoji: activeAccessory?.emoji,
       giftCardNote: isGiftSet ? giftCardNote.trim() : undefined,
-      image: activeColor?.image || product.image,
+      image:
+        (isComboActive && composedComboImg) ||
+        activeColor?.image ||
+        product.image,
       price: effectivePrice,
     };
   };
@@ -546,9 +606,34 @@ export default function ProductDetailScreen() {
   };
 
   const isCloseupZoom = currentGalleryItem?.zoomMode === 'closeup';
+  const isShowingGiftBoxSlide =
+    currentGalleryItem?.accessoryId === 'gift_box_letter' ||
+    currentGalleryItem?.id === 'g_gift_box_default';
+  const showLiveComboStudio =
+    isComboActive &&
+    !isShowingGiftBoxSlide &&
+    Boolean(selectedSlot1 || selectedSlot2);
   const activeDisplayImage =
     currentGalleryItem?.image || activeColor?.image || product.image;
   const relatedNumColumns = windowWidth >= 900 ? 4 : windowWidth >= 620 ? 3 : 2;
+
+  const handleRandomizeComboPair = () => {
+    if (slot1Candidates.length === 0 && slot2Candidates.length === 0) return;
+    const next1 =
+      slot1Candidates[Math.floor(Math.random() * slot1Candidates.length)] ||
+      selectedSlot1;
+    const pool2 =
+      slot2Candidates.length > 1
+        ? slot2Candidates.filter((c) => c.id !== next1?.id)
+        : slot2Candidates;
+    const next2 =
+      pool2[Math.floor(Math.random() * pool2.length)] || selectedSlot2;
+    if (next1) setSlot1Id(next1.id);
+    if (next2) setSlot2Id(next2.id);
+    if (next1 && next2) {
+      setComboNote(`${next1.label} + ${next2.label}`);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -706,7 +791,18 @@ export default function ProductDetailScreen() {
                     },
                   } as any)
                 : {})}>
-              {activeDisplayImage ? (
+              {showLiveComboStudio ? (
+                <ComboStudioLiveView
+                  slot1={selectedSlot1}
+                  slot2={selectedSlot2}
+                  themeBadge={curatedComboDef?.themeBadge}
+                  onRandomize={
+                    slot1Candidates.length > 1 || slot2Candidates.length > 1
+                      ? handleRandomizeComboPair
+                      : undefined
+                  }
+                />
+              ) : activeDisplayImage ? (
                 Platform.OS === 'web' && resolveImgUri(activeDisplayImage) ? (
                   React.createElement('img', {
                     src: resolveImgUri(activeDisplayImage)!,
@@ -785,8 +881,8 @@ export default function ProductDetailScreen() {
               </View>
             </View>
 
-            {/* Clean Square Thumbnails (Swipeable / Mouse-Draggable) */}
-            {galleryItems.length > 1 && (
+            {/* Clean Square Thumbnails (Swipeable / Mouse-Draggable) - hidden for Curated Combos so no single-item clutter appears */}
+            {galleryItems.length > 1 && !curatedComboDef && (
               <ScrollView
                 ref={thumbScrollRef}
                 horizontal
@@ -994,93 +1090,30 @@ export default function ProductDetailScreen() {
                         </View>
 
                         {isComboActive && (
-                        <View
-                        style={{
-                        marginTop: 6,
-                        backgroundColor: '#FFFBEB',
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: '#FDE68A',
-                        padding: 12,
-                        gap: 7,
-                        }}>
-                        <Text
-                        style={{
-                        fontSize: 12.5,
-                        fontWeight: '700',
-                        color: '#92400E',
-                        }}>
-                        💝 Chọn 2 mẫu bạn muốn phối trong Combo (chạm để chọn nhanh hoặc tự nhập):
-                        </Text>
-                        {singleModelOptions.length >= 2 && (
-                        <View
-                        style={{
-                          flexDirection: 'row',
-                          flexWrap: 'wrap',
-                          gap: 6,
-                        }}>
-                        {singleModelOptions.map((m) => (
-                          <TouchableOpacity
-                            key={`combo_pick_${m.id}`}
-                            onPress={() => {
-                              setComboNote((prev) => {
-                                const parts = prev
-                                  .split('+')
-                                  .map((s) => s.trim())
-                                  .filter(Boolean);
-                                if (parts.length >= 2) {
-                                  return `${parts[1]} + ${m.name}`;
-                                }
-                                if (parts.length === 1) {
-                                  return `${parts[0]} + ${m.name}`;
-                                }
-                                return m.name;
-                              });
-                            }}
-                            activeOpacity={0.78}
-                            style={{
-                              paddingHorizontal: 10,
-                              paddingVertical: 5,
-                              borderRadius: 999,
-                              backgroundColor: '#FFFFFF',
-                              borderWidth: 1,
-                              borderColor: '#F59E0B',
-                            }}>
-                            <Text
-                              style={{
-                                fontSize: 11.5,
-                                fontWeight: '700',
-                                color: '#78350F',
-                              }}>
-                              + {m.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                        </View>
-                        )}
-                        <TextInput
-                        style={{
-                        backgroundColor: '#FFFFFF',
-                        borderWidth: 1,
-                        borderColor: '#FCD34D',
-                        borderRadius: 9,
-                        paddingHorizontal: 11,
-                        paddingVertical: 8,
-                        fontSize: 13,
-                        color: '#3B2A1E',
-                        minWidth: 0,
-                        }}
-                        placeholder={
-                        singleModelOptions.length >= 2
-                          ? `VD: ${singleModelOptions[0]?.name} + ${singleModelOptions[1]?.name}`
-                          : 'Nhập 2 mẫu / màu bạn muốn phối trong Combo...'
-                        }
-                        placeholderTextColor="#A3907E"
-                        value={comboNote}
-                        onChangeText={setComboNote}
-                        maxLength={55}
-                        />
-                        </View>
+                          <View style={{ marginTop: 8 }}>
+                            <ComboSlotSelector
+                              slot1Candidates={slot1Candidates}
+                              slot2Candidates={slot2Candidates}
+                              selectedSlot1={selectedSlot1}
+                              selectedSlot2={selectedSlot2}
+                              onSelectSlot1={(cand: ComboSlotCandidate) => {
+                                setSlot1Id(cand.id);
+                                const s2Label = selectedSlot2?.label || '';
+                                setComboNote(
+                                  s2Label ? `${cand.label} + ${s2Label}` : cand.label
+                                );
+                              }}
+                              onSelectSlot2={(cand: ComboSlotCandidate) => {
+                                setSlot2Id(cand.id);
+                                const s1Label = selectedSlot1?.label || '';
+                                setComboNote(
+                                  s1Label ? `${s1Label} + ${cand.label}` : cand.label
+                                );
+                              }}
+                              customNote={comboNote}
+                              onChangeCustomNote={setComboNote}
+                            />
+                          </View>
                         )}
                         </View>
                         )}

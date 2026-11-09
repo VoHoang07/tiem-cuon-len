@@ -1,4 +1,5 @@
-import { Product, ProductColorOption, ProductGalleryItem } from '@/types/product';
+import { Product, ProductColorOption } from '@/types/product';
+import { ComboSlotCandidate } from '@/utils/comboStudioComposer';
 
 export interface CuratedComboPackage {
   id: string;
@@ -349,35 +350,7 @@ export function buildCuratedComboProducts(liveProducts: Product[]): Product[] {
       };
     });
 
-    const gallery: ProductGalleryItem[] = [];
-    for (const memberId of def.memberProductIds) {
-      const mp = byId.get(memberId);
-      if (!mp) continue;
-      if (mp.image) {
-        gallery.push({
-          id: `g_${def.id}_${mp.id}_cover`,
-          label: `${mp.name} (Trong ${def.shortTitle})`,
-          angleTag: mp.name,
-          image: mp.image,
-          zoomMode: 'normal',
-        });
-      }
-      if (Array.isArray(mp.colorOptions)) {
-        for (const co of mp.colorOptions.slice(0, 6)) {
-          if (co && co.image && co.image !== mp.image) {
-            gallery.push({
-              id: `g_${def.id}_${mp.id}_${co.id}`,
-              label: `${mp.name} — Mẫu: ${co.name}`,
-              angleTag: co.name || mp.name,
-              image: co.image,
-              zoomMode: 'normal',
-            });
-          }
-        }
-      }
-      }
-
-      return {
+    return {
       id: def.id,
       name: def.name,
       price: def.price,
@@ -394,10 +367,146 @@ export function buildCuratedComboProducts(liveProducts: Product[]): Product[] {
       createdAt: '2026-04-01T00:00:00.000Z',
       tags: ['combo', def.themeBadge, def.shortTitle],
       colorOptions,
-      gallery: gallery.length > 0 ? gallery : undefined,
-      } as Product;
-      });
+      gallery: undefined,
+    } as Product;
+    });
+    }
+
+    function extractProductModelCandidates(
+    mp: Product | undefined
+    ): ComboSlotCandidate[] {
+    if (!mp) return [];
+    const rawColors = (Array.isArray(mp.colorOptions) ? mp.colorOptions : []).filter(
+    (c) => {
+      if (!c) return false;
+      const lower = String(c.name || '').toLowerCase();
+      return (
+        !lower.includes('combo') &&
+        !lower.includes('hộp quà') &&
+        !lower.includes('thư tay') &&
+        !lower.includes('set quà')
+      );
+    }
+    );
+    const shortProdName = mp.name
+    .replace(/^Móc [Kk]hoá\s+/i, '')
+    .replace(/^Charm Bông Treo Túi\s+/i, '')
+    .trim();
+
+    if (rawColors.length >= 2) {
+    return rawColors.map((c, idx) => ({
+      id: `${mp.id}__${c.id || idx}`,
+      label: String(c.name || `Mẫu ${idx + 1}`).trim(),
+      productName: mp.name,
+      image: c.image || mp.image || null,
+      hex: c.hex || '#D4A373',
+    }));
+    }
+    return [
+    {
+      id: `${mp.id}__main`,
+      label: shortProdName || mp.name,
+      productName: mp.name,
+      image: rawColors[0]?.image || mp.image || null,
+      hex: rawColors[0]?.hex || '#D4A373',
+    },
+    ];
+    }
+
+    /**
+    * Resolves Slot 1 & Slot 2 visual model candidates (with real images) for a Combo package
+    * or a regular product's "Combo 2 Mẫu Tự Chọn".
+    */
+    export function getComboSlotCandidates(
+    product: Product | null | undefined,
+    activeColorId: string | null | undefined,
+    liveProducts: Product[]
+    ): {
+    slot1Candidates: ComboSlotCandidate[];
+    slot2Candidates: ComboSlotCandidate[];
+    defaultSlot1: ComboSlotCandidate | null;
+    defaultSlot2: ComboSlotCandidate | null;
+    } {
+    if (!product) {
+    return {
+      slot1Candidates: [],
+      slot2Candidates: [],
+      defaultSlot1: null,
+      defaultSlot2: null,
+    };
+    }
+
+    const def = getCuratedComboDefinition(product.id);
+    if (def) {
+    const activePkg =
+      def.packages.find((p) => p.id === activeColorId) || def.packages[0];
+
+    // Special case: "Đôi Bạn Tri Kỷ" allows picking from all 6 cute keychains
+    if (def.id === 'combo_bestie_cute_02') {
+      const allCute: ComboSlotCandidate[] = [];
+      for (const mId of def.memberProductIds) {
+        const mp = liveProducts.find((p) => p.id === mId);
+        allCute.push(...extractProductModelCandidates(mp));
       }
+      const p1Cand =
+        allCute.find((c) =>
+          c.id.startsWith(`${activePkg.primaryProductId}__`)
+        ) ||
+        allCute[0] ||
+        null;
+      const p2Cand =
+        allCute.find((c) =>
+          c.id.startsWith(`${activePkg.secondaryProductId}__`)
+        ) ||
+        allCute[1] ||
+        allCute[0] ||
+        null;
+      return {
+        slot1Candidates: allCute,
+        slot2Candidates: allCute,
+        defaultSlot1: p1Cand,
+        defaultSlot2: p2Cand,
+      };
+    }
+
+    const p1 = liveProducts.find((p) => p.id === activePkg.primaryProductId);
+    const p2 = liveProducts.find((p) => p.id === activePkg.secondaryProductId);
+
+    let slot1List = extractProductModelCandidates(p1);
+    let slot2List = extractProductModelCandidates(p2);
+
+    // For Nàng Thơ Gói Cao Cấp, include both velvet flower bouquet & rose pot in Slot 1
+    if (activePkg.id === 'pkg_muse_premium') {
+      const rosePot = liveProducts.find((p) => p.id === 'vw_pot_rose_01');
+      slot1List = [
+        ...slot1List,
+        ...extractProductModelCandidates(rosePot),
+      ];
+    }
+
+    const def1 = slot1List[0] || null;
+    const def2 =
+      activePkg.primaryProductId === activePkg.secondaryProductId
+        ? slot2List[1] || slot2List[0] || null
+        : slot2List[0] || null;
+
+    return {
+      slot1Candidates: slot1List,
+      slot2Candidates: slot2List,
+      defaultSlot1: def1,
+      defaultSlot2: def2,
+    };
+    }
+
+    // Regular product with "🎁 Combo 2 Mẫu Tự Chọn"
+    const ownList = extractProductModelCandidates(product);
+    return {
+    slot1Candidates: ownList,
+    slot2Candidates: ownList,
+    defaultSlot1: ownList[0] || null,
+    defaultSlot2: ownList[1] || ownList[0] || null,
+    };
+    }
 
 /**
  * Returns quick-pick model names from the member products of a Curated Combo
