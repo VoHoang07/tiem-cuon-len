@@ -1673,8 +1673,19 @@ export default function CheckoutScreen() {
                       ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
                       : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`}
                   </Text>
-                </TouchableOpacity>
-              </View>
+                  </TouchableOpacity>
+                  <Text
+                  style={{
+                    marginTop: 8,
+                    fontSize: 11.5,
+                    fontWeight: '700',
+                    color: '#065F46',
+                    textAlign: 'center',
+                    lineHeight: 16,
+                  }}>
+                  🛡️ Cam kết đổi trả miễn phí nếu sản phẩm lỗi/hỏng form do vận chuyển — Hoàn toàn yên tâm thanh toán trước hoặc nhận COD.
+                  </Text>
+                  </View>
             </View>
           </View>
         </View>

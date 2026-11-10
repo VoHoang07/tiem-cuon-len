@@ -1329,6 +1329,15 @@ export default function ProductDetailScreen() {
               <Text style={styles.subtleMetaLine}>
                 🧶 Chất liệu: {product.material} • Tuỳ chọn Tự dùng / Tiêu chuẩn hoặc Set Quà Tặng Đặc Biệt (+25.000₫)
               </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: '#065F46',
+                  lineHeight: 17,
+                }}>
+                🛡️ Cam kết đổi trả 1-đổi-1 nếu sản phẩm lỗi hoặc hỏng form do vận chuyển — An tâm 100% khi thanh toán trước hoặc nhận COD.
+              </Text>
 
               {isAdmin ? (
                 <View style={styles.adminRow}>

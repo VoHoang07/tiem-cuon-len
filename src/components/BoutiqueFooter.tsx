@@ -574,7 +574,20 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
                 Mở cửa mỗi ngày (08:00 – 22:00) • Giao hàng toàn quốc
               </Text>
             </View>
-          </View>
+
+            {/* Buyer Protection & Return Guarantee Badge */}
+            <View style={styles.returnGuaranteeBox}>
+              <View style={styles.returnGuaranteeHeader}>
+                <ShieldCheck size={15} color="#065F46" />
+                <Text style={styles.returnGuaranteeTitle}>
+                  CAM KẾT ĐỔI TRẢ & ĐỒNG KIỂM 100%
+                </Text>
+              </View>
+              <Text style={styles.returnGuaranteeDesc}>
+                Cam kết đổi trả miễn phí 1-đổi-1 hoặc hoàn tiền 100% nếu sản phẩm bị lỗi đan móc, sai mẫu hoặc hỏng form do vận chuyển. Khách hàng hoàn toàn yên tâm khi thanh toán trước qua QR hoặc nhận hàng COD kiểm tra tại chỗ.
+              </Text>
+            </View>
+            </View>
 
           {/* Column 2: Categories */}
           <View style={[styles.linksCol, !isMobile && styles.linksColDesktop]}>
@@ -685,9 +698,14 @@ export const BoutiqueFooter = React.memo(function BoutiqueFooter({
 
         {/* Bottom Divider & Copyright Bar */}
         <View style={[styles.bottomBar, isMobile && styles.bottomBarMobile]}>
-          <Text style={styles.copyrightText}>
-            © 2026 Tiệm Cuộn Len Handmade (tiemcuonlen.shop) • Đan móc thủ công bằng cả trái tim
-          </Text>
+          <View style={{ flex: 1, minWidth: 200, gap: 4 }}>
+            <Text style={styles.copyrightText}>
+              © 2026 Tiệm Cuộn Len Handmade (tiemcuonlen.shop) • Đan móc thủ công bằng cả trái tim
+            </Text>
+            <Text style={styles.bottomGuaranteeText}>
+              🛡️ Cam kết đổi trả nếu sản phẩm lỗi/hỏng form do vận chuyển — An tâm 100% khi thanh toán trước hoặc nhận COD.
+            </Text>
+          </View>
 
           <View style={styles.bottomActionsRow}>
             <TouchableOpacity
@@ -1264,6 +1282,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#4A3525',
+  },
+  returnGuaranteeBox: {
+    marginTop: 12,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+    maxWidth: 420,
+  },
+  returnGuaranteeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  returnGuaranteeTitle: {
+    fontSize: 11.5,
+    fontWeight: '900',
+    color: '#065F46',
+    letterSpacing: 0.3,
+  },
+  returnGuaranteeDesc: {
+    fontSize: 12,
+    color: '#047857',
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  bottomGuaranteeText: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '700',
+    lineHeight: 17,
   },
 
   linksCol: {
