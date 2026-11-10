@@ -283,7 +283,7 @@ export default function HelpScreen() {
         badge: 'Cam kết 100%',
         title: 'Bảo hành & Đổi trả Đồ Thủ Công 7 ngày',
         summary:
-          'An tâm mua sắm với cam kết chất lượng sợi len Cotton Milk & Kẽm nhung loại 1.',
+          'An tâm mua sắm với cam kết chất lượng sợi Len Nhung Gấu, Len Nhung Đũa & Kẽm nhung loại 1.',
         steps: [
           'Mỗi sản phẩm đều được kiểm tra kỹ đường móc và đóng gói chống móp trước khi gửi đi.',
           'Hỗ trợ đổi mới hoặc hoàn tiền 100% trong 7 ngày nếu sản phẩm bị lỗi vận chuyển hoặc sai phân loại đã đặt.',

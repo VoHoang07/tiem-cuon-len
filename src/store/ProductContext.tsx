@@ -205,7 +205,14 @@ function hydrateDbProduct(raw: Product): Product {
           ...raw,
           image: raw.image || cachedMedia.image || null,
           tags: cachedMedia.cleanTags || [],
-          colorOptions: raw.colorOptions || cachedMedia.colorOptions,
+          colorOptions: cachedMedia.colorOptions?.map((co) => ({
+            ...co,
+            // If `colorOptions` has only 1 variant and `raw.price` was updated on the product row, sync its price
+            price:
+              cachedMedia.colorOptions?.length === 1 && Number(raw.price) > 0
+                ? Number(raw.price)
+                : co.price,
+          })),
           accessoryOptions: raw.accessoryOptions || cachedMedia.accessoryOptions,
           gallery: raw.gallery || cachedMedia.gallery,
           isMadeToOrder:
@@ -1587,7 +1594,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                   for (const mr of rows) {
                     const target = baseRows.find((b) => b.id === mr.id);
                     if (target) {
-                      if (mr.image) target.image = mr.image;
+                      const adminEdit = customAdminProductsMemory.get(mr.id);
+                      if (adminEdit) {
+                        Object.assign(target, adminEdit);
+                        if (!target.image && mr.image) target.image = mr.image;
+                      } else if (mr.image) {
+                        target.image = mr.image;
+                      }
                       const hydrated = hydrateDbProduct(target);
                       cacheProductMediaInMemory(hydrated, { coverChecked: true });
                       coverUpdated = true;
@@ -1644,7 +1657,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               for (const mr of mediaRows) {
                 const target = baseRows.find((b) => b.id === mr.id);
                 if (target) {
-                  target.tags = mr.tags ?? target.tags;
+                  const adminEdit = customAdminProductsMemory.get(mr.id);
+                  if (adminEdit && Array.isArray(adminEdit.colorOptions) && adminEdit.colorOptions.length > 0) {
+                    Object.assign(target, adminEdit);
+                  } else {
+                    target.tags = mr.tags ?? target.tags;
+                  }
                   const hydrated = hydrateDbProduct(target);
                   cacheProductMediaInMemory(hydrated, {
                     coverChecked: true,
@@ -1935,9 +1953,33 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const refetchProducts = useCallback(async () => {
     setPage(0);
-    const data = await fetchProducts(0);
+    const [data, remoteRescuedList] = await Promise.all([
+      fetchProducts(0),
+      fetchRemoteRescuedProducts(),
+    ]);
     if (data) {
-      const merged = mergeWithMockProducts(data);
+      const authoritativeAdminSyncMap = new Map<string, Product>();
+      for (const rp of remoteRescuedList) {
+        if (rp && rp.id && rp.__rescueWard === 'ADMIN_SYNC') {
+          authoritativeAdminSyncMap.set(rp.id, rp);
+          customAdminProductsMemory.set(rp.id, rp);
+          cacheProductMediaInMemory(rp, {
+            coverChecked: Boolean(rp.image),
+            tagsChecked: true,
+          });
+        }
+      }
+      const remoteIds = new Set(data.map((r) => r.id));
+      const mergedRemoteData = data.map(
+        (dItem) => authoritativeAdminSyncMap.get(dItem.id) || dItem
+      );
+      const extraAdminSynced = [...authoritativeAdminSyncMap.values()].filter(
+        (ap) => !remoteIds.has(ap.id)
+      );
+      const merged = mergeWithMockProducts([
+        ...mergedRemoteData,
+        ...extraAdminSynced,
+      ]);
       setProducts(merged);
       saveCachedProducts(merged);
     }

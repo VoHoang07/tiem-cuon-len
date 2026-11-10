@@ -46,7 +46,7 @@ export const CURATED_COMBO_DEFINITIONS: CuratedComboDefinition[] = [
     price: 139000,
     originalPrice: 150000,
     category: 'Keychains',
-    material: 'Len Cotton Milk cao cấp',
+    material: 'Len Nhung Gấu cao cấp',
     description:
       'Set đôi hoàn hảo cho các cặp đôi hoặc bạn thân: tự chọn 2 Móc Khoá 12 Cung Hoàng Đạo theo đúng cung của 2 người, hoặc phối 1 Cung Hoàng Đạo + 1 Bó Hoa Mini 7 bông không bao giờ tàn.',
     primaryProductId: 'user_1793721241087',
@@ -84,7 +84,7 @@ export const CURATED_COMBO_DEFINITIONS: CuratedComboDefinition[] = [
     price: 85000,
     originalPrice: 98000,
     category: 'Keychains',
-    material: 'Len Cotton Milk mềm mịn',
+    material: 'Len Nhung Gấu mềm mịn',
     description:
       'Mua lẻ 1 bé đã cưng, rủ bạn thân đeo cặp 2 bé còn tiết kiệm hơn! Tự do chọn 2 mẫu bất kỳ trong bộ sưu tập móc khoá lầy lội: Gà Béoo, Vịtt Banana, Đùi Gà Heo, Ốc Quế Kem Chảy, Zịtt hoặc Bé Ma Treo Gió.',
     primaryProductId: 'user_1793958733621',
@@ -138,7 +138,7 @@ export const CURATED_COMBO_DEFINITIONS: CuratedComboDefinition[] = [
     price: 99000,
     originalPrice: 114000,
     category: 'Keychains',
-    material: 'Len Cotton Milk & Bông gòn bi',
+    material: 'Len Nhung Gấu & Len Nhung Đũa',
     description:
       'Dành riêng cho những tâm hồn hảo ngọt và mê sắc màu pastel: kết hợp Móc Khoá Donut Mini cùng Ốc Quế Kem Chảy, hoặc nâng cấp lên bộ đôi "Mẹ Bồng Con" gồm Bánh Donut Size Vừa kèm Donut Mini.',
     primaryProductId: 'user_1793987529864',
@@ -180,7 +180,7 @@ export const CURATED_COMBO_DEFINITIONS: CuratedComboDefinition[] = [
     price: 145000,
     originalPrice: 164000,
     category: 'Flowers',
-    material: 'Len Cotton Milk & Kẽm Nhung Hàn Quốc',
+    material: 'Len Nhung Gấu & Kẽm Nhung Hàn Quốc',
     description:
       'Giải pháp quà tặng tinh tế điểm 10 cho dịp Sinh nhật, Kỷ niệm: vừa có Hoa thủ công vĩnh cửu không bao giờ héo, vừa có Móc Khoá Thú Bông đáng yêu để người nhận mang theo bên mình mỗi ngày.',
     primaryProductId: 'user_1793956553782',
@@ -224,7 +224,7 @@ export const CURATED_COMBO_DEFINITIONS: CuratedComboDefinition[] = [
     originalPrice: 418000,
     freeshipBadge: true,
     category: 'Keychains',
-    material: 'Len Nhung Đũa & Cotton Milk cao cấp',
+    material: 'Len Nhung Gấu & Xù Xiaoke cao cấp',
     description:
       'Bộ đôi Charm treo túi xách làm mưa làm gió: kết hợp 1 bé Charm Bông Twinkle Twinkle bản chuẩn cùng 1 bé Twinkle Noel (hoặc chọn 2 bé Twinkle bất kỳ). Tiết kiệm tới 39.000₫ và được Tự động Freeship toàn quốc!',
     primaryProductId: 'user_1794152247063',
@@ -262,7 +262,7 @@ export const CURATED_COMBO_DEFINITIONS: CuratedComboDefinition[] = [
     price: 219000,
     originalPrice: 244000,
     category: 'Accessories',
-    material: 'Len Lông Cừu & Len Cotton Milk ấm áp',
+    material: 'Len Lông Thỏ & Len Nhung Gấu ấm áp',
     description:
       'Set phụ kiện đồng điệu cho những chuyến vi vu Đà Lạt, Sapa hay ngày se lạnh: gồm 1 Băng Chùm Tai EarMuffs (hoặc Nón Tai Gấu) phối cùng 1 Móc Khoá Thú Bông xinh xắn.',
     primaryProductId: 'user_1793884910153',

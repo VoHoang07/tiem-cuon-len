@@ -453,7 +453,7 @@ export function ProductStudioForm({
   const [newCatEmoji, setNewCatEmoji] = useState('🧢');
   const [newCatLine, setNewCatLine] = useState<'len' | 'kem_nhung'>('len');
   const [material, setMaterial] = useState(
-    initialProduct?.material ?? 'Len Cotton Milk'
+    initialProduct?.material ?? 'Len Nhung Gấu'
   );
   const [isMadeToOrder, setIsMadeToOrder] = useState<boolean>(
     initialProduct?.isMadeToOrder !== undefined
@@ -532,7 +532,7 @@ export function ProductStudioForm({
     setName(d.name ?? '');
     setPrice(d.price ?? '');
     setCategory(d.category ?? 'Crochet');
-    setMaterial(d.material ?? 'Len Cotton Milk');
+    setMaterial(d.material ?? 'Len Nhung Gấu');
     setIsMadeToOrder(d.isMadeToOrder !== false);
     setQuantity(d.quantity ?? '10');
     setDescription(d.description ?? '');
@@ -650,7 +650,7 @@ export function ProductStudioForm({
     setName('');
     setPrice('');
     setCategory('Crochet');
-    setMaterial('Len Cotton Milk');
+    setMaterial('Len Nhung Gấu');
     setIsMadeToOrder(true);
     setQuantity('10');
     setDescription('');
@@ -1060,7 +1060,7 @@ export function ProductStudioForm({
     const desc = generateProductDescription({
       name: name.trim(),
       category: inferred,
-      material: material.trim() || 'Len Cotton Milk',
+      material: material.trim() || 'Len Nhung Gấu',
       color: resolvedColorName,
       tags: tags
         .split(',')
@@ -1173,7 +1173,7 @@ export function ProductStudioForm({
       zoomMode: 'normal',
     }));
 
-    const finalMaterial = material.trim() || 'Len Cotton Milk';
+    const finalMaterial = material.trim() || 'Len Nhung Gấu';
     const finalMainColor = normalizedColors[0]?.name || 'Kem Sữa';
     const finalQty = isMadeToOrder
       ? 999
@@ -2184,7 +2184,7 @@ export function ProductStudioForm({
                 style={styles.stdInput}
                 value={material}
                 onChangeText={setMaterial}
-                placeholder="Len Cotton Milk"
+                placeholder="Len Nhung Gấu"
                 placeholderTextColor={COLORS.lightText}
               />
             </View>

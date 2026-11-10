@@ -1,4 +1,4 @@
-import { Category, ProductColorOption, ProductAccessoryOption } from '@/types/product';
+import { Category, ProductAccessoryOption, ProductColorOption } from '@/types/product';
 
 const COLOR_HEX_MAP: Record<string, string> = {
   'kem sữa': '#F5EBE0',
@@ -217,7 +217,7 @@ export function generateProductDescription(product: {
     PROFESSIONAL_CATEGORY_SPECS.Crochet;
 
   const cleanName = product.name.trim() || 'Sản phẩm thủ công';
-  const cleanMaterial = product.material.trim() || 'Len Cotton Milk loại 1';
+  const cleanMaterial = product.material.trim() || 'Len Nhung Gấu cao cấp';
   const cleanColor = product.color.trim() || 'Chuẩn theo phân loại';
 
   return [
