@@ -80,13 +80,30 @@ const KEM_NHUNG_CAT_SET = new Set<string>([
 function isVelvetWireProduct(p: Product): boolean {
   if (p.craftLine === 'kem_nhung') return true;
   if (p.craftLine === 'len') return false;
+  const name = (p.name || '').toLowerCase();
+  const mat = (p.material || '').toLowerCase();
+  // Explicit yarn/crochet keywords in product name or material always classify as Len
+  if (
+    (name.includes('len') || mat.includes('len')) &&
+    !name.includes('kẽm nhung') &&
+    !name.includes('kẻm nhung') &&
+    !mat.includes('kẽm nhung') &&
+    !mat.includes('kẻm nhung')
+  ) {
+    return false;
+  }
+  if (
+    name.includes('kẽm nhung') ||
+    name.includes('kẻm nhung') ||
+    mat.includes('kẽm nhung') ||
+    mat.includes('kẻm nhung')
+  ) {
+    return true;
+  }
   const catLine = getCategoryCraftLine(p.category);
   if (catLine === 'kem_nhung') return true;
   if (catLine === 'len') return false;
-  if (KEM_NHUNG_CAT_SET.has(p.category)) return true;
-  const name = (p.name || '').toLowerCase();
-  if (name.includes('len')) return false;
-  return name.includes('kẽm nhung') || name.includes('kẻm nhung');
+  return KEM_NHUNG_CAT_SET.has(p.category);
 }
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
@@ -241,8 +258,27 @@ export default function HomeScreen() {
     [numColumns, handleCardPress]
   );
 
-  const showHeroAndFeatured =
-    !search && selectedCategory === 'All' && selectedMainLine === 'all';
+  const showHeroAndFeatured = !search;
+  const flatListRef = useRef<FlatList<Product> | null>(null);
+  const catalogSectionYRef = useRef<number>(0);
+
+  const scrollToCatalogSection = useCallback(() => {
+    setTimeout(() => {
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const el = document.getElementById('catalog-filter-anchor');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+      }
+      if (catalogSectionYRef.current > 0) {
+        flatListRef.current?.scrollToOffset({
+          offset: Math.max(0, catalogSectionYRef.current - 12),
+          animated: true,
+        });
+      }
+    }, 60);
+  }, []);
 
   const SearchBarBlock = (
     <View
@@ -609,8 +645,18 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Major Product Lines: Len vs Kẽm Nhung */}
-      <View style={[styles.mainLineSection, isMobile && styles.mainLineSectionMobile]}>
+      {/* Featured 6 Curated Theme Combos ("🎁 Combo Tiết Kiệm") — placed ABOVE the 3 Major Product Lines so clicking the 3 product options directly filters the catalog right underneath */}
+      {searchInput.trim().length === 0 && (
+        <ComboShowcaseSection products={products} />
+      )}
+
+      {/* Major Product Lines: Tất cả dòng SP / Sản phẩm từ Len / Sản phẩm Kẽm nhung */}
+      <View
+        nativeID="catalog-filter-anchor"
+        onLayout={(e) => {
+          catalogSectionYRef.current = e.nativeEvent.layout.y;
+        }}
+        style={[styles.mainLineSection, isMobile && styles.mainLineSectionMobile]}>
         <TouchableOpacity
           style={[
             styles.mainLineCard,
@@ -622,6 +668,7 @@ export default function HomeScreen() {
           onPress={() => {
             setSelectedMainLine('all');
             setSelectedCategory('All');
+            scrollToCatalogSection();
           }}
           activeOpacity={0.8}>
           <View style={styles.mainLineEmojiCircle}>
@@ -653,6 +700,7 @@ export default function HomeScreen() {
           onPress={() => {
             setSelectedMainLine('len');
             setSelectedCategory('All');
+            scrollToCatalogSection();
           }}
           activeOpacity={0.8}>
           <View style={[styles.mainLineEmojiCircle, { backgroundColor: '#F3E5D8' }]}>
@@ -682,6 +730,7 @@ export default function HomeScreen() {
           onPress={() => {
             setSelectedMainLine('kem_nhung');
             setSelectedCategory('All');
+            scrollToCatalogSection();
           }}
           activeOpacity={0.8}>
           <View style={[styles.mainLineEmojiCircle, { backgroundColor: '#FCE8EE' }]}>
@@ -700,13 +749,10 @@ export default function HomeScreen() {
               {kemNhungCount} mẫu nhung mịn
             </Text>
           </View>
-          </TouchableOpacity>
-          </View>
+        </TouchableOpacity>
+      </View>
 
-          {/* Featured 6 Curated Theme Combos ("🎁 Combo Tiết Kiệm") */}
-          {searchInput.trim().length === 0 && <ComboShowcaseSection products={products} />}
-
-          {/* Main Catalog Filter & Sort Toolbar */}
+      {/* Main Catalog Filter & Sort Toolbar */}
       <View style={styles.catalogToolbar}>
         <SectionHeader
           title={
@@ -725,12 +771,31 @@ export default function HomeScreen() {
         <CategoryChips
           categories={
             selectedMainLine === 'len'
-              ? ['All', ...shopCategories.filter((c) => c.craftLine === 'len').map((c) => c.id)]
+              ? [
+                  'All',
+                  ...shopCategories
+                    .filter((c) => {
+                      if (c.craftLine === 'len') return true;
+                      return uniqueProducts.some(
+                        (p) =>
+                          (p.category === c.id || p.subCategory === c.id) &&
+                          !isVelvetWireProduct(p)
+                      );
+                    })
+                    .map((c) => c.id),
+                ]
               : selectedMainLine === 'kem_nhung'
                 ? [
                     'All',
                     ...shopCategories
-                      .filter((c) => c.craftLine === 'kem_nhung')
+                      .filter((c) => {
+                        if (c.craftLine === 'kem_nhung') return true;
+                        return uniqueProducts.some(
+                          (p) =>
+                            (p.category === c.id || p.subCategory === c.id) &&
+                            isVelvetWireProduct(p)
+                        );
+                      })
                       .map((c) => c.id),
                   ]
                 : ['All', ...shopCategories.map((c) => c.id)]
@@ -742,6 +807,19 @@ export default function HomeScreen() {
               setSelectedCategory('All');
             } else {
               setSelectedCategory(cat);
+              if (cat !== 'All' && selectedMainLine !== 'all') {
+                const hasMatchInLine = uniqueProducts.some(
+                  (p) =>
+                    (p.category === cat || p.subCategory === cat) &&
+                    (selectedMainLine === 'kem_nhung'
+                      ? isVelvetWireProduct(p)
+                      : !isVelvetWireProduct(p))
+                );
+                if (!hasMatchInLine) {
+                  const catLine = getCategoryCraftLine(cat);
+                  setSelectedMainLine(catLine || 'all');
+                }
+              }
             }
           }}
         />
@@ -795,7 +873,6 @@ export default function HomeScreen() {
     </View>
   );
 
-  const flatListRef = useRef<FlatList<Product> | null>(null);
   const handleScrollToTop = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     if (typeof window !== 'undefined') {

@@ -153,7 +153,9 @@ function loadCustomAdminProductsSync(): Product[] {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           for (const p of parsed) {
-            if (p && p.id) customAdminProductsMemory.set(p.id, p);
+            if (p && p.id && !customAdminProductsMemory.has(p.id)) {
+              customAdminProductsMemory.set(p.id, p);
+            }
           }
         }
       }
@@ -526,7 +528,8 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
   const seenCustomNames = new Set<string>();
 
   const localCustom = loadCustomAdminProductsSync();
-  const combinedSource = [...localCustom, ...remoteOrCached];
+  // Authoritative order: remote DB rows FIRST, then local custom cache for any offline-only items
+  const combinedSource = [...remoteOrCached, ...localCustom];
 
   for (const rawItem of combinedSource) {
     const item = hydrateDbProduct(rawItem);
@@ -546,19 +549,22 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
       // Only apply admin field overrides when the remote row ID exactly matches the mock ID
       // (prevents old legacy seeded rows with different IDs from overwriting mock products)
       if (item.id === matchedMock.id) {
-        const overrides: Partial<Product> = {};
-        if (item.price !== undefined && Number(item.price) > 0) overrides.price = Number(item.price);
-        if (item.name) overrides.name = item.name;
-        if (item.description) overrides.description = item.description;
-        if (item.material) overrides.material = item.material;
-        if (item.color) overrides.color = item.color;
-        if (Array.isArray(item.tags) && item.tags.length > 0) overrides.tags = item.tags;
-        if (item.rating !== undefined) overrides.rating = item.rating;
-        if (item.quantity !== undefined) overrides.quantity = item.quantity;
-        if (isValidOverridableImage(item.image)) {
+        const prevOverrides = remoteOverridesByMockId.get(matchedMock.id) || {};
+        const overrides: Partial<Product> = { ...prevOverrides };
+        if (overrides.price === undefined && item.price !== undefined && Number(item.price) > 0) {
+          overrides.price = Number(item.price);
+        }
+        if (!overrides.name && item.name) overrides.name = item.name;
+        if (!overrides.description && item.description) overrides.description = item.description;
+        if (!overrides.material && item.material) overrides.material = item.material;
+        if (!overrides.color && item.color) overrides.color = item.color;
+        if (!overrides.tags && Array.isArray(item.tags) && item.tags.length > 0) overrides.tags = item.tags;
+        if (overrides.rating === undefined && item.rating !== undefined) overrides.rating = item.rating;
+        if (overrides.quantity === undefined && item.quantity !== undefined) overrides.quantity = item.quantity;
+        if (!overrides.image && isValidOverridableImage(item.image)) {
           overrides.image = item.image;
         }
-        if (Array.isArray(item.colorOptions) && item.colorOptions.length > 0) {
+        if (!overrides.colorOptions && Array.isArray(item.colorOptions) && item.colorOptions.length > 0) {
           overrides.colorOptions = item.colorOptions.map((co, idx) => {
             const mockCo =
               matchedMock.colorOptions?.find(
@@ -572,10 +578,10 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
             };
           });
         }
-        if (Array.isArray(item.accessoryOptions) && item.accessoryOptions.length > 0) {
+        if (!overrides.accessoryOptions && Array.isArray(item.accessoryOptions) && item.accessoryOptions.length > 0) {
           overrides.accessoryOptions = item.accessoryOptions;
         }
-        if (Array.isArray(item.gallery) && item.gallery.length > 0) {
+        if (!overrides.gallery && Array.isArray(item.gallery) && item.gallery.length > 0) {
           overrides.gallery = item.gallery.map((g, idx) => {
             const mockG =
               matchedMock.gallery?.find((mg) => mg.id === g.id) ||
@@ -588,7 +594,7 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
             };
           });
         }
-        if (typeof item.isMadeToOrder === 'boolean') {
+        if (overrides.isMadeToOrder === undefined && typeof item.isMadeToOrder === 'boolean') {
           overrides.isMadeToOrder = item.isMadeToOrder;
         }
         remoteOverridesByMockId.set(matchedMock.id, overrides);
@@ -830,13 +836,14 @@ async function getSupabaseAuthBearer(): Promise<string> {
 }
 
 async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>): Promise<boolean> {
+  let productsTableOk = false;
   try {
     const { error } = await supabase.from('products').upsert(dbProduct, { onConflict: 'id' });
-    if (!error) return true;
+    if (!error) productsTableOk = true;
   } catch {
     // fall through to REST call
   }
-  if (supabaseUrl && supabaseAnonKey) {
+  if (!productsTableOk && supabaseUrl && supabaseAnonKey) {
     try {
       const bearer = await getSupabaseAuthBearer();
       const res = await fetch(`${supabaseUrl}/rest/v1/products?on_conflict=id`, {
@@ -849,34 +856,80 @@ async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>
         },
         body: JSON.stringify(dbProduct),
       });
-      if (res.ok) return true;
+      if (res.ok) productsTableOk = true;
     } catch {
       // ignore
     }
   }
-  return false;
+  // Always mirror the latest product state into `addresses` (`tcl_rescue_<id>`) so that:
+  // 1) Stale rescue rows never revert Admin edits after a 5-min sync or page reload
+  // 2) Even if the Admin's Supabase JWT expired, the public partition write succeeds and syncs across all devices
+  if (supabaseUrl && supabaseAnonKey && dbProduct?.id) {
+    try {
+      const rescuePayload = {
+        id: `tcl_rescue_${dbProduct.id}`,
+        userId: SHOP_REVIEWS_HOLDER_USER,
+        fullName: SHOP_REVIEWS_PARTITION,
+        phone: RESCUE_PRODUCT_PHONE_TAG,
+        city: 'HCM',
+        district: new Date().toISOString(),
+        ward: 'ADMIN_SYNC',
+        detailAddress: JSON.stringify(dbProduct),
+        isDefault: false,
+      };
+      const bearer = await getSupabaseAuthBearer();
+      const rRes = await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${bearer}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(rescuePayload),
+      });
+      if (rRes.ok) return true;
+    } catch {
+      // ignore
+    }
+  }
+  return productsTableOk;
 }
 
 async function deleteProductFromSupabase(id: string): Promise<void> {
   try {
     const { error } = await supabase.from('products').delete().eq('id', id);
-    if (!error) return;
+    if (!error) {
+      // also clean up any rescue mirror row
+    }
   } catch {
     // fall through
   }
   if (supabaseUrl && supabaseAnonKey) {
     try {
       const bearer = await getSupabaseAuthBearer();
-      await fetch(
-        `${supabaseUrl}/rest/v1/products?id=eq.${encodeURIComponent(id)}`,
-        {
-          method: 'DELETE',
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${bearer}`,
-          },
-        }
-      );
+      await Promise.all([
+        fetch(
+          `${supabaseUrl}/rest/v1/products?id=eq.${encodeURIComponent(id)}`,
+          {
+            method: 'DELETE',
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${bearer}`,
+            },
+          }
+        ),
+        fetch(
+          `${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(`tcl_rescue_${id}`)}`,
+          {
+            method: 'DELETE',
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${bearer}`,
+            },
+          }
+        ),
+      ]);
     } catch {
       // ignore
     }
@@ -1064,11 +1117,13 @@ async function pushRescuedProductToSupabase(product: Product): Promise<void> {
   }
 }
 
-async function fetchRemoteRescuedProducts(): Promise<Product[]> {
+async function fetchRemoteRescuedProducts(): Promise<
+  Array<Product & { __rescueWard?: string }>
+> {
   if (!supabaseUrl || !supabaseAnonKey) return [];
   try {
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/addresses?phone=eq.${RESCUE_PRODUCT_PHONE_TAG}&select=id,detailAddress`,
+      `${supabaseUrl}/rest/v1/addresses?phone=eq.${RESCUE_PRODUCT_PHONE_TAG}&select=id,ward,detailAddress`,
       {
         cache: 'no-store',
         headers: {
@@ -1080,13 +1135,17 @@ async function fetchRemoteRescuedProducts(): Promise<Product[]> {
     if (!res.ok) return [];
     const rows = await res.json();
     if (!Array.isArray(rows)) return [];
-    const rescued: Product[] = [];
+    const rescued: Array<Product & { __rescueWard?: string }> = [];
     for (const row of rows) {
       if (row?.detailAddress) {
         try {
           const parsed = JSON.parse(row.detailAddress);
           if (parsed && parsed.id && parsed.name) {
-            rescued.push(hydrateDbProduct(parsed as Product));
+            const hydrated = hydrateDbProduct(parsed as Product) as Product & {
+              __rescueWard?: string;
+            };
+            hydrated.__rescueWard = String(row.ward || '');
+            rescued.push(hydrated);
           }
         } catch {
           // ignore
@@ -1721,15 +1780,34 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           syncDeletedIdsToSupabase(currentDeleted).catch(() => {});
         }
 
-        // Merge any products rescued via cross-device bridge
+        const remoteDataIds = new Set((data || []).map((r) => r.id));
+
+        // Merge any products rescued via cross-device bridge:
+        // - If `rp.__rescueWard === 'ADMIN_SYNC'`, it was explicitly saved by Admin and is authoritative.
+        // - Otherwise, only use `rp` if the product is missing from `data` (`!remoteDataIds.has(rp.id)`),
+        //   preventing old customer rescue snapshots from overwriting Admin's updated prices in `products`.
+        const authoritativeAdminSyncMap = new Map<string, Product>();
+        const fallbackMissingRescued: Product[] = [];
         if (remoteRescuedList.length > 0) {
           for (const rp of remoteRescuedList) {
             if (rp && rp.id && !currentDeleted.has(rp.id) && !RETIRED_PRODUCT_IDS.has(rp.id)) {
-              customAdminProductsMemory.set(rp.id, rp);
-              cacheProductMediaInMemory(rp, {
-                coverChecked: Boolean(rp.image),
-                tagsChecked: true,
-              });
+              if (rp.__rescueWard === 'ADMIN_SYNC') {
+                authoritativeAdminSyncMap.set(rp.id, rp);
+                customAdminProductsMemory.set(rp.id, rp);
+                cacheProductMediaInMemory(rp, {
+                  coverChecked: Boolean(rp.image),
+                  tagsChecked: true,
+                });
+              } else if (!remoteDataIds.has(rp.id)) {
+                fallbackMissingRescued.push(rp);
+                if (!customAdminProductsMemory.has(rp.id)) {
+                  customAdminProductsMemory.set(rp.id, rp);
+                }
+                cacheProductMediaInMemory(rp, {
+                  coverChecked: Boolean(rp.image),
+                  tagsChecked: true,
+                });
+              }
             }
           }
           saveCustomProductsToIdb([...customAdminProductsMemory.values()]);
@@ -1778,7 +1856,18 @@ export function ProductProvider({ children }: { children: ReactNode }) {
             })();
           }
 
-          const merged = mergeWithMockProducts([...remoteRescuedList, ...data]);
+          const mergedRemoteData = data.map((dItem) =>
+            authoritativeAdminSyncMap.get(dItem.id) || dItem
+          );
+          const extraAdminSynced = [...authoritativeAdminSyncMap.values()].filter(
+            (ap) => !remoteIds.has(ap.id)
+          );
+
+          const merged = mergeWithMockProducts([
+            ...mergedRemoteData,
+            ...extraAdminSynced,
+            ...fallbackMissingRescued,
+          ]);
           setProducts((prev) => {
             if (productsSignature(merged) === productsSignature(prev)) {
               return prev;

@@ -302,8 +302,8 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
 
     // ─── ADMIN DELETE CHAT CONVERSATION OR SINGLE MESSAGE ─────────────────────
     if (action === 'delete_chat') {
-      const adminUser = await verifyAdminRequest(req);
-      if (!adminUser) {
+      const adminUser = await verifySupabaseUser(req);
+      if (!adminUser || !adminUser.isAdmin) {
         return res
           .status(403)
           .json({ success: false, error: 'Chỉ Quản trị viên mới có quyền xóa tin nhắn.' });

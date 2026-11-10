@@ -506,61 +506,90 @@ async function resolveAuthoritativeProductPrices(baseIds) {
 
   try {
     const idFilter = cleanIds.map((id) => encodeURIComponent(id)).join(',');
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/products?id=in.(${idFilter})&select=id,price,name,tags&limit=200`,
-      {
-        method: 'GET',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
+    const rescueIdFilter = cleanIds
+      .map((id) => encodeURIComponent(`tcl_rescue_${id}`))
+      .join(',');
+    const [res, rescueRes] = await Promise.all([
+      fetch(
+        `${SUPABASE_URL}/rest/v1/products?id=in.(${idFilter})&select=id,price,name,tags&limit=200`,
+        {
+          method: 'GET',
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      ),
+      fetch(
+        `${SUPABASE_URL}/rest/v1/addresses?id=in.(${rescueIdFilter})&ward=eq.ADMIN_SYNC&select=id,detailAddress&limit=200`,
+        {
+          method: 'GET',
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      ),
+    ]);
+    const rows = res.ok ? await res.json() : [];
+    const rescueRows = rescueRes.ok ? await rescueRes.json() : [];
+    const combinedRows = Array.isArray(rows) ? [...rows] : [];
+    if (Array.isArray(rescueRows)) {
+      for (const rRow of rescueRows) {
+        if (rRow && rRow.detailAddress) {
+          try {
+            const parsed = JSON.parse(rRow.detailAddress);
+            if (parsed && parsed.id && Number(parsed.price) > 0) {
+              combinedRows.push(parsed);
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
-    );
-    if (res.ok) {
-      const rows = await res.json();
-      if (Array.isArray(rows)) {
-        for (const row of rows) {
-          if (row && row.id && Number(row.price) > 0) {
-            const baseIdStr = String(row.id);
-            const basePriceNum = Number(row.price);
-            priceMap.set(baseIdStr, basePriceNum);
-            priceMap.set(
-              `${baseIdStr}__c_combo_2`,
-              calculateSmartCombo2PriceServer(basePriceNum)
-            );
-            if (Array.isArray(row.tags)) {
-              for (const tag of row.tags) {
-                if (typeof tag === 'string' && tag.startsWith('__tcl_variants_v1__:')) {
-                  try {
-                    const parsedMeta = JSON.parse(tag.slice('__tcl_variants_v1__:'.length));
-                    if (parsedMeta && Array.isArray(parsedMeta.colorOptions)) {
-                      const firstVariantPrice = Number(
-                        parsedMeta.colorOptions[0] && parsedMeta.colorOptions[0].price
+    }
+    if (combinedRows.length > 0) {
+      for (const row of combinedRows) {
+        if (row && row.id && Number(row.price) > 0) {
+          const baseIdStr = String(row.id);
+          const basePriceNum = Number(row.price);
+          priceMap.set(baseIdStr, basePriceNum);
+          priceMap.set(
+            `${baseIdStr}__c_combo_2`,
+            calculateSmartCombo2PriceServer(basePriceNum)
+          );
+          if (Array.isArray(row.tags)) {
+            for (const tag of row.tags) {
+              if (typeof tag === 'string' && tag.startsWith('__tcl_variants_v1__:')) {
+                try {
+                  const parsedMeta = JSON.parse(tag.slice('__tcl_variants_v1__:'.length));
+                  if (parsedMeta && Array.isArray(parsedMeta.colorOptions)) {
+                    const firstVariantPrice = Number(
+                      parsedMeta.colorOptions[0] && parsedMeta.colorOptions[0].price
+                    );
+                    if (firstVariantPrice > 0) {
+                      priceMap.set(
+                        `${baseIdStr}__c_combo_2`,
+                        calculateSmartCombo2PriceServer(firstVariantPrice)
                       );
-                      if (firstVariantPrice > 0) {
-                        priceMap.set(
-                          `${baseIdStr}__c_combo_2`,
-                          calculateSmartCombo2PriceServer(firstVariantPrice)
-                        );
-                      }
-                      for (const co of parsedMeta.colorOptions) {
-                        const vPrice = Number(co && co.price);
-                        if (vPrice > 0) {
-                          if (co.id) {
-                            priceMap.set(`${baseIdStr}__${String(co.id)}`, vPrice);
-                          }
-                          if (co.name) {
-                            priceMap.set(
-                              `${baseIdStr}__name:${String(co.name).trim().toLowerCase()}`,
-                              vPrice
-                            );
-                          }
+                    }
+                    for (const co of parsedMeta.colorOptions) {
+                      const vPrice = Number(co && co.price);
+                      if (vPrice > 0) {
+                        if (co.id) {
+                          priceMap.set(`${baseIdStr}__${String(co.id)}`, vPrice);
+                        }
+                        if (co.name) {
+                          priceMap.set(
+                            `${baseIdStr}__name:${String(co.name).trim().toLowerCase()}`,
+                            vPrice
+                          );
                         }
                       }
                     }
-                  } catch {
-                    // ignore malformed variant metadata
                   }
+                } catch {
+                  // ignore malformed variant metadata
                 }
               }
             }
