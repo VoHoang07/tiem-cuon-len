@@ -1,17 +1,31 @@
 import { Platform } from 'react-native';
 
+export function resolveImageUri(src: any): string | null {
+  if (!src) return null;
+  if (typeof src === 'string') return src;
+  if (typeof src === 'object') {
+    if (typeof src.uri === 'string') return src.uri;
+    if (typeof src.default === 'string') return src.default;
+    if (src.default && typeof src.default.uri === 'string') {
+      return src.default.uri;
+    }
+  }
+  return null;
+}
+
 export interface ComboSlotCandidate {
   id: string;
   label: string;
   productName: string;
-  image: string | null;
+  image: any;
   hex?: string;
 }
 
 const composedCache = new Map<string, string>();
 
-function loadWebImage(src: string): Promise<HTMLImageElement | null> {
+function loadWebImage(rawSrc: any): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
+    const src = resolveImageUri(rawSrc);
     if (typeof window === 'undefined' || !src) {
       resolve(null);
       return;

@@ -502,6 +502,13 @@ async function fetchRemoteDeletedIds(): Promise<string[]> {
   return [];
 }
 
+function isValidOverridableImage(img: unknown): img is string {
+  return (
+    typeof img === 'string' &&
+    (img.startsWith('data:image/') || img.startsWith('http'))
+  );
+}
+
 function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
   const deletedIds = getDeletedIds();
   const mockById = new Map<string, Product>();
@@ -548,10 +555,7 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
         if (Array.isArray(item.tags) && item.tags.length > 0) overrides.tags = item.tags;
         if (item.rating !== undefined) overrides.rating = item.rating;
         if (item.quantity !== undefined) overrides.quantity = item.quantity;
-        if (
-          typeof item.image === 'string' &&
-          (item.image.startsWith('data:image/') || item.image.startsWith('http'))
-        ) {
+        if (isValidOverridableImage(item.image)) {
           overrides.image = item.image;
         }
         if (Array.isArray(item.colorOptions) && item.colorOptions.length > 0) {
@@ -562,11 +566,9 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
               ) || matchedMock.colorOptions?.[idx];
             return {
               ...co,
-              image:
-                typeof co.image === 'string' &&
-                (co.image.startsWith('data:image/') || co.image.startsWith('http'))
-                  ? co.image
-                  : mockCo?.image,
+              image: isValidOverridableImage(co.image)
+                ? co.image
+                : mockCo?.image || matchedMock.image,
             };
           });
         }
@@ -574,7 +576,17 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
           overrides.accessoryOptions = item.accessoryOptions;
         }
         if (Array.isArray(item.gallery) && item.gallery.length > 0) {
-          overrides.gallery = item.gallery;
+          overrides.gallery = item.gallery.map((g, idx) => {
+            const mockG =
+              matchedMock.gallery?.find((mg) => mg.id === g.id) ||
+              matchedMock.gallery?.[idx];
+            return {
+              ...g,
+              image: isValidOverridableImage(g.image)
+                ? g.image
+                : mockG?.image || matchedMock.image,
+            };
+          });
         }
         if (typeof item.isMadeToOrder === 'boolean') {
           overrides.isMadeToOrder = item.isMadeToOrder;
@@ -688,17 +700,16 @@ function saveCachedProducts(items: Product[]) {
       // and never blocks saving tcl_deleted_product_ids_v1 or Supabase auth tokens
       const lightweight = items.map((p) => ({
         ...p,
-        image:
-          typeof p.image === 'string' && p.image.startsWith('data:image/')
-            ? undefined
-            : p.image,
+        image: isValidOverridableImage(p.image) && !p.image.startsWith('data:image/')
+          ? p.image
+          : undefined,
         colorOptions: Array.isArray(p.colorOptions)
           ? p.colorOptions.map((c) => ({
               ...c,
               image:
-                typeof c.image === 'string' && c.image.startsWith('data:image/')
-                  ? undefined
-                  : c.image,
+                isValidOverridableImage(c.image) && !c.image.startsWith('data:image/')
+                  ? c.image
+                  : undefined,
             }))
           : p.colorOptions,
         gallery: undefined,

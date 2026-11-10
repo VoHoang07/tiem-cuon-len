@@ -1,5 +1,8 @@
 import { Product, ProductColorOption } from '@/types/product';
-import { ComboSlotCandidate } from '@/utils/comboStudioComposer';
+import {
+    ComboSlotCandidate,
+    resolveImageUri,
+} from '@/utils/comboStudioComposer';
 
 export interface CuratedComboPackage {
   id: string;
@@ -394,20 +397,28 @@ export function buildCuratedComboProducts(liveProducts: Product[]): Product[] {
     .trim();
 
     if (rawColors.length >= 2) {
-    return rawColors.map((c, idx) => ({
-      id: `${mp.id}__${c.id || idx}`,
-      label: String(c.name || `Mẫu ${idx + 1}`).trim(),
-      productName: mp.name,
-      image: c.image || mp.image || null,
-      hex: c.hex || '#D4A373',
-    }));
+    return rawColors.map((c, idx) => {
+      const matchedGallery = (mp.gallery ?? []).find(
+        (g) => g.colorId && c.id && g.colorId === c.id
+      );
+      const rawImg = c.image || matchedGallery?.image || mp.image || null;
+      return {
+        id: `${mp.id}__${c.id || idx}`,
+        label: String(c.name || `Mẫu ${idx + 1}`).trim(),
+        productName: mp.name,
+        image: resolveImageUri(rawImg) || rawImg,
+        hex: c.hex || '#D4A373',
+      };
+    });
     }
+    const fallbackImg =
+      rawColors[0]?.image || mp.gallery?.[0]?.image || mp.image || null;
     return [
     {
       id: `${mp.id}__main`,
       label: shortProdName || mp.name,
       productName: mp.name,
-      image: rawColors[0]?.image || mp.image || null,
+      image: resolveImageUri(fallbackImg) || fallbackImg,
       hex: rawColors[0]?.hex || '#D4A373',
     },
     ];

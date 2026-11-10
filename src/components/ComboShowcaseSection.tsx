@@ -4,6 +4,7 @@ import {
     CuratedComboDefinition,
 } from '@/data/comboCatalog';
 import { Product } from '@/types/product';
+import { resolveImageUri } from '@/utils/comboStudioComposer';
 import { formatVND } from '@/utils/formatCurrency';
 import { useRouter } from 'expo-router';
 import { ArrowRight, Plus, Sparkles } from 'lucide-react-native';
@@ -70,9 +71,9 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
         <View style={styles.dualPhotoSplitRow}>
           <View style={styles.dualHalfBox}>
             {img1 ? (
-              Platform.OS === 'web' ? (
+              Platform.OS === 'web' && resolveImageUri(img1) ? (
                 React.createElement('img', {
-                  src: img1,
+                  src: resolveImageUri(img1)!,
                   alt: p1?.name || def.shortTitle,
                   loading: 'lazy',
                   decoding: 'async',
@@ -85,7 +86,7 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
                 })
               ) : (
                 <Image
-                  source={{ uri: img1 }}
+                  source={typeof img1 === 'string' ? { uri: img1 } : (img1 as any)}
                   style={styles.dualHalfImg}
                   resizeMode="cover"
                 />
@@ -101,9 +102,9 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
 
           <View style={styles.dualHalfBox}>
             {img2 ? (
-              Platform.OS === 'web' ? (
+              Platform.OS === 'web' && resolveImageUri(img2) ? (
                 React.createElement('img', {
-                  src: img2,
+                  src: resolveImageUri(img2)!,
                   alt: p2?.name || def.shortTitle,
                   loading: 'lazy',
                   decoding: 'async',
@@ -116,7 +117,7 @@ export function ComboShowcaseSection({ products }: ComboShowcaseSectionProps) {
                 })
               ) : (
                 <Image
-                  source={{ uri: img2 }}
+                  source={typeof img2 === 'string' ? { uri: img2 } : (img2 as any)}
                   style={styles.dualHalfImg}
                   resizeMode="cover"
                 />

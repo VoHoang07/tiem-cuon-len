@@ -75,7 +75,13 @@ export const DEFAULT_GIFT_BOX_IMAGE = '/gift-box-ver2.jpg';
 function resolveImgUri(src: any): string | null {
   if (!src) return null;
   if (typeof src === 'string') return src;
-  if (typeof src === 'object' && typeof src.uri === 'string') return src.uri;
+  if (typeof src === 'object') {
+    if (typeof src.uri === 'string') return src.uri;
+    if (typeof src.default === 'string') return src.default;
+    if (src.default && typeof src.default.uri === 'string') {
+      return src.default.uri;
+    }
+  }
   return null;
 }
 
@@ -831,7 +837,7 @@ export default function ProductDetailScreen() {
                 </View>
               )}
 
-              {galleryItems.length > 1 && (
+              {galleryItems.length > 1 && !showLiveComboStudio && (
                 <>
                   <TouchableOpacity
                     style={[styles.arrowBtn, styles.arrowLeft]}
@@ -866,11 +872,13 @@ export default function ProductDetailScreen() {
                 </View>
               )}
 
-              <View style={styles.counterPill}>
-                <Text style={styles.counterPillText}>
-                  {safeGalleryIndex + 1} / {galleryItems.length}
-                </Text>
-              </View>
+              {!showLiveComboStudio && (
+                <View style={styles.counterPill}>
+                  <Text style={styles.counterPillText}>
+                    {safeGalleryIndex + 1} / {galleryItems.length}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Clean Square Thumbnails (Swipeable / Mouse-Draggable) - hidden for Curated Combos so no single-item clutter appears */}

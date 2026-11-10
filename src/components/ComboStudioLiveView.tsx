@@ -1,5 +1,8 @@
 import { SHADOWS } from '@/constants/theme';
-import { ComboSlotCandidate } from '@/utils/comboStudioComposer';
+import {
+    ComboSlotCandidate,
+    resolveImageUri,
+} from '@/utils/comboStudioComposer';
 import { Plus, Sparkles } from 'lucide-react-native';
 import React from 'react';
 import {
@@ -33,17 +36,18 @@ export function ComboStudioLiveView({
   const label1 = slot1?.label || 'Mẫu #1';
   const label2 = slot2?.label || 'Mẫu #2';
 
-  const renderPhoto = (uri: string | null, alt: string) => {
-    if (!uri) {
+  const renderPhoto = (rawUri: any, alt: string) => {
+    const resolvedStr = resolveImageUri(rawUri);
+    if (!rawUri && !resolvedStr) {
       return (
         <View style={styles.photoFallback}>
           <Text style={{ fontSize: 28 }}>🧶</Text>
         </View>
       );
     }
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && resolvedStr) {
       return React.createElement('img', {
-        src: uri,
+        src: resolvedStr,
         alt,
         decoding: 'async',
         draggable: false,
@@ -57,7 +61,11 @@ export function ComboStudioLiveView({
       });
     }
     return (
-      <Image source={{ uri }} style={styles.nativePhoto} resizeMode="cover" />
+      <Image
+        source={typeof rawUri === 'string' ? { uri: rawUri } : (rawUri as any)}
+        style={styles.nativePhoto}
+        resizeMode="cover"
+      />
     );
   };
 
@@ -189,9 +197,9 @@ export function ComboSlotSelector({
                 activeOpacity={0.82}>
                 <View style={styles.candThumbBox}>
                   {cand.image ? (
-                    Platform.OS === 'web' ? (
+                    Platform.OS === 'web' && resolveImageUri(cand.image) ? (
                       React.createElement('img', {
-                        src: cand.image,
+                        src: resolveImageUri(cand.image)!,
                         alt: cand.label,
                         loading: 'lazy',
                         decoding: 'async',
@@ -204,7 +212,11 @@ export function ComboSlotSelector({
                       })
                     ) : (
                       <Image
-                        source={{ uri: cand.image }}
+                        source={
+                          typeof cand.image === 'string'
+                            ? { uri: cand.image }
+                            : (cand.image as any)
+                        }
                         style={styles.nativePhoto}
                         resizeMode="cover"
                       />
