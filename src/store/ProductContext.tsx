@@ -60,6 +60,14 @@ function cacheProductMediaInMemory(
     (typeof p.image === 'object' && p.image !== null);
   const hasColors =
     Array.isArray(p.colorOptions) && p.colorOptions.length > 0;
+  const hasColorsWithImages =
+    Array.isArray(p.colorOptions) &&
+    p.colorOptions.some(
+      (c) =>
+        (typeof c?.image === 'string' && c.image.length > 0) ||
+        typeof c?.image === 'number' ||
+        (typeof c?.image === 'object' && c?.image !== null)
+    );
   const prev = hydratedMediaMemory.get(p.id);
   if (hasImage || hasColors || opts?.coverChecked || opts?.tagsChecked || prev) {
     hydratedMediaMemory.set(p.id, {
@@ -77,7 +85,9 @@ function cacheProductMediaInMemory(
           )
         : prev?.cleanTags,
       coverChecked: Boolean(opts?.coverChecked || hasImage || prev?.coverChecked),
-      tagsChecked: Boolean(opts?.tagsChecked || hasColors || prev?.tagsChecked),
+      tagsChecked: Boolean(
+        opts?.tagsChecked || hasColorsWithImages || prev?.tagsChecked
+      ),
     });
   }
 }
@@ -965,8 +975,9 @@ interface ProductContextType {
   removeShopCategory: (categoryId: string) => void;
   resetShopCategories: () => void;
   refetchProducts: () => Promise<void>;
+  ensureProductVariantsHydrated: (productId: string) => Promise<void>;
   importProductsFromRawData: (rawText: string) => Promise<number>;
-}
+  }
 
 const SHOP_CATEGORIES_CACHE_KEY = 'tcl_shop_categories_v1';
 const SHOP_CATEGORIES_ROW_ID = 'tcl_shop_categories_v1';
@@ -1129,8 +1140,9 @@ async function fetchRemoteRescuedProducts(): Promise<
 > {
   if (!supabaseUrl || !supabaseAnonKey) return [];
   try {
-    const res = await fetch(
-      `${supabaseUrl}/rest/v1/addresses?phone=eq.${RESCUE_PRODUCT_PHONE_TAG}&select=id,ward,detailAddress`,
+    // 1. Lightweight query: list rescue row IDs and wards FIRST (avoiding 15MB+ single-SELECT statement timeout 57014)
+    const listRes = await fetch(
+      `${supabaseUrl}/rest/v1/addresses?phone=eq.${RESCUE_PRODUCT_PHONE_TAG}&select=id,ward`,
       {
         cache: 'no-store',
         headers: {
@@ -1139,13 +1151,38 @@ async function fetchRemoteRescuedProducts(): Promise<
         },
       }
     );
-    if (!res.ok) return [];
-    const rows = await res.json();
-    if (!Array.isArray(rows)) return [];
+    if (!listRes.ok) return [];
+    const metaRows = (await listRes.json()) as Array<{
+      id: string;
+      ward?: string;
+    }>;
+    if (!Array.isArray(metaRows) || metaRows.length === 0) return [];
+
+    // Prioritize ADMIN_SYNC rows first so Admin edits apply immediately
+    const sortedMeta = [...metaRows].sort(
+      (a, b) => (b.ward === 'ADMIN_SYNC' ? 1 : 0) - (a.ward === 'ADMIN_SYNC' ? 1 : 0)
+    );
     const rescued: Array<Product & { __rescueWard?: string }> = [];
-    for (const row of rows) {
-      if (row?.detailAddress) {
-        try {
+
+    for (const meta of sortedMeta) {
+      if (!meta?.id) continue;
+      try {
+        const detailRes = await fetch(
+          `${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(
+            meta.id
+          )}&select=id,ward,detailAddress`,
+          {
+            cache: 'no-store',
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+            },
+          }
+        );
+        if (!detailRes.ok) continue;
+        const rows = await detailRes.json();
+        const row = Array.isArray(rows) ? rows[0] : null;
+        if (row?.detailAddress) {
           const parsed = JSON.parse(row.detailAddress);
           if (parsed && parsed.id && parsed.name) {
             const hydrated = hydrateDbProduct(parsed as Product) as Product & {
@@ -1154,9 +1191,9 @@ async function fetchRemoteRescuedProducts(): Promise<
             hydrated.__rescueWard = String(row.ward || '');
             rescued.push(hydrated);
           }
-        } catch {
-          // ignore
         }
+      } catch {
+        // continue next rescue row
       }
     }
     return rescued;
@@ -1462,9 +1499,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               !deleted.has(item.id) &&
               !RETIRED_PRODUCT_IDS.has(item.id)
             ) {
+              const hasColorImages =
+                Array.isArray(item.colorOptions) &&
+                item.colorOptions.some((c) => Boolean(c?.image));
               cacheProductMediaInMemory(item, {
                 coverChecked: Boolean(item.image),
-                tagsChecked: true,
+                tagsChecked: hasColorImages,
               });
               // Rescue any custom user_ product from cached_all_products into customAdminProductsMemory
               if (
@@ -1489,10 +1529,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               !deleted.has(item.id) &&
               !RETIRED_PRODUCT_IDS.has(item.id)
             ) {
+              const hasColorImages =
+                Array.isArray(item.colorOptions) &&
+                item.colorOptions.some((c) => Boolean(c?.image));
               customAdminProductsMemory.set(item.id, item);
               cacheProductMediaInMemory(item, {
                 coverChecked: Boolean(item.image),
-                tagsChecked: true,
+                tagsChecked: hasColorImages,
               });
             }
           }
@@ -1624,6 +1667,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         }
 
         // PASS 2: Background Variant & Gallery Hydration (`select=id,tags` ONLY — never re-download `image`!)
+        // Fetch 1 product at a time (`VARIANT_CHUNK = 1`) with 1 retry so large multi-MB Base64 variant rows
+        // (e.g. Twinkle 6 models, Donut 7 models, Bé Ma 9 models) NEVER trigger PostgreSQL 57014 statement timeout!
         const missingVariantIds = activeRows
         .filter((r) => {
           const cached = hydratedMediaMemory.get(r.id);
@@ -1633,57 +1678,81 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
         if (missingVariantIds.length === 0) return;
 
-        const VARIANT_CHUNK = 2;
         let variantsUpdated = false;
-        for (let i = 0; i < missingVariantIds.length; i += VARIANT_CHUNK) {
-        const chunk = missingVariantIds.slice(i, i + VARIANT_CHUNK);
-        const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
-        try {
-          const res = await fetch(
-            `${supabaseUrl}/rest/v1/products?select=id,tags&id=in.(${inFilter})`,
-            {
-              headers: {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-              },
-            }
-          );
-          if (res.ok) {
-            const mediaRows = (await res.json()) as Array<{
-              id: string;
-              tags?: string[];
-            }>;
-            if (Array.isArray(mediaRows) && mediaRows.length > 0) {
-              for (const mr of mediaRows) {
-                const target = baseRows.find((b) => b.id === mr.id);
-                if (target) {
-                  const adminEdit = customAdminProductsMemory.get(mr.id);
-                  if (adminEdit && Array.isArray(adminEdit.colorOptions) && adminEdit.colorOptions.length > 0) {
-                    Object.assign(target, adminEdit);
-                  } else {
-                    target.tags = mr.tags ?? target.tags;
-                  }
-                  const hydrated = hydrateDbProduct(target);
-                  cacheProductMediaInMemory(hydrated, {
-                    coverChecked: true,
-                    tagsChecked: true,
-                  });
-                  variantsUpdated = true;
+        let hydratedSinceLastFlush = 0;
+        for (let i = 0; i < missingVariantIds.length; i++) {
+          const singleId = missingVariantIds[i];
+          if (!singleId) continue;
+          const alreadyNow = hydratedMediaMemory.get(singleId);
+          if (alreadyNow?.tagsChecked) continue;
+
+          let fetchedTags: string[] | null = null;
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+              const res = await fetch(
+                `${supabaseUrl}/rest/v1/products?select=id,tags&id=eq.${encodeURIComponent(
+                  singleId
+                )}`,
+                {
+                  headers: {
+                    apikey: supabaseAnonKey,
+                    Authorization: `Bearer ${supabaseAnonKey}`,
+                  },
                 }
+              );
+              if (res.ok) {
+                const mediaRows = (await res.json()) as Array<{
+                  id: string;
+                  tags?: string[];
+                }>;
+                if (Array.isArray(mediaRows) && mediaRows[0]) {
+                  fetchedTags = mediaRows[0].tags ?? [];
+                  break;
+                }
+              }
+            } catch {
+              // retry once after short pause
+            }
+            if (attempt === 1) {
+              await new Promise((r) => setTimeout(r, 150));
+            }
+          }
+
+          if (fetchedTags !== null) {
+            const target = baseRows.find((b) => b.id === singleId);
+            if (target) {
+              const adminEdit = customAdminProductsMemory.get(singleId);
+              if (
+                adminEdit &&
+                Array.isArray(adminEdit.colorOptions) &&
+                adminEdit.colorOptions.length > 1
+              ) {
+                Object.assign(target, adminEdit);
+              } else {
+                target.tags = fetchedTags;
+              }
+              const hydrated = hydrateDbProduct(target);
+              cacheProductMediaInMemory(hydrated, {
+                coverChecked: true,
+                tagsChecked: true,
+              });
+              variantsUpdated = true;
+              hydratedSinceLastFlush++;
+              // Update UI after every 4 hydrated products so mobile users see variant badges & models quickly
+              if (hydratedSinceLastFlush >= 4) {
+                hydratedSinceLastFlush = 0;
+                setProducts(mergeWithMockProducts(baseRows));
               }
             }
           }
-        } catch {
-          // continue next chunk
-        }
-        // Give mobile browser GC 60ms breathing room between multi-MB variant chunks to prevent WebKit OOM crash
-        await new Promise((r) => setTimeout(r, 60));
+          // Give mobile browser GC 60ms breathing room between multi-MB variant rows to prevent WebKit OOM crash
+          await new Promise((r) => setTimeout(r, 60));
         }
 
         if (variantsUpdated) {
-        const merged = mergeWithMockProducts(baseRows);
-        setProducts(merged);
-        saveCachedProducts(merged);
+          const merged = mergeWithMockProducts(baseRows);
+          setProducts(merged);
+          saveCachedProducts(merged);
         }
     },
     []
@@ -1950,6 +2019,79 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       setPage(nextPage);
     }
   }, [page, fetchProducts]);
+
+  const ensureProductVariantsHydrated = useCallback(
+    async (rawProductId: string) => {
+      const cleanId = String(rawProductId || '')
+        .split('__')[0]
+        .trim();
+      if (
+        !cleanId ||
+        !supabaseUrl ||
+        !supabaseAnonKey ||
+        LEGACY_ID_TO_MOCK_ID[cleanId]
+      ) {
+        return;
+      }
+      const cached = hydratedMediaMemory.get(cleanId);
+      const hasMultipleOrImages =
+        Array.isArray(cached?.colorOptions) &&
+        (cached.colorOptions.length > 1 ||
+          cached.colorOptions.some((c) => Boolean(c?.image)));
+      if (cached?.tagsChecked && hasMultipleOrImages) {
+        return;
+      }
+
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const res = await fetch(
+            `${supabaseUrl}/rest/v1/products?select=id,image,tags&id=eq.${encodeURIComponent(
+              cleanId
+            )}`,
+            {
+              headers: {
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${supabaseAnonKey}`,
+              },
+            }
+          );
+          if (res.ok) {
+            const rows = (await res.json()) as Array<{
+              id: string;
+              image?: Product['image'];
+              tags?: string[];
+            }>;
+            const row = Array.isArray(rows) ? rows[0] : null;
+            if (row) {
+              setProducts((prev) => {
+                const target = prev.find((p) => p.id === cleanId);
+                if (!target) return prev;
+                const hydrated = hydrateDbProduct({
+                  ...target,
+                  image: row.image || target.image,
+                  tags: row.tags ?? target.tags,
+                });
+                cacheProductMediaInMemory(hydrated, {
+                  coverChecked: true,
+                  tagsChecked: true,
+                });
+                const next = prev.map((p) => (p.id === cleanId ? hydrated : p));
+                saveCachedProducts(next);
+                return next;
+              });
+              return;
+            }
+          }
+        } catch {
+          // retry once
+        }
+        if (attempt === 1) {
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+    },
+    []
+  );
 
   const refetchProducts = useCallback(async () => {
     setPage(0);
@@ -2232,9 +2374,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       removeShopCategory,
       resetShopCategories,
       refetchProducts,
+      ensureProductVariantsHydrated,
       importProductsFromRawData,
-    }),
-    [
+      }),
+      [
       products,
       shopReviews,
       shopCategories,
@@ -2252,8 +2395,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       removeShopCategory,
       resetShopCategories,
       refetchProducts,
+      ensureProductVariantsHydrated,
       importProductsFromRawData,
-    ]
+      ]
   );
 
   return (

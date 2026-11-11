@@ -113,6 +113,7 @@ export default function ProductDetailScreen() {
     addReview,
     removeProduct,
     cartCount,
+    ensureProductVariantsHydrated,
   } = useShop();
   const { user, role, isAuthenticated } = useAuth();
   const { openChatWithProduct } = useChat();
@@ -175,7 +176,17 @@ export default function ProductDetailScreen() {
     setGiftCardNote(initialGiftNote ? String(initialGiftNote) : '');
     setActiveGalleryIndex(0);
     setShowReviewForm(false);
-  }, [id, initialColorId, initialAccessoryId, initialQty, initialGiftNote]);
+    if (id && !isCuratedComboProductId(String(id))) {
+      void ensureProductVariantsHydrated(String(id));
+    }
+  }, [
+    id,
+    initialColorId,
+    initialAccessoryId,
+    initialQty,
+    initialGiftNote,
+    ensureProductVariantsHydrated,
+  ]);
 
   const colorOptions: ProductColorOption[] = useMemo(
     () => getProductColorOptionsWithCombo(product),

@@ -790,7 +790,12 @@ export default function CheckoutScreen() {
       createdAt: new Date().toISOString(),
     };
 
-    await addOrder(order);
+    // Let `addOrder(order)` run in the background if mobile network takes >1.8s so the customer
+    // sees the "Đặt hàng thành công" screen (or QR screen) immediately without hanging on the checkout form!
+    await Promise.race([
+      addOrder(order).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 1800)),
+    ]);
 
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -800,7 +805,7 @@ export default function CheckoutScreen() {
       // ignore
     }
 
-    recordSecurityAudit({
+    void recordSecurityAudit({
       eventType: 'CHECKOUT_ORDER_CREATED',
       severity: 'INFO',
       path: '/checkout',
@@ -815,21 +820,30 @@ export default function CheckoutScreen() {
         paymentMethod: selectedPayment.title,
         howFoundShop: howFoundShop || getOrCaptureVisitorTrafficSource(),
       },
-      });
+    });
 
     if (selectedPayment.type === 'cod') {
       // Server-side `action: 'create'` in `/api/orders-guard` already dispatches the email once for COD orders
       if (!isBuyNow) clearCart();
+      setIsSubmittingOrder(false);
       setSubmitted(true);
+      if (typeof window !== 'undefined') {
+        try {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch {
+          // ignore
+        }
+      }
     } else {
       // Bank Transfer / QR: Do NOT send email yet!
       // Email & cart clearing happen only AFTER payment is confirmed on /payment/[orderId]
+      setIsSubmittingOrder(false);
       router.replace({
         pathname: `/payment/${orderId}` as any,
         params: isBuyNow ? { buyNow: '1' } : undefined,
       });
     }
-  };
+    };
 
     const renderCODSuccess = () => (
     <SafeAreaView style={styles.safe}>
@@ -1664,15 +1678,23 @@ export default function CheckoutScreen() {
                   style={[
                     styles.payBtn,
                     isDesktop && styles.payBtnDesktop,
+                    isSubmittingOrder && { opacity: 0.85 },
                   ]}
                   onPress={() => handlePayment()}
                   disabled={isSubmittingOrder}
                   activeOpacity={0.8}>
-                  <Text style={styles.payBtnText}>
-                    {selectedPayment?.type === 'cod'
-                      ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
-                      : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`}
-                  </Text>
+                  {isSubmittingOrder ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <ActivityIndicator size="small" color={COLORS.white} />
+                      <Text style={styles.payBtnText}>Đang tạo đơn hàng...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.payBtnText}>
+                      {selectedPayment?.type === 'cod'
+                        ? `Đặt hàng COD (${formatVND(checkoutTotal)})`
+                        : `Tiếp tục quét mã QR (${formatVND(checkoutTotal)})`}
+                    </Text>
+                  )}
                   </TouchableOpacity>
                   <Text
                   style={{

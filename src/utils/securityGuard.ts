@@ -634,9 +634,13 @@ export async function isCurrentIpBlocked(): Promise<{
   ip: string;
   reason?: string;
 }> {
+  const localList = readLocalBlockedIps();
+  // Fast path: if local blocklist is empty, do not block checkout on external IP lookup
+  if (localList.length === 0) {
+    return { blocked: false, ip: cachedTelemetry?.ip || '127.0.0.1' };
+  }
   const telemetry = await resolveClientIpTelemetry();
   const currentIp = telemetry.ip;
-  const localList = readLocalBlockedIps();
   const matched = localList.find((b) => b.ip === currentIp);
   if (matched) {
     return { blocked: true, ip: currentIp, reason: matched.reason };

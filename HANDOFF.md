@@ -88,19 +88,22 @@ flowchart TD
 
 | File | Trạng thái | Vai trò & Thay đổi cụ thể |
 | :--- | :---: | :--- |
-| `src/store/ProductContext.tsx` | Đã sửa | Quản lý toàn bộ vòng đời sản phẩm, cache `IndexedDB`, đồng bộ 2 chiều với Supabase (`public.products` + cầu nối `tcl_rescue_<id>` có cờ `ward: 'ADMIN_SYNC'`). Giữ nguyên dữ liệu Admin đã sửa trong cả `syncProducts`, `refetchProducts` và `hydrateMissingProductMedia`. |
+| `src/store/ProductContext.tsx` | Đã sửa | Quản lý toàn bộ vòng đời sản phẩm, cache `IndexedDB`, đồng bộ 2 chiều với Supabase (`public.products` + cầu nối `tcl_rescue_<id>` có cờ `ward: 'ADMIN_SYNC'`). Sửa lỗi thiếu mẫu phân loại trên điện thoại (như *Twinkle Twinkle* 6 mẫu, *Bé Ma* 9 mẫu, *Donut* 7 mẫu) bằng cách: (1) `fetchRemoteRescuedProducts` truy vấn `select=id,ward` nhẹ trước rồi tải từng dòng; (2) Pass 2 `hydrateMissingProductMedia` tải từng sản phẩm đơn lẻ (`id=eq.<id>`) kèm retry để không bao giờ bị lỗi Postgres TOAST `57014 statement timeout`; (3) chỉ đánh dấu `tagsChecked: true` khi `colorOptions` thực sự có ảnh; (4) cung cấp `ensureProductVariantsHydrated(id)`. |
+| `src/store/ShopContext.tsx` | Đã sửa | Cầu nối Store: Mở rộng `ensureProductVariantsHydrated` sang `useShop()` để trang chi tiết sản phẩm gọi tức thì khi mở. |
 | `src/app/index.tsx` | Đã sửa | Trang chủ cửa hàng: Đưa `ComboShowcaseSection` lên trên 3 nút chọn dòng sản phẩm; giữ ổn định `showHeroAndFeatured = !search`; thêm `scrollToCatalogSection` (`catalog-filter-anchor`); sửa `isVelvetWireProduct` và bộ lọc `CategoryChips` để phân loại chính xác sản phẩm Len vs Kẽm nhung. |
-| `api/_securityCore.js` | Đã sửa | Lõi bảo mật & tính giá Server: Cập nhật `resolveAuthoritativeProductPrices` đọc song song `public.products` và `public.addresses` (`ward=eq.ADMIN_SYNC`) để luôn lấy đúng giá Admin vừa sửa khi khách tạo đơn. |
+| `api/_securityCore.js` | Đã sửa | Lõi bảo mật & tính giá Server: Tối ưu `resolveAuthoritativeProductPrices` đọc `select=id,price,name` nhanh (<50ms) trước rồi đọc `tags` theo từng ID đơn lẻ để tránh lỗi `57014 statement timeout` khi đơn hàng có nhiều sản phẩm nặng. |
 | `api/security-audit.js` | Đã sửa | API SIEM & Quản trị bảo mật: Sửa nhánh `action === 'delete_chat'` gọi đúng `verifySupabaseUser(req)` và kiểm tra `adminUser.isAdmin` thay vì hàm không tồn tại. |
 | `src/data/comboCatalog.ts` | Đã sửa | Định nghĩa 6 bộ Combo chủ đề: Chuẩn hoá trường `material` từ `Len Cotton Milk` sang `Len Nhung Gấu` / `Len Nhung Đũa` / `Len Lông Thỏ`. |
 | `src/components/ProductStudioForm.tsx` | Đã sửa | Studio thêm/sửa sản phẩm của Admin: Đặt chất liệu mặc định là `Len Nhung Gấu`, hỗ trợ nhập giá riêng cho từng phân loại, bảng 34 màu thu gọn, tự động nén ảnh chuẩn Studio 1440×1440. |
 | `src/utils/generateProductDescription.ts` | Đã sửa | Trình tạo mô tả sản phẩm tự động: Đổi chất liệu mặc định sang `Len Nhung Gấu cao cấp`. |
 | `src/app/help.tsx` | Đã sửa | Trung tâm trợ giúp & chính sách bảo hành: Cập nhật cam kết chất liệu `Len Nhung Gấu, Len Nhung Đũa & Kẽm nhung loại 1`. |
 | `src/components/BoutiqueFooter.tsx` | Đã sửa | Footer toàn trang: Hiển thị cam kết Bảo hành & Đổi trả miễn phí 7 ngày (đổi mới/hoàn tiền 100% nếu bung mối len hoặc gãy móp do vận chuyển). |
-| `src/app/product/[id].tsx` | Đã sửa | Trang chi tiết sản phẩm: Hiển thị khung chọn phân loại, khung ghép đôi `ComboStudioLiveView`, chọn bao bì (`Tự dùng` vs `Set Quà Tặng Đặc Biệt +25k`), và hộp cam kết bảo hành 7 ngày. |
+| `src/app/product/[id].tsx` | Đã sửa | Trang chi tiết sản phẩm: Tự động gọi `ensureProductVariantsHydrated(id)` khi mở trang để nạp ngay toàn bộ phân loại; hiển thị khung chọn phân loại, khung ghép đôi `ComboStudioLiveView`, chọn bao bì (`Tự dùng` vs `Set Quà Tặng Đặc Biệt +25k`), và hộp cam kết bảo hành 7 ngày. |
 | `src/app/cart.tsx` | Đã sửa | Trang giỏ hàng: Sửa lỗi hiển thị `Phí vận chuyển: 0₫` và `Tổng cộng: 0₫` do truy cập nhầm thuộc tính `shippingConfig` cũ (`freeShippingEnabled` / `standardShippingFee` = `undefined` gây `NaN`), đồng bộ sang chuẩn `shippingConfig.freeshipEnabled`, `shippingConfig.freeshipThreshold` và `shippingConfig.hcmFee`. |
-| `src/app/checkout.tsx` | Đã sửa | Trang thanh toán: Đồng bộ giá biến thể + phụ phí hộp quà + xem trước thiệp Vintage Airmail + huy hiệu tài khoản xác thực + cam kết đổi trả 100%. |
-| `AGENTS.md` & `CLAUDE.md` | Đã sửa | Hiến pháp kỹ thuật & Bộ nhớ tự học (`SELF-EVOLVING MEMORY` từ mục #1 đến #25) luôn được giữ đồng bộ tuyệt đối. |
+| `src/store/OrderContext.tsx` | Đã sửa | Quản lý đơn hàng: Tự động lọc bỏ chuỗi ảnh `data:image/` Base64 khỏi `order.items` (`compactOrder`) trước khi gửi lên `/api/orders-guard` và Supabase, kèm `AbortController` timeout 9s để không treo mạng di động. |
+| `src/utils/securityGuard.ts` | Đã sửa | Bảo vệ tốc độ nút Đặt hàng: `isCurrentIpBlocked()` trả về ngay trong `0ms` nếu danh sách chặn cục bộ rỗng thay vì chờ tra cứu IP bên thứ 3. |
+| `src/app/checkout.tsx` | Đã sửa | Trang thanh toán: Hiển thị trạng thái loading `"Đang tạo đơn hàng..."` trên nút bấm, dùng `Promise.race` (`1.8s`) kết hợp cuộn lên đầu trang чтобы chuyển sang màn hình **"Đặt hàng thành công"** (hoặc trang mã QR) ngay lập tức trong khi request hoàn tất ngầm. |
+| `AGENTS.md` & `CLAUDE.md` | Đã sửa | Hiến pháp kỹ thuật & Bộ nhớ tự học (`SELF-EVOLVING MEMORY` từ mục #1 đến #27) luôn được giữ đồng bộ tuyệt đối. |
 | `HANDOFF.md` | Mới tạo | Tài liệu bàn giao kiến trúc, trạng thái phiên làm việc, các ràng buộc ngầm và checklist bước tiếp theo. |
 
 ---

@@ -1,20 +1,20 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from 'react';
-import { Order, OrderStatus } from '@/types/order';
-import { supabase, supabaseUrl, supabaseAnonKey } from '@/services/supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
+import { Order, OrderStatus } from '@/types/order';
 import {
-  sanitizeText,
-  validateOrderShippingUpdateSchema,
+    sanitizeText,
+    validateOrderShippingUpdateSchema,
 } from '@/utils/schemaValidator';
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from 'react';
 
 async function callOrdersGuardApi(body: Record<string, unknown>): Promise<{
   ok: boolean;
@@ -28,20 +28,29 @@ async function callOrdersGuardApi(body: Record<string, unknown>): Promise<{
     const token = session?.access_token;
     if (!token) return { ok: false };
 
-    const res = await fetch('/api/orders-guard', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) return { ok: false };
-    const data = await res.json();
-    if (data && data.success) {
-      return { ok: true, order: data.order as Order | undefined };
+    const controller =
+      typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 9000) : null;
+    try {
+      const res = await fetch('/api/orders-guard', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(body),
+        signal: controller?.signal,
+      });
+      if (timer) clearTimeout(timer);
+      if (!res.ok) return { ok: false };
+      const data = await res.json();
+      if (data && data.success) {
+        return { ok: true, order: data.order as Order | undefined };
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   } catch {
     // fallback to direct Supabase call
@@ -216,6 +225,27 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [fetchOrders]);
 
   const addOrder = useCallback(async (order: Order) => {
+    // Strip multi-KB/MB Base64 images from order items before sending over mobile network
+    // (the order UI & server only need lightweight URL or category fallback)
+    const compactOrder: Order = {
+      ...order,
+      items: (order.items || []).map((ci) => {
+        if (!ci?.product) return ci;
+        const rawImg = ci.product.image;
+        const safeLightImg =
+          typeof rawImg === 'string' && rawImg.startsWith('data:image/')
+            ? null
+            : rawImg;
+        return {
+          ...ci,
+          product: {
+            ...ci.product,
+            image: safeLightImg,
+          },
+        };
+      }),
+    };
+
     setOrders((prev) => {
       const next = [order, ...prev];
       saveCachedOrders(next, user?.id);
@@ -223,7 +253,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     });
 
     // 1. Primary: Server-side Order Guard API (recalculates authoritative prices & enforces Anti-IDOR)
-    const guardResult = await callOrdersGuardApi({ action: 'create', order });
+    const guardResult = await callOrdersGuardApi({ action: 'create', order: compactOrder });
     if (guardResult.ok && guardResult.order) {
       setOrders((prev) => {
         const next = prev.map((o) => (o.id === order.id ? guardResult.order! : o));
@@ -235,7 +265,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
     // 2. Fallback: Direct Supabase upsert (when running local Expo dev server without /api)
     try {
-      const { error } = await supabase.from('orders').upsert(order, { onConflict: 'id' });
+      const { error } = await supabase.from('orders').upsert(compactOrder, { onConflict: 'id' });
       if (error && supabaseUrl && supabaseAnonKey) {
         await fetch(`${supabaseUrl}/rest/v1/orders?on_conflict=id`, {
           method: 'POST',
@@ -245,7 +275,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             'Content-Type': 'application/json',
             Prefer: 'resolution=merge-duplicates,return=minimal',
           },
-          body: JSON.stringify(order),
+          body: JSON.stringify(compactOrder),
         });
       }
     } catch {
@@ -259,7 +289,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
               'Content-Type': 'application/json',
               Prefer: 'resolution=merge-duplicates,return=minimal',
             },
-            body: JSON.stringify(order),
+            body: JSON.stringify(compactOrder),
           });
         } catch {
           // ignore

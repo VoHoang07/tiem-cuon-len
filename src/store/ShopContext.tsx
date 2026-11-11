@@ -1,8 +1,8 @@
-import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
-import type { Product, CartItem, Review } from '@/types/product';
-import { ProductProvider, useProducts } from '@/store/ProductContext';
 import { CartProvider, useCart } from '@/store/CartContext';
 import { FavoritesProvider, useFavorites } from '@/store/FavoritesContext';
+import { ProductProvider, useProducts } from '@/store/ProductContext';
+import type { CartItem, Product, Review } from '@/types/product';
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 
 interface ShopContextType {
   products: Product[];
@@ -34,7 +34,8 @@ interface ShopContextType {
   cartCount: number;
   loadMore: () => Promise<void>;
   refetchCartFavorites: () => Promise<void>;
-}
+  ensureProductVariantsHydrated: (productId: string) => Promise<void>;
+  }
 
 const ShopContext = createContext<ShopContextType | null>(null);
 
@@ -51,7 +52,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 }
 
 function ShopBridge({ children }: { children: ReactNode }) {
-  const { products, shopReviews, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, addShopReview, removeShopReview, replyToShopReview, refetchProducts } = useProducts();
+  const { products, shopReviews, isLoading, hasMore, loadMore, addProduct, updateProduct, removeProduct, addReview, addShopReview, removeShopReview, replyToShopReview, refetchProducts, ensureProductVariantsHydrated } = useProducts();
   const { cart, cartHydrated, cartTotal, cartCount, addToCart, removeFromCart, updateCartQuantity, updateCartItemPackaging, clearCart, refetchCart } = useCart();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
@@ -86,8 +87,9 @@ function ShopBridge({ children }: { children: ReactNode }) {
       cartCount,
       loadMore,
       refetchCartFavorites,
-    }),
-    [
+      ensureProductVariantsHydrated,
+      }),
+      [
       products,
       shopReviews,
       cart,
@@ -113,7 +115,8 @@ function ShopBridge({ children }: { children: ReactNode }) {
       cartCount,
       loadMore,
       refetchCartFavorites,
-    ]
+      ensureProductVariantsHydrated,
+      ]
   );
 
   return (
