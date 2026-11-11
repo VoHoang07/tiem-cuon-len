@@ -698,10 +698,28 @@ function loadCachedProducts(): Product[] {
 
 function productsSignature(list: Product[]): string {
   return list
-    .map(
-      (p) =>
-        `${p.id}:${p.name}:${p.price}:${p.quantity}:${p.isMadeToOrder !== false ? 1 : 0}:${p.rating}:${p.reviews?.length || 0}:${p.colorOptions?.map((c) => `${c.id}_${c.name}_${c.price || ''}`).join(',') || 0}:${p.accessoryOptions?.length || 0}:${p.gallery?.length || 0}:${typeof p.image === 'string' ? p.image.length : 1}`
-    )
+    .map((p) => {
+      const imgHead =
+        typeof p.image === 'string' && p.image.length > 60
+          ? `${p.image.length}_${p.image.slice(30, 62)}`
+          : typeof p.image === 'string'
+          ? p.image.length
+          : 1;
+      const coSig =
+        p.colorOptions
+          ?.map(
+            (c) =>
+              `${c.id}_${c.name}_${c.price || ''}_${
+                typeof c.image === 'string' ? c.image.length : c.image ? 1 : 0
+              }`
+          )
+          .join(',') || 0;
+      return `${p.id}:${p.name}:${p.price}:${p.quantity}:${
+        p.isMadeToOrder !== false ? 1 : 0
+      }:${p.rating}:${p.reviews?.length || 0}:${coSig}:${
+        p.accessoryOptions?.length || 0
+      }:${p.gallery?.length || 0}:${imgHead}`;
+    })
     .join('|');
 }
 
@@ -1502,8 +1520,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               const hasColorImages =
                 Array.isArray(item.colorOptions) &&
                 item.colorOptions.some((c) => Boolean(c?.image));
+              // Load cached images into memory for instant 0ms first render, but set coverChecked: false
+              // so Pass 1 always verifies/updates any newly edited Cover Collage from Supabase!
               cacheProductMediaInMemory(item, {
-                coverChecked: Boolean(item.image),
+                coverChecked: false,
                 tagsChecked: hasColorImages,
               });
               // Rescue any custom user_ product from cached_all_products into customAdminProductsMemory
@@ -1534,7 +1554,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                 item.colorOptions.some((c) => Boolean(c?.image));
               customAdminProductsMemory.set(item.id, item);
               cacheProductMediaInMemory(item, {
-                coverChecked: Boolean(item.image),
+                coverChecked: false,
                 tagsChecked: hasColorImages,
               });
             }
@@ -1595,15 +1615,16 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         .sort((a, b) => (b.rating >= 4.8 ? 1 : 0) - (a.rating >= 4.8 ? 1 : 0));
 
       // PASS 1: Fast Cover Photo Hydration (`select=id,image` ONLY, skipping multi-MB `tags` variant galleries)
+      // Always check `!cached.coverChecked` so any updated Studio Cover Collage on Supabase overrides stale IndexedDB single-photo covers!
       const missingCoverIds = activeRows
         .filter((r) => {
           const cached = hydratedMediaMemory.get(r.id);
-          return !cached || (!cached.image && !cached.coverChecked);
+          return !cached || !cached.coverChecked;
         })
         .map((r) => r.id);
 
       if (missingCoverIds.length > 0) {
-        const COVER_CHUNK = 3;
+        const COVER_CHUNK = 2;
         const coverChunks: string[][] = [];
         for (let i = 0; i < missingCoverIds.length; i += COVER_CHUNK) {
           coverChunks.push(missingCoverIds.slice(i, i + COVER_CHUNK));
@@ -1612,12 +1633,45 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         // Run 2 concurrent workers for fast cover image loading on mobile
         let cursor = 0;
         let coverUpdated = false;
+        const applyFetchedCoverRow = (mr: {
+          id: string;
+          image?: Product['image'];
+        }) => {
+          const target = baseRows.find((b) => b.id === mr.id);
+          if (!target) return;
+          const adminEdit = customAdminProductsMemory.get(mr.id);
+          if (adminEdit) {
+            Object.assign(target, adminEdit);
+            // Authoritative remote `mr.image` from `products` table ALWAYS wins over stale local cache
+            // unless `adminEdit` was explicitly synced via `ADMIN_SYNC`
+            if (
+              mr.image &&
+              (adminEdit as Product & { __rescueWard?: string }).__rescueWard !==
+                'ADMIN_SYNC'
+            ) {
+              target.image = mr.image;
+              customAdminProductsMemory.set(mr.id, {
+                ...adminEdit,
+                image: mr.image,
+              });
+            } else if (!target.image && mr.image) {
+              target.image = mr.image;
+            }
+          } else if (mr.image) {
+            target.image = mr.image;
+          }
+          const hydrated = hydrateDbProduct(target);
+          cacheProductMediaInMemory(hydrated, { coverChecked: true });
+          coverUpdated = true;
+        };
+
         const runCoverWorker = async () => {
           while (cursor < coverChunks.length) {
             const chunkIdx = cursor++;
             const chunk = coverChunks[chunkIdx];
             if (!chunk || chunk.length === 0) continue;
             const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
+            let chunkSucceeded = false;
             try {
               const res = await fetch(
                 `${supabaseUrl}/rest/v1/products?select=id,image&id=in.(${inFilter})`,
@@ -1634,35 +1688,55 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                   image?: Product['image'];
                 }>;
                 if (Array.isArray(rows) && rows.length > 0) {
+                  chunkSucceeded = true;
                   for (const mr of rows) {
-                    const target = baseRows.find((b) => b.id === mr.id);
-                    if (target) {
-                      const adminEdit = customAdminProductsMemory.get(mr.id);
-                      if (adminEdit) {
-                        Object.assign(target, adminEdit);
-                        if (!target.image && mr.image) target.image = mr.image;
-                      } else if (mr.image) {
-                        target.image = mr.image;
-                      }
-                      const hydrated = hydrateDbProduct(target);
-                      cacheProductMediaInMemory(hydrated, { coverChecked: true });
-                      coverUpdated = true;
-                    }
+                    applyFetchedCoverRow(mr);
                   }
-                  // Render above-the-fold cover photos immediately on first chunk, then batch the rest
-                  if (chunkIdx <= 1) {
+                  if (chunkIdx <= 2) {
                     setProducts(mergeWithMockProducts(baseRows));
                   }
                 }
               }
             } catch {
-              // continue next chunk
+              // fallback to single-ID below
+            }
+
+            // If a 2-ID cover chunk timed out on Supabase TOAST, retry each ID individually
+            if (!chunkSucceeded) {
+              for (const singleCoverId of chunk) {
+                try {
+                  const sRes = await fetch(
+                    `${supabaseUrl}/rest/v1/products?select=id,image&id=eq.${encodeURIComponent(
+                      singleCoverId
+                    )}`,
+                    {
+                      headers: {
+                        apikey: supabaseAnonKey,
+                        Authorization: `Bearer ${supabaseAnonKey}`,
+                      },
+                    }
+                  );
+                  if (sRes.ok) {
+                    const sRows = (await sRes.json()) as Array<{
+                      id: string;
+                      image?: Product['image'];
+                    }>;
+                    if (Array.isArray(sRows) && sRows[0]) {
+                      applyFetchedCoverRow(sRows[0]);
+                    }
+                  }
+                } catch {
+                  // ignore
+                }
+              }
             }
           }
         };
         await Promise.all([runCoverWorker(), runCoverWorker()]);
         if (coverUpdated) {
-          setProducts(mergeWithMockProducts(baseRows));
+          const mergedAfterCovers = mergeWithMockProducts(baseRows);
+          setProducts(mergedAfterCovers);
+          saveCachedProducts(mergedAfterCovers);
         }
         }
 
@@ -1721,15 +1795,21 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           if (fetchedTags !== null) {
             const target = baseRows.find((b) => b.id === singleId);
             if (target) {
+              const currentCoverImage = target.image;
               const adminEdit = customAdminProductsMemory.get(singleId);
               if (
                 adminEdit &&
+                (adminEdit as Product & { __rescueWard?: string }).__rescueWard ===
+                  'ADMIN_SYNC' &&
                 Array.isArray(adminEdit.colorOptions) &&
                 adminEdit.colorOptions.length > 1
               ) {
                 Object.assign(target, adminEdit);
               } else {
                 target.tags = fetchedTags;
+              }
+              if (currentCoverImage) {
+                target.image = currentCoverImage;
               }
               const hydrated = hydrateDbProduct(target);
               cacheProductMediaInMemory(hydrated, {

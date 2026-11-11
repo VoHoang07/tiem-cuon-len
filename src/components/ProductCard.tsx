@@ -143,8 +143,10 @@ export const ProductCard = memo(function ProductCard({
 
   const imageHeight =
     variant === 'carousel'
-      ? Math.round(cardWidth * 0.9)
-      : Math.min(Math.round(cardWidth * 0.94), 232);
+      ? Math.round(cardWidth * 0.96)
+      : !isDesktop
+      ? cardWidth
+      : Math.min(cardWidth, 252);
 
   const handlePressIn = () => {
     if (Platform.OS === 'web') return;
