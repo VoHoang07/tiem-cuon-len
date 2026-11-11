@@ -304,6 +304,33 @@ function hydrateDbProduct(raw: Product): Product {
 }
 
 const RETIRED_PRODUCT_IDS = new Set([
+  'user_bunny_keychain_01',
+  'cherry-1',
+  'icecream-2',
+  'keychain-capybara-4',
+  'yarn-milk-cotton-1',
+  'yarn-velvet-chunky-2',
+  'yarn-rainbow-cake-3',
+  'sunflower-3',
+  'bouquet-4',
+  'crochet-lily-valley-5',
+  'bearbag-7',
+  'bag-daisy-tote-2',
+  'bag-ribbon-coquette-4',
+  'dino-5',
+  'doll-teddy-sweater-2',
+  'doll-cat-fish-4',
+  'mirror-6',
+  'acc-daisy-headband-2',
+  'acc-flower-coaster-3',
+  'vw_flower_peony_04',
+  'vw_acc_butterfly_05',
+  'vw_acc_bracelet_06',
+  'vw_stem_pastel_07',
+  'vw_stem_glitter_08',
+  'user_1793974873680',
+  'user_1793703456472',
+  'user_1794282259897',
   'keychain-duck-5',
   'yarn-mohair-4',
   'yarn-macrame-5',
@@ -655,7 +682,7 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
   const merged: Product[] = [...customAdminProducts];
 
   for (const mp of MOCK_PRODUCTS) {
-    if (deletedIds.has(mp.id)) continue;
+    if (deletedIds.has(mp.id) || RETIRED_PRODUCT_IDS.has(mp.id)) continue;
     const remoteReviews = remoteReviewsByMockId.get(mp.id);
     const remoteOverrides = remoteOverridesByMockId.get(mp.id);
     if (remoteOverrides || (remoteReviews && remoteReviews.length > 0)) {
@@ -1867,8 +1894,6 @@ export function ProductProvider({ children }: { children: ReactNode }) {
             if (timer) clearTimeout(timer);
             if (Array.isArray(data)) {
               setHasMore(data.length === PAGE_SIZE);
-              // Kick off Stage 2 progressive media hydration in small 2-item chunks without blocking catalog display
-              void hydrateMissingProductMedia(data);
               return data;
             }
           }
@@ -1893,13 +1918,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
         const rows = (data as Product[]) || [];
         setHasMore(rows.length === PAGE_SIZE);
-        void hydrateMissingProductMedia(rows);
         return rows;
       } catch {
         return null;
       }
     },
-    [hydrateMissingProductMedia]
+    []
   );
 
   useEffect(() => {
@@ -1919,10 +1943,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       try {
-        const [data, remoteDeletedList, remoteRescuedList] = await Promise.all([
+        // 1. FAST PATH (< 0.4s): Fetch lightweight product metadata + deleted IDs FIRST and render immediately!
+        // Never block initial product catalog display on multi-MB `fetchRemoteRescuedProducts()`!
+        const [data, remoteDeletedList] = await Promise.all([
           fetchProducts(0),
           fetchRemoteDeletedIds(),
-          fetchRemoteRescuedProducts(),
         ]);
         if (cancelled) return;
 
@@ -1947,12 +1972,32 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           syncDeletedIdsToSupabase(currentDeleted).catch(() => {});
         }
 
-        const remoteDataIds = new Set((data || []).map((r) => r.id));
+        if (data && data.length > 0) {
+          const fastMerged = mergeWithMockProducts(data);
+          setProducts((prev) => {
+            if (productsSignature(fastMerged) === productsSignature(prev)) {
+              return prev;
+            }
+            saveCachedProducts(fastMerged);
+            return fastMerged;
+          });
+          setLoaded(true);
+          // Start hydrating cover photos & variants now that `remoteDeletedList` is already in `deletedIdsMemory`!
+          void hydrateMissingProductMedia(data);
+        } else if (remoteDeletedList.length > 0) {
+          setProducts((prev) =>
+            prev.filter(
+              (p) => !currentDeleted.has(p.id) && !RETIRED_PRODUCT_IDS.has(p.id)
+            )
+          );
+          setLoaded(true);
+        }
 
-        // Merge any products rescued via cross-device bridge:
-        // - If `rp.__rescueWard === 'ADMIN_SYNC'`, it was explicitly saved by Admin and is authoritative.
-        // - Otherwise, only use `rp` if the product is missing from `data` (`!remoteDataIds.has(rp.id)`),
-        //   preventing old customer rescue snapshots from overwriting Admin's updated prices in `products`.
+        // 2. BACKGROUND PATH: Check cross-device rescue bridge without blocking customer's initial render
+        const remoteRescuedList = await fetchRemoteRescuedProducts();
+        if (cancelled) return;
+
+        const remoteDataIds = new Set((data || []).map((r) => r.id));
         const authoritativeAdminSyncMap = new Map<string, Product>();
         const fallbackMissingRescued: Product[] = [];
         if (remoteRescuedList.length > 0) {
@@ -2042,10 +2087,6 @@ export function ProductProvider({ children }: { children: ReactNode }) {
             saveCachedProducts(merged);
             return merged;
           });
-        } else if (remoteDeletedList.length > 0) {
-          setProducts((prev) =>
-            prev.filter((p) => !currentDeleted.has(p.id))
-          );
         }
         setLoaded(true);
       } catch {
@@ -2088,17 +2129,18 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
-    };
-  }, [fetchProducts, role]);
+      };
+      }, [fetchProducts, hydrateMissingProductMedia, role]);
 
-  const loadMore = useCallback(async () => {
-    const nextPage = page + 1;
-    const data = await fetchProducts(nextPage);
-    if (data && data.length > 0) {
+      const loadMore = useCallback(async () => {
+      const nextPage = page + 1;
+      const data = await fetchProducts(nextPage);
+      if (data && data.length > 0) {
       setProducts((prev) => mergeWithMockProducts([...prev, ...data]));
       setPage(nextPage);
-    }
-  }, [page, fetchProducts]);
+      void hydrateMissingProductMedia(data);
+      }
+      }, [page, fetchProducts, hydrateMissingProductMedia]);
 
   const ensureProductVariantsHydrated = useCallback(
     async (rawProductId: string) => {
