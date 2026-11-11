@@ -33,15 +33,15 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
   }
 
   const authUser = await verifySupabaseUser(req);
-  if (!authUser) {
-    return res.status(401).json({
-      success: false,
-      error: 'Unauthorized: Vui lòng đăng nhập lại.',
-    });
-  }
 
   // ─── GET ORDER BY ID (WITH ANTI-IDOR OWNERSHIP CHECK) ───────────────────────
   if (req.method === 'GET') {
+    if (!authUser) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: Vui lòng đăng nhập lại.',
+      });
+    }
     const orderId = sanitizeTextServer((req.query && req.query.orderId) || '', 80);
     if (!orderId) {
       return res.status(400).json({ success: false, error: 'Thiếu mã đơn hàng (orderId).' });
@@ -95,6 +95,13 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
 
   const action = sanitizeTextServer(rawBody.action || 'create', 30);
 
+  if (!authUser && action !== 'notify_email') {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Vui lòng đăng nhập lại.',
+    });
+  }
+
   // ─── 1. CREATE ORDER (SERVER-SIDE PRICE CALCULATION & ANTI-MASS-ASSIGNMENT) ───
   if (action === 'create') {
     const cleanOrder = stripUnknownFieldsServer(rawBody.order, [
@@ -143,6 +150,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         'selectedAccessoryId',
         'selectedAccessoryName',
         'selectedAccessoryEmoji',
+        'giftCardNote',
       ]);
 
       const baseId = String(rawProd.baseProductId || rawProd.id || '').split('__')[0];
@@ -229,35 +237,41 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
           selectedAccessoryName: isGiftBoxOption
             ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
             : 'Tự dùng / Tiêu chuẩn',
-        },
-        quantity: qty,
-        price: serverUnitPrice,
-      });
-    }
+          giftCardNote:
+            isGiftBoxOption && rawProd.giftCardNote
+              ? sanitizeTextServer(rawProd.giftCardNote, 300)
+              : undefined,
+          },
+          quantity: qty,
+          price: serverUnitPrice,
+          });
+          }
 
-    if (sanitizedItems.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Đơn hàng phải có ít nhất 1 sản phẩm hợp lệ.',
-      });
-    }
+          if (sanitizedItems.length === 0) {
+          return res.status(400).json({
+          success: false,
+          error: 'Đơn hàng phải có ít nhất 1 sản phẩm hợp lệ.',
+          });
+          }
 
-    // Sanitize shipping address & compute authoritative shipping fee using server config
-    const rawAddr = stripUnknownFieldsServer(cleanOrder.shippingAddress, [
-      'id',
-      'fullName',
-      'phone',
-      'email',
-      'city',
-      'district',
-      'ward',
-      'detailAddress',
-      'shippingMethod',
-      'shippingFee',
-      'note',
-      'promoCode',
-      'discountAmount',
-      ]);
+          // Sanitize shipping address & compute authoritative shipping fee using server config
+          const rawAddr = stripUnknownFieldsServer(cleanOrder.shippingAddress, [
+          'id',
+          'fullName',
+          'phone',
+          'email',
+          'city',
+          'district',
+          'ward',
+          'detailAddress',
+          'shippingMethod',
+          'shippingFee',
+          'note',
+          'promoCode',
+          'discountAmount',
+          'customerAuthProvider',
+          'isVerifiedAccount',
+          ]);
 
     const city = sanitizeTextServer(rawAddr.city, 80);
     const cleanPhone = sanitizeTextServer(rawAddr.phone, 20)
@@ -284,12 +298,17 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       shippingLower.includes('hỏa tốc');
     const isHcm =
       city.toLowerCase().includes('hồ chí minh') ||
+      city.toLowerCase().includes('ho chi minh') ||
       city.toLowerCase().includes('hcm') ||
       city.toLowerCase().includes('sài gòn');
 
     let authoritativeShippingFee = 0;
     if (!isPickupOrExpress) {
-      if (authoritativeSubtotal >= shippingCfg.freeshipThreshold) {
+      if (
+        shippingCfg.freeshipEnabled !== false &&
+        shippingCfg.freeshipThreshold > 0 &&
+        authoritativeSubtotal >= shippingCfg.freeshipThreshold
+      ) {
         authoritativeShippingFee = 0;
       } else {
         authoritativeShippingFee = isHcm ? shippingCfg.hcmFee : shippingCfg.provincialFee;
@@ -407,7 +426,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       {
         headers: {
           apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+          Authorization: `Bearer ${(authUser && authUser.accessToken) || SUPABASE_KEY}`,
         },
       }
     );
@@ -417,8 +436,15 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       return res.status(404).json({ success: false, error: 'Không tìm thấy đơn hàng.' });
     }
 
-    if (!authUser.isAdmin && String(existingOrder.userId) !== authUser.id) {
+    if (authUser && !authUser.isAdmin && String(existingOrder.userId) !== authUser.id) {
       return res.status(403).json({ success: false, error: 'Forbidden (Anti-IDOR).' });
+    }
+    if (!authUser && existingOrder.status === 'pending_payment') {
+      return res.status(200).json({
+        success: true,
+        sent: false,
+        reason: 'Order still awaiting payment',
+      });
     }
 
     // Persistent Idempotency Check: never send duplicate email if already notified
@@ -443,7 +469,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         method: 'PATCH',
         headers: {
           apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+          Authorization: `Bearer ${(authUser && authUser.accessToken) || SUPABASE_KEY}`,
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
         },
@@ -501,8 +527,12 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         isOwner &&
         nextStatus === 'Đã hủy' &&
         (existingOrder.status === 'pending_payment' || existingOrder.status === 'Đang xử lý');
+      const isCustomerCompleteAllowed =
+        isOwner &&
+        nextStatus === 'Hoàn thành' &&
+        existingOrder.status === 'Đang giao';
 
-      if (!isCustomerCancelAllowed) {
+      if (!isCustomerCancelAllowed && !isCustomerCompleteAllowed) {
         await logServerAuditEvent(req, {
           eventType: 'ADMIN_SECURITY_ACTION',
           severity: 'WARNING',
@@ -574,8 +604,9 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         '';
 
       if (
-        (nextStatus === 'Đang giao' && existingOrder.status !== 'Đang giao') ||
-        (newTracking && newTracking !== prevTracking)
+        authUser.isAdmin &&
+        ((nextStatus === 'Đang giao' && existingOrder.status !== 'Đang giao') ||
+          (newTracking && newTracking !== prevTracking))
       ) {
         await sendCustomerOrderLifecycleEmailServer(mergedOrder, 'shipped');
       } else if (
@@ -584,7 +615,15 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       ) {
         await sendCustomerOrderLifecycleEmailServer(mergedOrder, 'completed');
       }
-    }
+      } else if (
+      nextStatus === 'Hoàn thành' &&
+      existingOrder.status !== 'Hoàn thành'
+      ) {
+      await sendCustomerOrderLifecycleEmailServer(
+        { ...existingOrder, status: nextStatus },
+        'completed'
+      );
+      }
 
     return res.status(200).json({
       success: true,

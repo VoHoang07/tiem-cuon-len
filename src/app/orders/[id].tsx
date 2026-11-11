@@ -1,7 +1,7 @@
 import {
-    getOrderStatusColor,
-    getOrderStatusLabel,
-    ORDER_STATUS_NEXT,
+  getOrderStatusColor,
+  getOrderStatusLabel,
+  ORDER_STATUS_NEXT,
 } from '@/constants/orderStatus';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
@@ -11,42 +11,42 @@ import type { OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
 import { saveVoucherToWallet } from '@/utils/promoEngine';
 import {
-    ADMIN_BOOKING_PORTALS,
-    exportOrdersToGoshipCsv,
-    formatShippingSlipForClipboard,
-    getCarrierTrackingUrl,
-    getCodCollectAmount,
-    getFullAddressString,
-    SHIPPING_CARRIERS,
+  ADMIN_BOOKING_PORTALS,
+  exportOrdersToGoshipCsv,
+  formatShippingSlipForClipboard,
+  getCarrierTrackingUrl,
+  getCodCollectAmount,
+  getFullAddressString,
+  SHIPPING_CARRIERS,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-    Check,
-    CheckCircle2,
-    ChevronLeft,
-    Clock,
-    Copy,
-    ExternalLink,
-    MapPin,
-    Package,
-    Phone,
-    QrCode,
-    Star,
-    Truck,
-    User as UserIcon,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  Clock,
+  Copy,
+  ExternalLink,
+  MapPin,
+  Package,
+  Phone,
+  QrCode,
+  Star,
+  Truck,
+  User as UserIcon,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    Image,
-    Linking,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -86,7 +86,7 @@ export default function OrderDetailScreen() {
   const router = useRouter();
   const { orders, updateOrderStatus, updateOrderShipping } = useOrders();
   const { user, role } = useAuth();
-  const { addReview, addShopReview } = useShop();
+  const { products, addReview, addShopReview } = useShop();
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
 
@@ -697,7 +697,12 @@ export default function OrderDetailScreen() {
               Sản phẩm trong đơn ({order.items.reduce((s, i) => s + i.quantity, 0)} món)
             </Text>
             {order.items.map((item) => {
-              const baseId = String(item.product.id || '').split('__')[0];
+              const baseId = String(
+                item.product.baseProductId || item.product.id || ''
+              ).split('__')[0];
+              const liveCatalogProd = products.find((p) => p.id === baseId);
+              const resolvedThumb =
+                item.product.image || liveCatalogProd?.image || null;
               const isReviewOpen = activeReviewItemId === item.product.id;
               const isItemReviewed = Boolean(reviewedItemIds[item.product.id]);
 
@@ -707,12 +712,12 @@ export default function OrderDetailScreen() {
                     <TouchableOpacity
                       style={styles.itemIcon}
                       onPress={() => router.push(`/product/${baseId}`)}>
-                      {item.product.image ? (
+                      {resolvedThumb ? (
                         <Image
                           source={
-                            typeof item.product.image === 'string'
-                              ? { uri: item.product.image }
-                              : (item.product.image as any)
+                            typeof resolvedThumb === 'string'
+                              ? { uri: resolvedThumb }
+                              : (resolvedThumb as any)
                           }
                           style={styles.itemProductImage}
                           resizeMode="cover"

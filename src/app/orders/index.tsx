@@ -1,7 +1,7 @@
 import {
-    getOrderStatusColor,
-    getOrderStatusLabel,
-    ORDER_STATUS_NEXT,
+  getOrderStatusColor,
+  getOrderStatusLabel,
+  ORDER_STATUS_NEXT,
 } from '@/constants/orderStatus';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
@@ -9,37 +9,37 @@ import { useOrders } from '@/store/OrderContext';
 import type { Order, OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
 import {
-    exportOrdersToGoshipCsv,
-    formatShippingSlipForClipboard,
-    getCarrierTrackingUrl,
-    getCodCollectAmount,
+  exportOrdersToGoshipCsv,
+  formatShippingSlipForClipboard,
+  getCarrierTrackingUrl,
+  getCodCollectAmount,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import {
-    ArrowRightCircle,
-    Check,
-    ChevronLeft,
-    ChevronRight,
-    Copy,
-    Home,
-    QrCode,
-    ShoppingBag,
-    Trash2,
-    Truck,
+  ArrowRightCircle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Home,
+  QrCode,
+  ShoppingBag,
+  Trash2,
+  Truck,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    Linking,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  Alert,
+  FlatList,
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -85,32 +85,20 @@ export default function OrdersScreen() {
     setRefreshing(false);
   }, [refetchOrders]);
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const handleDelete = (order: Order) => {
-    if (typeof window !== 'undefined' && window.confirm) {
-      const confirmed = window.confirm('Bạn có chắc muốn xoá đơn hàng này không?');
-      if (!confirmed) return;
+    if (confirmDeleteId === order.id) {
+      setConfirmDeleteId(null);
       deleteOrder(order.id).catch((err) => {
         if (__DEV__) console.error('[DELETE FAILED]', err);
         Alert.alert('Lỗi', 'Không thể xoá đơn hàng. Vui lòng thử lại.');
       });
     } else {
-      Alert.alert(
-        'Xoá đơn hàng',
-        'Bạn có chắc muốn xoá đơn hàng này không?',
-        [
-          { text: 'Hủy', style: 'cancel' },
-          {
-            text: 'Xoá',
-            style: 'destructive',
-            onPress: () => {
-              deleteOrder(order.id).catch((err) => {
-                if (__DEV__) console.error('[DELETE FAILED]', err);
-                Alert.alert('Lỗi', 'Không thể xoá đơn hàng. Vui lòng thử lại.');
-              });
-            },
-          },
-        ],
-      );
+      setConfirmDeleteId(order.id);
+      setTimeout(() => {
+        setConfirmDeleteId((prev) => (prev === order.id ? null : prev));
+      }, 4000);
     }
   };
 
@@ -312,11 +300,20 @@ export default function OrdersScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.deleteBtn}
+              style={[
+                styles.deleteBtn,
+                confirmDeleteId === item.id && {
+                  backgroundColor: '#FEE2E2',
+                  borderColor: '#EF4444',
+                  borderWidth: 1,
+                },
+              ]}
               onPress={() => handleDelete(item)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Trash2 size={15} color={COLORS.error} />
-              <Text style={styles.deleteBtnText}>Xoá</Text>
+              <Text style={styles.deleteBtnText}>
+                {confirmDeleteId === item.id ? 'Bấm lần nữa để xoá' : 'Xoá'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

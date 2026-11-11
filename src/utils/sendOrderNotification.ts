@@ -49,17 +49,25 @@ export async function sendOrderNotification(data: OrderNotificationData): Promis
   markEmailSent(data.orderId);
 
   try {
-    if (typeof window === 'undefined' || !supabase) return;
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData?.session?.access_token;
-    if (!accessToken) return;
+    if (typeof window === 'undefined') return;
+    let accessToken = '';
+    if (supabase) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      accessToken = sessionData?.session?.access_token || '';
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    };
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
 
     await fetch('/api/orders-guard', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      credentials: 'same-origin',
+      headers,
       body: JSON.stringify({
         action: 'notify_email',
         orderId: data.orderId,

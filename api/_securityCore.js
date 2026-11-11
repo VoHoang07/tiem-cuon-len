@@ -643,6 +643,7 @@ async function resolveAuthoritativeShippingConfig() {
   const defaults = {
     hcmFee: 15000,
     provincialFee: 15000,
+    freeshipEnabled: true,
     freeshipThreshold: 299000,
   };
   try {
@@ -673,6 +674,10 @@ async function resolveAuthoritativeShippingConfig() {
               typeof parsed.provincialFee === 'number' && parsed.provincialFee >= 0
                 ? parsed.provincialFee
                 : defaults.provincialFee,
+            freeshipEnabled:
+              typeof parsed.freeshipEnabled === 'boolean'
+                ? parsed.freeshipEnabled
+                : defaults.freeshipEnabled,
             freeshipThreshold:
               typeof parsed.freeshipThreshold === 'number' && parsed.freeshipThreshold >= 0
                 ? parsed.freeshipThreshold

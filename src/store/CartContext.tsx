@@ -178,9 +178,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
           const compactItems = items.map((ci) => {
             if (!ci?.product) return ci;
             const { colorOptions, accessoryOptions, gallery, reviews, ...restProd } = ci.product;
+            const safeLightImage =
+              typeof restProd.image === 'string' &&
+              restProd.image.startsWith('data:image/')
+                ? undefined
+                : restProd.image;
             return {
               ...ci,
-              product: restProd,
+              product: {
+                ...restProd,
+                image: safeLightImage,
+              },
             };
           });
           window.localStorage.setItem(`cart_${cartOwnerId}`, JSON.stringify(compactItems));

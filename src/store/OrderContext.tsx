@@ -92,7 +92,27 @@ function saveCachedOrders(items: Order[], userId?: string) {
   if (typeof window === 'undefined' || !window.localStorage) return;
   setTimeout(() => {
     try {
-      window.localStorage.setItem(getOrdersCacheKey(userId), JSON.stringify(items));
+      const compactItems = items.slice(0, 50).map((o) => ({
+        ...o,
+        items: (o.items || []).map((ci) => {
+          if (!ci?.product) return ci;
+          const rawImg = ci.product.image;
+          return {
+            ...ci,
+            product: {
+              ...ci.product,
+              image:
+                typeof rawImg === 'string' && rawImg.startsWith('data:image/')
+                  ? null
+                  : rawImg,
+            },
+          };
+        }),
+      }));
+      window.localStorage.setItem(
+        getOrdersCacheKey(userId),
+        JSON.stringify(compactItems)
+      );
     } catch {
       // ignore
     }
@@ -263,7 +283,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // 2. Fallback: Direct Supabase upsert (when running local Expo dev server without /api)
+    // 2. Fallback: Direct Supabase upsert (when running local Expo dev server or when user logged in via OAuth fallback)
     try {
       const { error } = await supabase.from('orders').upsert(compactOrder, { onConflict: 'id' });
       if (error && supabaseUrl && supabaseAnonKey) {
@@ -296,9 +316,30 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [user?.id]);
+    const isCodOrder =
+      String(compactOrder.paymentMethod || '')
+        .toLowerCase()
+        .includes('cod') ||
+      String(compactOrder.paymentMethod || '')
+        .toLowerCase()
+        .includes('khi nhận hàng');
+    if (isCodOrder) {
+      fetch('/api/orders-guard', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+          action: 'notify_email',
+          orderId: compactOrder.id,
+        }),
+      }).catch(() => {});
+    }
+    }, [user?.id]);
 
-  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
+    const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
     const validated = validateOrderShippingUpdateSchema({ orderId, status });
     if (!validated.success || !validated.data) return;
 
@@ -307,7 +348,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       saveCachedOrders(next, user?.id);
       return next;
     });
-    if (role !== 'admin') return;
+    const isCustomerAllowedTransition =
+      status === 'Hoàn thành' || status === 'Đã hủy';
+    if (role !== 'admin' && !isCustomerAllowedTransition) return;
 
     const guardResult = await callOrdersGuardApi({
       action: 'update_status',
@@ -333,7 +376,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     } catch {
       // keep local update
     }
-  }, [user?.id, role]);
+    }, [user?.id, role]);
 
   const updateOrderShipping = useCallback(
     async (

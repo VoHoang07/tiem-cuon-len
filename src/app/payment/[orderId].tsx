@@ -282,13 +282,45 @@ export default function PaymentScreen() {
   const { user, role } = useAuth();
   const { clearCart } = useShop();
   const isAdmin = role === 'admin';
+  const [fetchedRemoteOrder, setFetchedRemoteOrder] = useState<any>(null);
+  const [loadingRemoteOrder, setLoadingRemoteOrder] = useState<boolean>(false);
 
-  const rawOrder = orders.find((o) => o.id === paramOrderId);
+  const rawOrder = orders.find((o) => o.id === paramOrderId) || fetchedRemoteOrder;
   // Anti-IDOR ownership verification: only the order owner or Admin can access the payment page
   const order =
     rawOrder && (isAdmin || (user && rawOrder.userId === user.id))
       ? rawOrder
       : undefined;
+
+  useEffect(() => {
+    if (rawOrder || !paramOrderId || !supabaseUrl || !supabaseAnonKey) return;
+    let mounted = true;
+    setLoadingRemoteOrder(true);
+    fetch(
+      `${supabaseUrl}/rest/v1/orders?id=eq.${encodeURIComponent(
+        String(paramOrderId)
+      )}&select=id,userId,items,total,status,paymentMethod,shippingAddress,createdAt&limit=1`,
+      {
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+      }
+    )
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => {
+        if (mounted && Array.isArray(rows) && rows[0]) {
+          setFetchedRemoteOrder(rows[0]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setLoadingRemoteOrder(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [rawOrder, paramOrderId]);
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -652,12 +684,21 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.notFoundText}>Không tìm thấy đơn hàng</Text>
-          <TouchableOpacity
-            style={styles.backBtnLarge}
-            onPress={() => router.replace('/orders')}>
-            <Text style={styles.backBtnLargeText}>Xem đơn hàng</Text>
-          </TouchableOpacity>
+          {loadingRemoteOrder ? (
+            <>
+              <ActivityIndicator size="large" color="#3D2B1F" />
+              <Text style={styles.notFoundText}>Đang tải thông tin mã QR thanh toán...</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.notFoundText}>Không tìm thấy đơn hàng</Text>
+              <TouchableOpacity
+                style={styles.backBtnLarge}
+                onPress={() => router.replace('/orders')}>
+                <Text style={styles.backBtnLargeText}>Xem đơn hàng</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -794,11 +835,24 @@ export default function PaymentScreen() {
           {/* 1. QR Code */}
           {sepayQrImageUrl ? (
             <View style={styles.qrBox}>
-              <Image
-                source={{ uri: sepayQrImageUrl }}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
+              {Platform.OS === 'web' ? (
+                React.createElement('img', {
+                  src: sepayQrImageUrl,
+                  alt: `VietQR ${transferContent}`,
+                  style: {
+                    width: 225,
+                    height: 274,
+                    objectFit: 'contain',
+                    display: 'block',
+                  },
+                })
+              ) : (
+                <Image
+                  source={{ uri: sepayQrImageUrl }}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+              )}
             </View>
           ) : null}
 
