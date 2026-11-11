@@ -98,8 +98,9 @@ flowchart TD
 | `src/app/help.tsx` | Đã sửa | Trung tâm trợ giúp & chính sách bảo hành: Cập nhật cam kết chất liệu `Len Nhung Gấu, Len Nhung Đũa & Kẽm nhung loại 1`. |
 | `src/components/BoutiqueFooter.tsx` | Đã sửa | Footer toàn trang: Hiển thị cam kết Bảo hành & Đổi trả miễn phí 7 ngày (đổi mới/hoàn tiền 100% nếu bung mối len hoặc gãy móp do vận chuyển). |
 | `src/app/product/[id].tsx` | Đã sửa | Trang chi tiết sản phẩm: Hiển thị khung chọn phân loại, khung ghép đôi `ComboStudioLiveView`, chọn bao bì (`Tự dùng` vs `Set Quà Tặng Đặc Biệt +25k`), và hộp cam kết bảo hành 7 ngày. |
+| `src/app/cart.tsx` | Đã sửa | Trang giỏ hàng: Sửa lỗi hiển thị `Phí vận chuyển: 0₫` và `Tổng cộng: 0₫` do truy cập nhầm thuộc tính `shippingConfig` cũ (`freeShippingEnabled` / `standardShippingFee` = `undefined` gây `NaN`), đồng bộ sang chuẩn `shippingConfig.freeshipEnabled`, `shippingConfig.freeshipThreshold` và `shippingConfig.hcmFee`. |
 | `src/app/checkout.tsx` | Đã sửa | Trang thanh toán: Đồng bộ giá biến thể + phụ phí hộp quà + xem trước thiệp Vintage Airmail + huy hiệu tài khoản xác thực + cam kết đổi trả 100%. |
-| `AGENTS.md` & `CLAUDE.md` | Đã sửa | Hiến pháp kỹ thuật & Bộ nhớ tự học (`SELF-EVOLVING MEMORY` từ mục #1 đến #24) luôn được giữ đồng bộ tuyệt đối. |
+| `AGENTS.md` & `CLAUDE.md` | Đã sửa | Hiến pháp kỹ thuật & Bộ nhớ tự học (`SELF-EVOLVING MEMORY` từ mục #1 đến #25) luôn được giữ đồng bộ tuyệt đối. |
 | `HANDOFF.md` | Mới tạo | Tài liệu bàn giao kiến trúc, trạng thái phiên làm việc, các ràng buộc ngầm và checklist bước tiếp theo. |
 
 ---
@@ -122,6 +123,8 @@ flowchart TD
    - Các ảnh tĩnh đóng gói qua `require('@/assets/images/...')` trả về object `{ uri: '/assets/...', width, height }`. Khi truyền vào thẻ `React.createElement('img', { src })` trên Web bắt buộc phải đi qua hàm `resolveImageUri(src)` nếu không sẽ bị lỗi `src="[object Object]"`.
 5. **Tránh ẩn đột ngột Hero Banner khi lọc trên Trang chủ:**
    - Trước đây đặt `showHeroAndFeatured = !search && selectedCategory === 'All' && selectedMainLine === 'all'` khiến toàn bộ phần đầu trang biến mất ngay khi bấm vào thẻ `"Sản phẩm từ Len"` hoặc `"Sản phẩm Kẽm nhung"`, làm vị trí cuộn của người dùng bị giật tung. Phải giữ `showHeroAndFeatured = !search`.
+6. **Chuẩn tên trường `ShippingConfig` (`PaymentMethodsContext.tsx`):**
+   - Đối tượng `shippingConfig` chỉ có 4 trường: `freeshipEnabled`, `freeshipThreshold`, `hcmFee`, `provincialFee`. Tuyệt đối không dùng tên cũ (`freeShippingEnabled`, `freeShippingThreshold`, `standardShippingFee`) vì sẽ trả về `undefined`, khiến phép cộng `cartTotal + shippingFee` thành `NaN` và `formatVND(NaN)` hiển thị `0₫`.
 
 ---
 

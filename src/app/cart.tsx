@@ -76,14 +76,15 @@ export default function CartScreen() {
   }>({ code: '', discountAmount: 0 });
 
   const isFreeShip =
-    shippingConfig.freeShippingEnabled &&
-    cartTotal >= shippingConfig.freeShippingThreshold;
+    shippingConfig.freeshipEnabled &&
+    shippingConfig.freeshipThreshold > 0 &&
+    cartTotal >= shippingConfig.freeshipThreshold;
   const shippingFee =
     cart.length === 0
       ? 0
       : isFreeShip
         ? 0
-        : shippingConfig.standardShippingFee;
+        : shippingConfig.hcmFee;
   const finalTotal = Math.max(
     0,
     cartTotal - appliedPromo.discountAmount + shippingFee
@@ -446,10 +447,12 @@ export default function CartScreen() {
           {isFreeShip ? 'Miễn phí' : formatVND(shippingFee)}
         </Text>
       </View>
-      {shippingConfig.freeShippingEnabled && !isFreeShip && (
+      {shippingConfig.freeshipEnabled &&
+        shippingConfig.freeshipThreshold > 0 &&
+        !isFreeShip && (
         <Text style={styles.freeShipHint}>
-          🚚 Mua thêm {formatVND(shippingConfig.freeShippingThreshold - cartTotal)}{' '}
-          để được Freeship (Đơn từ {formatVND(shippingConfig.freeShippingThreshold)})
+          🚚 Mua thêm {formatVND(shippingConfig.freeshipThreshold - cartTotal)}{' '}
+          để được Freeship (Đơn từ {formatVND(shippingConfig.freeshipThreshold)})
         </Text>
       )}
       <View style={[styles.summaryRow, styles.totalRow]}>
