@@ -376,7 +376,7 @@ function findMatchingMockProduct(
   const direct = mockById.get(item.id);
   if (direct) return direct;
 
-  // Custom products created by Admin (id starts with user_, except the seeded user_bunny_keychain_01) are NEVER mock products
+  // Custom products created by Admin whose IDs are NOT in `mockById` are brand-new products
   if (
     typeof item.id === 'string' &&
     item.id.startsWith('user_') &&
@@ -551,7 +551,9 @@ async function fetchRemoteDeletedIds(): Promise<string[]> {
 function isValidOverridableImage(img: unknown): img is string {
   return (
     typeof img === 'string' &&
-    (img.startsWith('data:image/') || img.startsWith('http'))
+    (img.startsWith('data:image/') ||
+      img.startsWith('http') ||
+      img.startsWith('/catalog-media/'))
   );
 }
 
@@ -700,6 +702,16 @@ function mergeWithMockProducts(remoteOrCached: Product[]): Product[] {
 }
 
 function loadCachedProducts(): Product[] {
+  // Pre-seed `hydratedMediaMemory` from static CDN-backed `MOCK_PRODUCTS` (`public/catalog-media/*.webp`)
+  // so a brand-new visitor sees all 28 latest products + 102 variants in 0ms with ZERO Supabase TOAST queries!
+  for (const mp of MOCK_PRODUCTS) {
+    if (mp && mp.id && !RETIRED_PRODUCT_IDS.has(mp.id)) {
+      cacheProductMediaInMemory(mp, {
+        coverChecked: true,
+        tagsChecked: true,
+      });
+    }
+  }
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       for (const oldKey of LEGACY_CACHE_KEYS) {
@@ -923,11 +935,19 @@ async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>
       // ignore
     }
   }
-  // Always mirror the latest product state into `addresses` (`tcl_rescue_<id>`) so that:
-  // 1) Stale rescue rows never revert Admin edits after a 5-min sync or page reload
-  // 2) Even if the Admin's Supabase JWT expired, the public partition write succeeds and syncs across all devices
-  if (supabaseUrl && supabaseAnonKey && dbProduct?.id) {
+  // Only write a fallback rescue row to `addresses` if the direct `products` table write failed
+  // (e.g., Admin JWT expired). Furthermore, strip multi-MB Base64 variant `tags` from `addresses`
+  // so `public.addresses` NEVER bloats PostgreSQL TOAST or slows down live chat / audit queries!
+  if (!productsTableOk && supabaseUrl && supabaseAnonKey && dbProduct?.id) {
     try {
+      const lightRescueProduct = {
+        ...dbProduct,
+        tags: Array.isArray(dbProduct.tags)
+          ? dbProduct.tags.filter(
+              (t) => typeof t === 'string' && !t.startsWith(VARIANTS_META_PREFIX)
+            )
+          : [],
+      };
       const rescuePayload = {
         id: `tcl_rescue_${dbProduct.id}`,
         userId: SHOP_REVIEWS_HOLDER_USER,
@@ -936,7 +956,7 @@ async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>
         city: 'HCM',
         district: new Date().toISOString(),
         ward: 'ADMIN_SYNC',
-        detailAddress: JSON.stringify(dbProduct),
+        detailAddress: JSON.stringify(lightRescueProduct),
         isDefault: false,
       };
       const bearer = await getSupabaseAuthBearer();
@@ -956,7 +976,7 @@ async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>
     }
   }
   return productsTableOk;
-}
+  }
 
 async function deleteProductFromSupabase(id: string): Promise<void> {
   try {
@@ -1535,6 +1555,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           saveDeletedIds(mergedDeleted);
         }
         const deleted = getDeletedIds();
+        const staticMockIds = new Set(MOCK_PRODUCTS.map((m) => m.id));
         let rescuedFromCache = false;
         if (cachedAll.length > 0) {
           for (const item of cachedAll) {
@@ -1547,17 +1568,15 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               const hasColorImages =
                 Array.isArray(item.colorOptions) &&
                 item.colorOptions.some((c) => Boolean(c?.image));
-              // Load cached images into memory for instant 0ms first render, but set coverChecked: false
-              // so Pass 1 always verifies/updates any newly edited Cover Collage from Supabase!
               cacheProductMediaInMemory(item, {
-                coverChecked: false,
+                coverChecked: Boolean(item.image),
                 tagsChecked: hasColorImages,
               });
-              // Rescue any custom user_ product from cached_all_products into customAdminProductsMemory
+              // Rescue any brand-new custom user_ product (not already in static MOCK_PRODUCTS) into customAdminProductsMemory
               if (
                 typeof item.id === 'string' &&
                 item.id.startsWith('user_') &&
-                item.id !== 'user_bunny_keychain_01'
+                !staticMockIds.has(item.id)
               ) {
                 const existing = customAdminProductsMemory.get(item.id);
                 if (!existing || (!existing.image && item.image)) {
@@ -1642,7 +1661,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         .sort((a, b) => (b.rating >= 4.8 ? 1 : 0) - (a.rating >= 4.8 ? 1 : 0));
 
       // PASS 1: Fast Cover Photo Hydration (`select=id,image` ONLY, skipping multi-MB `tags` variant galleries)
-      // Always check `!cached.coverChecked` so any updated Studio Cover Collage on Supabase overrides stale IndexedDB single-photo covers!
+      // Single-worker sequential fetch (`COVER_CHUNK = 1`) so Supabase Free Tier is never flooded with concurrent TOAST reads
       const missingCoverIds = activeRows
         .filter((r) => {
           const cached = hydratedMediaMemory.get(r.id);
@@ -1651,14 +1670,6 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         .map((r) => r.id);
 
       if (missingCoverIds.length > 0) {
-        const COVER_CHUNK = 2;
-        const coverChunks: string[][] = [];
-        for (let i = 0; i < missingCoverIds.length; i += COVER_CHUNK) {
-          coverChunks.push(missingCoverIds.slice(i, i + COVER_CHUNK));
-        }
-
-        // Run 2 concurrent workers for fast cover image loading on mobile
-        let cursor = 0;
         let coverUpdated = false;
         const applyFetchedCoverRow = (mr: {
           id: string;
@@ -1669,8 +1680,6 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           const adminEdit = customAdminProductsMemory.get(mr.id);
           if (adminEdit) {
             Object.assign(target, adminEdit);
-            // Authoritative remote `mr.image` from `products` table ALWAYS wins over stale local cache
-            // unless `adminEdit` was explicitly synced via `ADMIN_SYNC`
             if (
               mr.image &&
               (adminEdit as Product & { __rescueWard?: string }).__rescueWard !==
@@ -1692,80 +1701,45 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           coverUpdated = true;
         };
 
-        const runCoverWorker = async () => {
-          while (cursor < coverChunks.length) {
-            const chunkIdx = cursor++;
-            const chunk = coverChunks[chunkIdx];
-            if (!chunk || chunk.length === 0) continue;
-            const inFilter = chunk.map((id) => encodeURIComponent(id)).join(',');
-            let chunkSucceeded = false;
-            try {
-              const res = await fetch(
-                `${supabaseUrl}/rest/v1/products?select=id,image&id=in.(${inFilter})`,
-                {
-                  headers: {
-                    apikey: supabaseAnonKey,
-                    Authorization: `Bearer ${supabaseAnonKey}`,
-                  },
-                }
-              );
-              if (res.ok) {
-                const rows = (await res.json()) as Array<{
-                  id: string;
-                  image?: Product['image'];
-                }>;
-                if (Array.isArray(rows) && rows.length > 0) {
-                  chunkSucceeded = true;
-                  for (const mr of rows) {
-                    applyFetchedCoverRow(mr);
-                  }
-                  if (chunkIdx <= 2) {
-                    setProducts(mergeWithMockProducts(baseRows));
-                  }
-                }
+        for (let i = 0; i < missingCoverIds.length; i++) {
+          const singleCoverId = missingCoverIds[i];
+          if (!singleCoverId) continue;
+          try {
+            const sRes = await fetch(
+              `${supabaseUrl}/rest/v1/products?select=id,image&id=eq.${encodeURIComponent(
+                singleCoverId
+              )}`,
+              {
+                headers: {
+                  apikey: supabaseAnonKey,
+                  Authorization: `Bearer ${supabaseAnonKey}`,
+                },
               }
-            } catch {
-              // fallback to single-ID below
-            }
-
-            // If a 2-ID cover chunk timed out on Supabase TOAST, retry each ID individually
-            if (!chunkSucceeded) {
-              for (const singleCoverId of chunk) {
-                try {
-                  const sRes = await fetch(
-                    `${supabaseUrl}/rest/v1/products?select=id,image&id=eq.${encodeURIComponent(
-                      singleCoverId
-                    )}`,
-                    {
-                      headers: {
-                        apikey: supabaseAnonKey,
-                        Authorization: `Bearer ${supabaseAnonKey}`,
-                      },
-                    }
-                  );
-                  if (sRes.ok) {
-                    const sRows = (await sRes.json()) as Array<{
-                      id: string;
-                      image?: Product['image'];
-                    }>;
-                    if (Array.isArray(sRows) && sRows[0]) {
-                      applyFetchedCoverRow(sRows[0]);
-                    }
-                  }
-                } catch {
-                  // ignore
+            );
+            if (sRes.ok) {
+              const sRows = (await sRes.json()) as Array<{
+                id: string;
+                image?: Product['image'];
+              }>;
+              if (Array.isArray(sRows) && sRows[0]) {
+                applyFetchedCoverRow(sRows[0]);
+                if (i < 4) {
+                  setProducts(mergeWithMockProducts(baseRows));
                 }
               }
             }
+          } catch {
+            // ignore
           }
-        };
-        await Promise.all([runCoverWorker(), runCoverWorker()]);
+          await new Promise((r) => setTimeout(r, 80));
+        }
+
         if (coverUpdated) {
           const mergedAfterCovers = mergeWithMockProducts(baseRows);
           setProducts(mergedAfterCovers);
           saveCachedProducts(mergedAfterCovers);
         }
-        }
+      }
 
         // PASS 2: Background Variant & Gallery Hydration (`select=id,tags` ONLY — never re-download `image`!)
         // Fetch 1 product at a time (`VARIANT_CHUNK = 1`) with 1 retry so large multi-MB Base64 variant rows

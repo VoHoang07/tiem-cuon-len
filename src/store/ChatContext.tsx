@@ -297,9 +297,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Note: Keep polling even when tab is minimized (`visibilityState === 'hidden'`) for Admin & active Customers so OS push & chime fire in background!
   const fetchRemoteMessages = useCallback(async () => {
     if (!supabaseUrl || !supabaseAnonKey) return;
+    // Skip unnecessary database polling for anonymous visitors who haven't opened chat or sent a message yet
+    if (
+      !isAdmin &&
+      !isOpen &&
+      !user &&
+      lastSentAtRef.current === 0 &&
+      knownMessageIdsRef.current.size === 0
+    ) {
+      return;
+    }
     try {
+      const convFilter =
+        !isAdmin && myConversationId
+          ? `&city=eq.${encodeURIComponent(myConversationId)}`
+          : '';
       const res = await fetch(
-        `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}&select=*`,
+        `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}${convFilter}&select=id,fullName,city,phone,district,ward,detailAddress`,
         {
           headers: {
             apikey: supabaseAnonKey,
@@ -351,7 +365,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         } catch {
         // ignore network errors
         }
-        }, [isAdmin]);
+        }, [isAdmin, isOpen, myConversationId, user]);
 
   // Push a single message to Supabase REST table
   const pushMessageToSupabase = useCallback(async (msg: ChatMessage) => {
