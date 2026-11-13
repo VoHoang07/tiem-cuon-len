@@ -1,52 +1,52 @@
 import {
-  getOrderStatusColor,
-  getOrderStatusLabel,
-  ORDER_STATUS_NEXT,
+    getOrderStatusColor,
+    getOrderStatusLabel,
+    ORDER_STATUS_NEXT,
 } from '@/constants/orderStatus';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
+import { useChat } from '@/store/ChatContext';
 import { useOrders } from '@/store/OrderContext';
 import { useShop } from '@/store/ShopContext';
 import type { OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
-import { saveVoucherToWallet } from '@/utils/promoEngine';
 import {
-  ADMIN_BOOKING_PORTALS,
-  exportOrdersToGoshipCsv,
-  formatShippingSlipForClipboard,
-  getCarrierTrackingUrl,
-  getCodCollectAmount,
-  getFullAddressString,
-  SHIPPING_CARRIERS,
+    ADMIN_BOOKING_PORTALS,
+    exportOrdersToGoshipCsv,
+    formatShippingSlipForClipboard,
+    getCarrierTrackingUrl,
+    getCodCollectAmount,
+    getFullAddressString,
+    SHIPPING_CARRIERS,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  Check,
-  CheckCircle2,
-  ChevronLeft,
-  Clock,
-  Copy,
-  ExternalLink,
-  MapPin,
-  Package,
-  Phone,
-  QrCode,
-  Star,
-  Truck,
-  User as UserIcon,
+    Check,
+    CheckCircle2,
+    ChevronLeft,
+    Clock,
+    Copy,
+    ExternalLink,
+    MapPin,
+    Package,
+    Phone,
+    QrCode,
+    Star,
+    Truck,
+    User as UserIcon
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Image,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Image,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -81,12 +81,63 @@ const TIMELINE_STEPS = [
   },
 ];
 
+const QUICK_FEEDBACK_CHIPS = [
+  '🧶 Đường móc tỉ mỉ, chắc tay',
+  '🎁 Đóng gói hộp quà & thiệp rất xinh',
+  '💝 Giống mẫu 100%, len mềm mịn',
+  '🚚 Giao hàng cẩn thận, đáng tiền',
+  '🌟 Chủ tiệm tư vấn dễ thương, nhiệt tình',
+];
+
+async function compressProofScreenshotWeb(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Không đọc được ảnh.'));
+    reader.onload = () => {
+      const rawDataUrl = String(reader.result || '');
+      if (typeof document === 'undefined') {
+        resolve(rawDataUrl);
+        return;
+      }
+      const img = new window.Image();
+      img.onerror = () => resolve(rawDataUrl);
+      img.onload = () => {
+        try {
+          const maxDim = 920;
+          let w = img.naturalWidth || img.width || 600;
+          let h = img.naturalHeight || img.height || 600;
+          if (w > maxDim || h > maxDim) {
+            const ratio = Math.min(maxDim / w, maxDim / h);
+            w = Math.max(1, Math.round(w * ratio));
+            h = Math.max(1, Math.round(h * ratio));
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(rawDataUrl);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.78));
+        } catch {
+          resolve(rawDataUrl);
+        }
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { orders, updateOrderStatus, updateOrderShipping } = useOrders();
   const { user, role } = useAuth();
   const { products, addReview, addShopReview } = useShop();
+  const { sendMessage, openChat } = useChat();
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
 
@@ -99,7 +150,7 @@ export default function OrderDetailScreen() {
       : undefined;
 
   const [selectedCarrier, setSelectedCarrier] = useState<string>(
-    order?.shippingAddress?.shippingCarrier || 'Viettel Post'
+    order?.shippingAddress?.shippingCarrier || 'SPX'
   );
   const [trackingInput, setTrackingInput] = useState<string>(
     order?.shippingAddress?.trackingCode || ''
@@ -107,15 +158,45 @@ export default function OrderDetailScreen() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
 
-  // Product & Shop Review state when order is Completed ('Hoàn thành')
+  // Product quick review state when order is Completed ('Hoàn thành')
   const [activeReviewItemId, setActiveReviewItemId] = useState<string | null>(null);
   const [itemRating, setItemRating] = useState<number>(5);
   const [itemComment, setItemComment] = useState<string>('');
   const [reviewedItemIds, setReviewedItemIds] = useState<Record<string, boolean>>({});
 
-  const [shopRating, setShopRating] = useState<number>(5);
-  const [shopComment, setShopComment] = useState<string>('');
-  const [shopReviewed, setShopReviewed] = useState<boolean>(false);
+  // Section 1: Video Unboxing + Web Link (-25.000₫ Personal Voucher)
+  const [videoRating, setVideoRating] = useState<number>(5);
+  const [videoSelectedTags, setVideoSelectedTags] = useState<string[]>([]);
+  const [videoComment, setVideoComment] = useState<string>('');
+  const [videoPostUrl, setVideoPostUrl] = useState<string>('');
+  const [videoProofImg, setVideoProofImg] = useState<string | null>(null);
+  const [videoSubmitting, setVideoSubmitting] = useState<boolean>(false);
+  const [videoSubmitted, setVideoSubmitted] = useState<boolean>(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  // Section 2: Follow FB Fanpage + Public Share (-15.000₫ Personal Voucher)
+  const [fbRating, setFbRating] = useState<number>(5);
+  const [fbSelectedTags, setFbSelectedTags] = useState<string[]>([]);
+  const [fbComment, setFbComment] = useState<string>('');
+  const [fbPostUrl, setFbPostUrl] = useState<string>('');
+  const [fbProofImg, setFbProofImg] = useState<string | null>(null);
+  const [fbSubmitting, setFbSubmitting] = useState<boolean>(false);
+  const [fbSubmitted, setFbSubmitted] = useState<boolean>(false);
+  const [fbError, setFbError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!order?.id || typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      setVideoSubmitted(
+        window.localStorage.getItem(`tcl_proof_video_${order.id}`) === '1'
+      );
+      setFbSubmitted(
+        window.localStorage.getItem(`tcl_proof_fb_${order.id}`) === '1'
+      );
+    } catch {
+      // ignore
+    }
+  }, [order?.id]);
 
   useEffect(() => {
     if (order?.shippingAddress?.shippingCarrier) {
@@ -173,6 +254,169 @@ export default function OrderDetailScreen() {
     });
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 2500);
+  };
+
+  const handlePickProofScreenshot = async (
+    target: 'video_unbox_25k' | 'fb_follow_share_15k'
+  ) => {
+    const setErr = target === 'video_unbox_25k' ? setVideoError : setFbError;
+    const setImg =
+      target === 'video_unbox_25k' ? setVideoProofImg : setFbProofImg;
+    setErr(null);
+
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const validation = await validateWebFileUpload(file);
+        if (!validation.valid) {
+          setErr(validation.error || 'Ảnh tải lên không hợp lệ.');
+          return;
+        }
+        try {
+          const compressed = await compressProofScreenshotWeb(file);
+          const b64Check = validateBase64ImageUpload(compressed);
+          if (!b64Check.valid) {
+            setErr(b64Check.error || 'Định dạng ảnh không hợp lệ.');
+            return;
+          }
+          setImg(compressed);
+        } catch {
+          setErr('Không thể xử lý ảnh minh chứng. Bạn thử chọn lại ảnh khác nhé.');
+        }
+      };
+      input.click();
+      return;
+    }
+
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.72,
+        base64: true,
+      });
+      if (!res.canceled && res.assets?.[0]?.base64) {
+        const mime = res.assets[0].mimeType || 'image/jpeg';
+        const dataUri = `data:${mime};base64,${res.assets[0].base64}`;
+        const check = validateBase64ImageUpload(dataUri);
+        if (!check.valid) {
+          setErr(check.error || 'Ảnh không hợp lệ.');
+          return;
+        }
+        setImg(dataUri);
+      }
+    } catch {
+      setErr('Không thể mở thư viện ảnh.');
+    }
+  };
+
+  const handleSubmitMissionProof = (
+    missionType: 'video_unbox_25k' | 'fb_follow_share_15k'
+  ) => {
+    const isVideo = missionType === 'video_unbox_25k';
+    const proofImg = isVideo ? videoProofImg : fbProofImg;
+    const rating = isVideo ? videoRating : fbRating;
+    const selectedTags = isVideo ? videoSelectedTags : fbSelectedTags;
+    const rawComment = isVideo ? videoComment : fbComment;
+    const postUrl = (isVideo ? videoPostUrl : fbPostUrl).trim();
+    const setErr = isVideo ? setVideoError : setFbError;
+    const setBusy = isVideo ? setVideoSubmitting : setFbSubmitting;
+    const setDone = isVideo ? setVideoSubmitted : setFbSubmitted;
+
+    if (!proofImg) {
+      setErr(
+        isVideo
+          ? 'Vui lòng đính kèm ảnh chụp màn hình Story/Bài đăng (Facebook, Instagram hoặc TikTok) có gắn link web tiemcuonlen.shop nhé!'
+          : 'Vui lòng đính kèm ảnh chụp màn hình đã Follow Fanpage & Chia sẻ bài công khai nhé!'
+      );
+      return;
+    }
+
+    setErr(null);
+    setBusy(true);
+
+    const combinedReview = [selectedTags.join(', '), rawComment.trim()]
+      .filter(Boolean)
+      .join(' — ') ||
+      'Sản phẩm đan móc tỉ mỉ, rất xinh và ưng ý ạ!';
+
+    const reviewerName =
+      order.shippingAddress?.fullName || user?.name || 'Khách đã mua';
+    const reviewerEmail =
+      order.shippingAddress?.email || user?.email || undefined;
+
+    // 1. Publish review to Shop & first product in order
+    addShopReview({
+      id: `shop_rev_${Date.now()}`,
+      userId: reviewerEmail || order.userId || 'customer',
+      userName: reviewerName,
+      rating,
+      comment: combinedReview,
+      date: new Date().toISOString(),
+    });
+    const firstItem = order.items[0];
+    if (firstItem) {
+      const firstBaseId = String(
+        firstItem.product.baseProductId || firstItem.product.id
+      ).split('__')[0];
+      addReview(firstBaseId, {
+        id: `rev_${Date.now()}`,
+        userId: reviewerEmail || order.userId || 'customer',
+        userName: reviewerName,
+        rating,
+        comment: combinedReview,
+        date: new Date().toISOString(),
+      });
+    }
+
+    // 2. Dispatch structured proof + screenshot directly into Live Chat so Admin approves & sends 1-to-1 voucher in Chat!
+    const chatSummary = isVideo
+      ? `🎬 [Mục 1 — Nhận Gói Quà 60.000₫ (Voucher -25k + Tặng 1 SP 35k)] Mình vừa đánh giá ${rating}★ ("${combinedReview.slice(
+          0,
+          120
+        )}") và gửi ảnh màn hình đăng Video/Story khui hàng (FB/IG/TikTok) kèm tên & link web cho đơn #${order.id.slice(
+          -8
+        )}${postUrl ? ` (${postUrl})` : ''}. Shop kiểm tra và gửi mã quà 60k giúp mình nhé!`
+      : `👍 [Mục 2 — Nhận Voucher -15.000₫] Mình vừa đánh giá ${rating}★ ("${combinedReview.slice(
+          0,
+          120
+        )}") và gửi ảnh màn hình Follow Fanpage FB + Share bài công khai cho đơn #${order.id.slice(
+          -8
+        )}${postUrl ? ` (${postUrl})` : ''}. Shop kiểm tra và gửi mã riêng giúp mình nhé!`;
+
+    sendMessage(chatSummary, null, undefined, {
+      voucherProof: {
+        missionType,
+        orderId: order.id,
+        userId: user?.id || order.userId,
+        customerEmail: reviewerEmail,
+        customerName: reviewerName,
+        rating,
+        reviewText: combinedReview.slice(0, 220),
+        postUrl: postUrl || undefined,
+        proofImage: proofImg,
+      },
+    });
+
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(
+          isVideo
+            ? `tcl_proof_video_${order.id}`
+            : `tcl_proof_fb_${order.id}`,
+          '1'
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    setBusy(false);
+    setDone(true);
+    openChat();
   };
 
   return (
@@ -498,6 +742,36 @@ export default function OrderDetailScreen() {
             {/* ADMIN VIEW: 1-Click Copy Slip + Carrier Portal Links + Waybill Input */}
             {isAdmin && (
               <View style={styles.adminShippingToolkit}>
+                {order.shippingAddress?.bonusGiftProductName && (
+                  <View
+                    style={{
+                      backgroundColor: '#FDF2F8',
+                      borderWidth: 1.5,
+                      borderColor: '#EC4899',
+                      borderRadius: 12,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      gap: 3,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '900',
+                        color: '#9D174D',
+                      }}>
+                      🎀 LƯU Ý ĐÓNG GÓI QUÀ TẶNG KÈM (MÃ KHUI HÀNG {order.shippingAddress.promoCode}):
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: '800',
+                        color: '#831843',
+                      }}>
+                      👉 Bỏ thêm vào hộp: +01 {order.shippingAddress.bonusGiftProductName} (Quà 35k • Miễn phí 0₫)
+                    </Text>
+                  </View>
+                )}
+
                 {/* Step A: 1-Click Copy Full Slip for Goship / Viettel Post / GHTK */}
                 <TouchableOpacity
                   style={[
@@ -850,7 +1124,7 @@ export default function OrderDetailScreen() {
                         style={styles.inlineReviewInput}
                         value={itemComment}
                         onChangeText={setItemComment}
-                        placeholder="Chia sẻ vài câu cảm nhận về mẫu len này để nhận ngay mã TRIAN15K (-15.000₫) nhé..."
+                        placeholder="Chia sẻ vài câu cảm nhận về mẫu len này nhé..."
                         placeholderTextColor={COLORS.lightText}
                         multiline
                       />
@@ -869,13 +1143,12 @@ export default function OrderDetailScreen() {
                             comment: text,
                             date: new Date().toISOString(),
                           });
-                          saveVoucherToWallet('TRIAN15K');
                           setReviewedItemIds((prev) => ({ ...prev, [item.product.id]: true }));
                           setActiveReviewItemId(null);
                           setItemComment('');
                         }}>
                         <Text style={styles.submitInlineReviewText}>
-                          Gửi đánh giá & Nhận mã TRIAN15K (-15k) ({itemRating} ★)
+                          Gửi đánh giá sản phẩm ({itemRating} ★)
                         </Text>
                       </TouchableOpacity>
                       </View>
@@ -885,97 +1158,781 @@ export default function OrderDetailScreen() {
                       })}
                       </View>
 
-                      {/* 3B. Shop Review Box & TRIAN15K Loyalty Voucher Reward when Order is Completed ('Hoàn thành') */}
+                      {/* 3B. TWO SEPARATE POST-DELIVERY VOUCHER REWARD SECTIONS (25K VIDEO + 15K FB FOLLOW & SHARE) */}
                       {order.status === 'Hoàn thành' && (
-                      <View style={[styles.section, isMobile && styles.sectionMobile]}>
-                      <View
-                      style={{
-                      backgroundColor: '#FFFBEB',
-                      borderWidth: 1,
-                      borderColor: '#FCD34D',
-                      borderRadius: 12,
-                      padding: 10,
-                      marginBottom: 8,
-                      gap: 4,
-                      }}>
-                      <Text
-                      style={{
-                      fontSize: 12.5,
-                      fontWeight: '900',
-                      color: '#92400E',
-                      }}>
-                      🎁 Quà Tri Ân Khách Đánh Giá 5 Sao: Tặng Mã TRIAN15K (-15.000₫)
-                      </Text>
-                      <Text
-                      style={{
-                      fontSize: 11.5,
-                      color: '#78350F',
-                      lineHeight: 16,
-                      }}>
-                      Ngay khi bạn gửi đánh giá sản phẩm hoặc đánh giá Shop, hệ thống tự động mở khóa và lưu mã{' '}
-                      <Text style={{ fontWeight: '900' }}>TRIAN15K</Text> (Giảm 15.000₫ cho đơn từ 129.000₫) vào Ví Voucher của bạn!
-                      </Text>
-                      </View>
-                      <Text style={styles.sectionTitle}>⭐ Đánh giá Shop (Tiệm Cuộn Len)</Text>
-                      {shopReviewed || Object.keys(reviewedItemIds).length > 0 ? (
-                      <View style={styles.shopReviewedBanner}>
-                      <Text style={styles.shopReviewedText}>
-                      🎉 Cảm ơn bạn đã đánh giá! Tiệm đã tự động lưu mã quà tặng{' '}
-                      <Text style={{ fontWeight: '900' }}>TRIAN15K (-15.000₫)</Text>{' '}
-                      vào Ví Voucher của bạn cho lần mua tiếp theo!
-                      </Text>
-                      </View>
-                      ) : (
-                      <View style={styles.inlineReviewBox}>
-                      <View style={styles.starsPickerRow}>
-                      <Text style={styles.starsPickerLabel}>Chấm sao dịch vụ & đóng gói của Tiệm:</Text>
-                      <View style={styles.starsRow}>
-                      {[1, 2, 3, 4, 5].map((st) => (
-                        <TouchableOpacity key={st} onPress={() => setShopRating(st)}>
-                          <Star
-                            size={22}
-                            color="#F59E0B"
-                            fill={st <= shopRating ? '#F59E0B' : 'transparent'}
-                          />
-                        </TouchableOpacity>
-                      ))}
-                      </View>
-                      </View>
-                      <TextInput
-                      style={styles.inlineReviewInput}
-                      value={shopComment}
-                      onChangeText={setShopComment}
-                      placeholder="Nhận xét về cách tư vấn, đóng gói hộp quà và tốc độ giao hàng của Tiệm..."
-                      placeholderTextColor={COLORS.lightText}
-                      multiline
-                      />
-                      <TouchableOpacity
-                      style={styles.submitInlineReviewBtn}
-                      onPress={() => {
-                      const text =
-                        shopComment.trim() ||
-                        'Shop tư vấn nhiệt tình, đóng gói hộp quà cẩn thận 5 sao!';
-                      addShopReview({
-                        id: `shop_rev_${Date.now()}`,
-                        userId: user?.email || order.userId || 'customer',
-                        userName:
-                          order.shippingAddress?.fullName ||
-                          user?.name ||
-                          'Khách đã mua',
-                        rating: shopRating,
-                        comment: text,
-                        date: new Date().toISOString(),
-                      });
-                      saveVoucherToWallet('TRIAN15K');
-                      setShopReviewed(true);
-                      }}>
-                      <Text style={styles.submitInlineReviewText}>
-                      Gửi đánh giá Shop & Nhận mã TRIAN15K (-15k) ({shopRating} ★)
-                      </Text>
-                      </TouchableOpacity>
-                      </View>
-                      )}
-                      </View>
+                        <View
+                          style={[
+                            styles.section,
+                            isMobile && styles.sectionMobile,
+                            { gap: 14 },
+                          ]}>
+                          <View
+                            style={{
+                              backgroundColor: '#FFFBEB',
+                              borderWidth: 1.5,
+                              borderColor: '#FCD34D',
+                              borderRadius: 14,
+                              padding: 12,
+                              gap: 4,
+                            }}>
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 6,
+                              }}>
+                              <Gift size={16} color="#B45309" />
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: '900',
+                                  color: '#92400E',
+                                  flex: 1,
+                                }}>
+                                Đánh Giá & Gửi Ảnh Minh Chứng — Nhận Mã Voucher Riêng Qua Chat
+                              </Text>
+                            </View>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#78350F',
+                                lineHeight: 17,
+                              }}>
+                              Chọn 1 hoặc cả 2 mục bên dưới: chấm sao, chạm nhanh từ khóa nhận xét và đính kèm ảnh chụp màn hình. Tiệm sẽ xác nhận và gửi{' '}
+                              <Text style={{ fontWeight: '900' }}>
+                                Mã Voucher cá nhân độc quyền
+                              </Text>{' '}
+                              ngay trong khung Chat cho tài khoản của bạn!
+                            </Text>
+                          </View>
+
+                          {/* ================= MỤC 1: STORY / VIDEO KHUI HÀNG + LINK WEB -> GÓI QUÀ 60.000₫ (-25K + 1 SP 35K) ================= */}
+                          <View
+                            style={{
+                              backgroundColor: '#FDF2F8',
+                              borderWidth: 1.5,
+                              borderColor: '#F9A8D4',
+                              borderRadius: 14,
+                              padding: 13,
+                              gap: 9,
+                            }}>
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: 6,
+                              }}>
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 7,
+                                  flex: 1,
+                                  minWidth: 180,
+                                }}>
+                                <Video size={18} color="#9D174D" />
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: '900',
+                                    color: '#831843',
+                                    flex: 1,
+                                  }}>
+                                  Mục 1: Quay Video / Story Khui Hàng (FB / IG / TikTok) + Kèm Tên & Link Web
+                                </Text>
+                              </View>
+                              <View
+                                style={{
+                                  backgroundColor: '#9D174D',
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 4,
+                                  borderRadius: 999,
+                                }}>
+                                <Text
+                                  style={{
+                                    fontSize: 11.5,
+                                    fontWeight: '900',
+                                    color: '#FFFFFF',
+                                  }}>
+                                  🎁 Gói Quà 60.000₫ (-25k + 1 SP 35k)
+                                </Text>
+                              </View>
+                            </View>
+
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#9D174D',
+                                lineHeight: 17,
+                                fontWeight: '600',
+                              }}>
+                              • Điều kiện: Quay video khui hàng đăng{' '}
+                              <Text style={{ fontWeight: '900' }}>
+                                Story hoặc Bài đăng lên Facebook, Instagram hoặc TikTok
+                              </Text>{' '}
+                              kèm tên Tiệm & gắn link web{' '}
+                              <Text style={{ fontWeight: '900' }}>
+                                tiemcuonlen.shop
+                              </Text>{' '}
+                              (đúng như thiệp hướng dẫn trong hộp hàng).{'\n'}• Phần thưởng kép trị giá{' '}
+                              <Text style={{ fontWeight: '900' }}>60.000₫</Text>: Tặng mã riêng vừa{' '}
+                              <Text style={{ fontWeight: '900' }}>
+                                Giảm 25.000₫
+                              </Text>{' '}
+                              vừa được{' '}
+                              <Text style={{ fontWeight: '900' }}>
+                                Tự chọn thêm 01 sản phẩm giá 35.000₫ (Móc khóa / Kẹp tóc) của Tiệm miễn phí 0₫
+                              </Text>{' '}
+                              cho đơn mua lẻ tiếp theo từ 159.000₫!
+                            </Text>
+
+                            {videoSubmitted ? (
+                              <View
+                                style={{
+                                  backgroundColor: '#ECFDF5',
+                                  borderWidth: 1,
+                                  borderColor: '#6EE7B7',
+                                  borderRadius: 11,
+                                  padding: 11,
+                                  gap: 7,
+                                }}>
+                                <Text
+                                  style={{
+                                    fontSize: 12.5,
+                                    fontWeight: '800',
+                                    color: '#065F46',
+                                    lineHeight: 18,
+                                  }}>
+                                  ✅ Đã gửi đánh giá & ảnh minh chứng vào khung Chat! Tiệm đang kiểm tra và gửi mã Gói Quà 60.000₫ (-25k + chọn 1 SP 35k) cho bạn ngay trong khung Chat nhé.
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => openChat()}
+                                  activeOpacity={0.85}
+                                  style={{
+                                    alignSelf: 'flex-start',
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    backgroundColor: '#047857',
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 7,
+                                    borderRadius: 9,
+                                  }}>
+                                  <MessageCircle size={14} color="#FFFFFF" />
+                                  <Text
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: '800',
+                                      color: '#FFFFFF',
+                                    }}>
+                                    Mở khung Chat nhận mã Quà 60.000₫
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <View
+                                style={{
+                                  backgroundColor: '#FFFFFF',
+                                  borderRadius: 12,
+                                  padding: 11,
+                                  borderWidth: 1,
+                                  borderColor: '#FBCFE8',
+                                  gap: 8,
+                                }}>
+                                {/* Stars */}
+                                <View style={styles.starsPickerRow}>
+                                  <Text style={styles.starsPickerLabel}>
+                                    1. Chấm sao sản phẩm:
+                                  </Text>
+                                  <View style={styles.starsRow}>
+                                    {[1, 2, 3, 4, 5].map((st) => (
+                                      <TouchableOpacity
+                                        key={st}
+                                        onPress={() => setVideoRating(st)}>
+                                        <Star
+                                          size={21}
+                                          color="#F59E0B"
+                                          fill={
+                                            st <= videoRating
+                                              ? '#F59E0B'
+                                              : 'transparent'
+                                          }
+                                        />
+                                      </TouchableOpacity>
+                                    ))}
+                                  </View>
+                                </View>
+
+                                {/* Suggested Keyword Pills */}
+                                <Text
+                                  style={{
+                                    fontSize: 11.5,
+                                    fontWeight: '700',
+                                    color: '#5C4332',
+                                  }}>
+                                  2. Chạm nhanh từ khóa nhận xét (hoặc tự viết thêm):
+                                </Text>
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    flexWrap: 'wrap',
+                                    gap: 6,
+                                  }}>
+                                  {QUICK_FEEDBACK_CHIPS.map((chip) => {
+                                    const active =
+                                      videoSelectedTags.includes(chip);
+                                    return (
+                                      <TouchableOpacity
+                                        key={chip}
+                                        onPress={() =>
+                                          setVideoSelectedTags((prev) =>
+                                            prev.includes(chip)
+                                              ? prev.filter((t) => t !== chip)
+                                              : [...prev, chip]
+                                          )
+                                        }
+                                        style={{
+                                          backgroundColor: active
+                                            ? '#9D174D'
+                                            : '#FDF2F8',
+                                          borderWidth: 1,
+                                          borderColor: active
+                                            ? '#9D174D'
+                                            : '#F9A8D4',
+                                          borderRadius: 999,
+                                          paddingHorizontal: 9,
+                                          paddingVertical: 4.5,
+                                        }}>
+                                        <Text
+                                          style={{
+                                            fontSize: 11,
+                                            fontWeight: '700',
+                                            color: active
+                                              ? '#FFFFFF'
+                                              : '#831843',
+                                          }}>
+                                          {active ? `✓ ${chip}` : `+ ${chip}`}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                </View>
+
+                                <TextInput
+                                  style={[
+                                    styles.inlineReviewInput,
+                                    { fontSize: 16 },
+                                  ]}
+                                  value={videoComment}
+                                  onChangeText={setVideoComment}
+                                  placeholder="Tự viết thêm cảm nhận của bạn (tùy chọn)..."
+                                  placeholderTextColor={COLORS.lightText}
+                                  multiline
+                                />
+
+                                <TextInput
+                                  style={{
+                                    backgroundColor: '#FAF6F0',
+                                    borderWidth: 1,
+                                    borderColor: '#E2D4C5',
+                                    borderRadius: 9,
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 8,
+                                    fontSize: 16,
+                                    color: COLORS.darkText,
+                                    minWidth: 0,
+                                  }}
+                                  value={videoPostUrl}
+                                  onChangeText={setVideoPostUrl}
+                                  placeholder="Link Story / bài đăng FB, IG hoặc TikTok (không bắt buộc nếu đã có ảnh màn hình)..."
+                                  placeholderTextColor={COLORS.lightText}
+                                  autoCapitalize="none"
+                                  />
+
+                                  {/* Upload Screenshot Proof */}
+                                  <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 10,
+                                  }}>
+                                  <TouchableOpacity
+                                    onPress={() =>
+                                      void handlePickProofScreenshot(
+                                        'video_unbox_25k'
+                                      )
+                                    }
+                                    activeOpacity={0.85}
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      backgroundColor: '#FCE7F3',
+                                      borderWidth: 1,
+                                      borderColor: '#F472B6',
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 8,
+                                      borderRadius: 10,
+                                    }}>
+                                    <Camera size={15} color="#9D174D" />
+                                    <Text
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: '800',
+                                        color: '#9D174D',
+                                      }}>
+                                      {videoProofImg
+                                        ? 'Đổi ảnh màn hình khác'
+                                        : '📸 Tải ảnh màn hình Story / Bài đăng có gắn link web'}
+                                    </Text>
+                                  </TouchableOpacity>
+
+                                  {videoProofImg && (
+                                    <View
+                                      style={{
+                                        position: 'relative',
+                                        width: 66,
+                                        height: 66,
+                                        borderRadius: 9,
+                                        overflow: 'hidden',
+                                        borderWidth: 1,
+                                        borderColor: '#F472B6',
+                                      }}>
+                                      {Platform.OS === 'web' ? (
+                                        React.createElement('img', {
+                                          src: videoProofImg,
+                                          alt: 'Preview Video Proof',
+                                          style: {
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover',
+                                          },
+                                        })
+                                      ) : (
+                                        <Image
+                                          source={{ uri: videoProofImg }}
+                                          style={{
+                                            width: '100%',
+                                            height: '100%',
+                                          }}
+                                        />
+                                      )}
+                                      <TouchableOpacity
+                                        onPress={() => setVideoProofImg(null)}
+                                        style={{
+                                          position: 'absolute',
+                                          top: 2,
+                                          right: 2,
+                                          backgroundColor: 'rgba(0,0,0,0.65)',
+                                          borderRadius: 10,
+                                          padding: 2,
+                                        }}>
+                                        <X size={12} color="#FFFFFF" />
+                                      </TouchableOpacity>
+                                    </View>
+                                  )}
+                                </View>
+
+                                {videoError ? (
+                                  <Text
+                                    style={{
+                                      fontSize: 11.5,
+                                      fontWeight: '700',
+                                      color: '#B91C1C',
+                                    }}>
+                                    ⚠️ {videoError}
+                                  </Text>
+                                ) : null}
+
+                                <TouchableOpacity
+                                  style={[
+                                    styles.submitInlineReviewBtn,
+                                    { backgroundColor: '#9D174D' },
+                                  ]}
+                                  disabled={videoSubmitting}
+                                  onPress={() =>
+                                    handleSubmitMissionProof('video_unbox_25k')
+                                  }
+                                  activeOpacity={0.85}>
+                                  {videoSubmitting ? (
+                                    <ActivityIndicator
+                                      size="small"
+                                      color="#FFFFFF"
+                                    />
+                                  ) : (
+                                    <Text style={styles.submitInlineReviewText}>
+                                      Gửi Minh Chứng & Nhận Gói Quà 60.000₫ (-25k + 1 SP 35k) Qua Chat
+                                    </Text>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+
+                          {/* ================= MỤC 2: FOLLOW FANPAGE FB + SHARE CÔNG KHAI -> VOUCHER -15.000₫ ================= */}
+                          <View
+                            style={{
+                              backgroundColor: '#EFF6FF',
+                              borderWidth: 1.5,
+                              borderColor: '#93C5FD',
+                              borderRadius: 14,
+                              padding: 13,
+                              gap: 9,
+                            }}>
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: 6,
+                              }}>
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 7,
+                                  flex: 1,
+                                  minWidth: 180,
+                                }}>
+                                <Share2 size={18} color="#1D4ED8" />
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: '900',
+                                    color: '#1E3A8A',
+                                    flex: 1,
+                                  }}>
+                                  Mục 2: Follow Fanpage FB & Chia Sẻ Bài Công Khai
+                                </Text>
+                              </View>
+                              <View
+                                style={{
+                                  backgroundColor: '#1D4ED8',
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 4,
+                                  borderRadius: 999,
+                                }}>
+                                <Text
+                                  style={{
+                                    fontSize: 11.5,
+                                    fontWeight: '900',
+                                    color: '#FFFFFF',
+                                  }}>
+                                  🎁 Tặng Mã -15.000₫
+                                </Text>
+                              </View>
+                            </View>
+
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: '#1E40AF',
+                                lineHeight: 17,
+                                fontWeight: '600',
+                              }}>
+                              • Điều kiện: Bấm{' '}
+                              <Text style={{ fontWeight: '900' }}>
+                                Theo dõi (Follow) Fanpage Facebook
+                              </Text>{' '}
+                              của Tiệm Cuộn Len và{' '}
+                              <Text style={{ fontWeight: '900' }}>
+                                Chia sẻ (Share) bài viết ở chế độ Công khai
+                              </Text>
+                              .{'\n'}• Phần thưởng: Mã riêng{' '}
+                              <Text style={{ fontWeight: '900' }}>-15.000₫</Text>{' '}
+                              cho đơn mua lẻ từ 119.000₫ (chỉ tài khoản của bạn dùng được 1 lần, không áp chồng Combo).
+                            </Text>
+
+                            {fbSubmitted ? (
+                              <View
+                                style={{
+                                  backgroundColor: '#ECFDF5',
+                                  borderWidth: 1,
+                                  borderColor: '#6EE7B7',
+                                  borderRadius: 11,
+                                  padding: 11,
+                                  gap: 7,
+                                }}>
+                                <Text
+                                  style={{
+                                    fontSize: 12.5,
+                                    fontWeight: '800',
+                                    color: '#065F46',
+                                    lineHeight: 18,
+                                  }}>
+                                  ✅ Đã gửi đánh giá & ảnh minh chứng Follow + Share Fanpage vào khung Chat! Tiệm đang kiểm tra và gửi mã riêng -15.000₫ cho bạn ngay trong khung Chat nhé.
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => openChat()}
+                                  activeOpacity={0.85}
+                                  style={{
+                                    alignSelf: 'flex-start',
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    backgroundColor: '#047857',
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 7,
+                                    borderRadius: 9,
+                                  }}>
+                                  <MessageCircle size={14} color="#FFFFFF" />
+                                  <Text
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: '800',
+                                      color: '#FFFFFF',
+                                    }}>
+                                    Mở khung Chat nhận mã -15.000₫
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <View
+                                style={{
+                                  backgroundColor: '#FFFFFF',
+                                  borderRadius: 12,
+                                  padding: 11,
+                                  borderWidth: 1,
+                                  borderColor: '#BFDBFE',
+                                  gap: 8,
+                                }}>
+                                {/* Stars */}
+                                <View style={styles.starsPickerRow}>
+                                  <Text style={styles.starsPickerLabel}>
+                                    1. Chấm sao dịch vụ của Tiệm:
+                                  </Text>
+                                  <View style={styles.starsRow}>
+                                    {[1, 2, 3, 4, 5].map((st) => (
+                                      <TouchableOpacity
+                                        key={st}
+                                        onPress={() => setFbRating(st)}>
+                                        <Star
+                                          size={21}
+                                          color="#F59E0B"
+                                          fill={
+                                            st <= fbRating
+                                              ? '#F59E0B'
+                                              : 'transparent'
+                                          }
+                                        />
+                                      </TouchableOpacity>
+                                    ))}
+                                  </View>
+                                </View>
+
+                                {/* Suggested Keyword Pills */}
+                                <Text
+                                  style={{
+                                    fontSize: 11.5,
+                                    fontWeight: '700',
+                                    color: '#5C4332',
+                                  }}>
+                                  2. Chạm nhanh từ khóa nhận xét (hoặc tự viết thêm):
+                                </Text>
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    flexWrap: 'wrap',
+                                    gap: 6,
+                                  }}>
+                                  {QUICK_FEEDBACK_CHIPS.map((chip) => {
+                                    const active =
+                                      fbSelectedTags.includes(chip);
+                                    return (
+                                      <TouchableOpacity
+                                        key={chip}
+                                        onPress={() =>
+                                          setFbSelectedTags((prev) =>
+                                            prev.includes(chip)
+                                              ? prev.filter((t) => t !== chip)
+                                              : [...prev, chip]
+                                          )
+                                        }
+                                        style={{
+                                          backgroundColor: active
+                                            ? '#1D4ED8'
+                                            : '#EFF6FF',
+                                          borderWidth: 1,
+                                          borderColor: active
+                                            ? '#1D4ED8'
+                                            : '#93C5FD',
+                                          borderRadius: 999,
+                                          paddingHorizontal: 9,
+                                          paddingVertical: 4.5,
+                                        }}>
+                                        <Text
+                                          style={{
+                                            fontSize: 11,
+                                            fontWeight: '700',
+                                            color: active
+                                              ? '#FFFFFF'
+                                              : '#1E3A8A',
+                                          }}>
+                                          {active ? `✓ ${chip}` : `+ ${chip}`}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                </View>
+
+                                <TextInput
+                                  style={[
+                                    styles.inlineReviewInput,
+                                    { fontSize: 16 },
+                                  ]}
+                                  value={fbComment}
+                                  onChangeText={setFbComment}
+                                  placeholder="Tự viết thêm cảm nhận của bạn (tùy chọn)..."
+                                  placeholderTextColor={COLORS.lightText}
+                                  multiline
+                                />
+
+                                <TextInput
+                                  style={{
+                                    backgroundColor: '#FAF6F0',
+                                    borderWidth: 1,
+                                    borderColor: '#E2D4C5',
+                                    borderRadius: 9,
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 8,
+                                    fontSize: 16,
+                                    color: COLORS.darkText,
+                                    minWidth: 0,
+                                  }}
+                                  value={fbPostUrl}
+                                  onChangeText={setFbPostUrl}
+                                  placeholder="Link bài viết Facebook đã chia sẻ công khai (tùy chọn)..."
+                                  placeholderTextColor={COLORS.lightText}
+                                  autoCapitalize="none"
+                                />
+
+                                {/* Upload Screenshot Proof */}
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 10,
+                                  }}>
+                                  <TouchableOpacity
+                                    onPress={() =>
+                                      void handlePickProofScreenshot(
+                                        'fb_follow_share_15k'
+                                      )
+                                    }
+                                    activeOpacity={0.85}
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      backgroundColor: '#DBEAFE',
+                                      borderWidth: 1,
+                                      borderColor: '#60A5FA',
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 8,
+                                      borderRadius: 10,
+                                    }}>
+                                    <Camera size={15} color="#1D4ED8" />
+                                    <Text
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: '800',
+                                        color: '#1D4ED8',
+                                      }}>
+                                      {fbProofImg
+                                        ? 'Đổi ảnh màn hình khác'
+                                        : '📸 Tải ảnh màn hình đã Follow & Share bài'}
+                                    </Text>
+                                  </TouchableOpacity>
+
+                                  {fbProofImg && (
+                                    <View
+                                      style={{
+                                        position: 'relative',
+                                        width: 66,
+                                        height: 66,
+                                        borderRadius: 9,
+                                        overflow: 'hidden',
+                                        borderWidth: 1,
+                                        borderColor: '#60A5FA',
+                                      }}>
+                                      {Platform.OS === 'web' ? (
+                                        React.createElement('img', {
+                                          src: fbProofImg,
+                                          alt: 'Preview FB Share Proof',
+                                          style: {
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover',
+                                          },
+                                        })
+                                      ) : (
+                                        <Image
+                                          source={{ uri: fbProofImg }}
+                                          style={{
+                                            width: '100%',
+                                            height: '100%',
+                                          }}
+                                        />
+                                      )}
+                                      <TouchableOpacity
+                                        onPress={() => setFbProofImg(null)}
+                                        style={{
+                                          position: 'absolute',
+                                          top: 2,
+                                          right: 2,
+                                          backgroundColor: 'rgba(0,0,0,0.65)',
+                                          borderRadius: 10,
+                                          padding: 2,
+                                        }}>
+                                        <X size={12} color="#FFFFFF" />
+                                      </TouchableOpacity>
+                                    </View>
+                                  )}
+                                </View>
+
+                                {fbError ? (
+                                  <Text
+                                    style={{
+                                      fontSize: 11.5,
+                                      fontWeight: '700',
+                                      color: '#B91C1C',
+                                    }}>
+                                    ⚠️ {fbError}
+                                  </Text>
+                                ) : null}
+
+                                <TouchableOpacity
+                                  style={[
+                                    styles.submitInlineReviewBtn,
+                                    { backgroundColor: '#1D4ED8' },
+                                  ]}
+                                  disabled={fbSubmitting}
+                                  onPress={() =>
+                                    handleSubmitMissionProof(
+                                      'fb_follow_share_15k'
+                                    )
+                                  }
+                                  activeOpacity={0.85}>
+                                  {fbSubmitting ? (
+                                    <ActivityIndicator
+                                      size="small"
+                                      color="#FFFFFF"
+                                    />
+                                  ) : (
+                                    <Text style={styles.submitInlineReviewText}>
+                                      Gửi Minh Chứng Follow/Share & Nhận Mã -15.000₫ Qua Chat
+                                    </Text>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                        </View>
                       )}
 
           {/* 4. Payment & Order Total */}
@@ -1015,6 +1972,24 @@ export default function OrderDetailScreen() {
                   </Text>
                 </View>
               )}
+            {order.shippingAddress?.bonusGiftProductName && (
+              <View style={styles.metaLineRow}>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: '#9D174D', fontWeight: '800', flex: 1, paddingRight: 8 },
+                  ]}>
+                  🎀 Quà tặng kèm ({order.shippingAddress.bonusGiftProductName})
+                </Text>
+                <Text
+                  style={[
+                    styles.sectionValue,
+                    { color: '#15803D', fontWeight: '900' },
+                  ]}>
+                  0₫
+                </Text>
+              </View>
+            )}
             {order.shippingAddress?.shippingFee !== undefined && (
               <View style={styles.metaLineRow}>
                 <Text style={styles.sectionTitle}>Phí vận chuyển</Text>

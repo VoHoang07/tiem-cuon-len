@@ -7,7 +7,11 @@ import { supabase } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 import { useProducts } from '@/store/ProductContext';
 import { CartItem, Product } from '@/types/product';
-import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
+import {
+    calculateDynamicPairComboPrice,
+    getProductColorOptionsWithCombo,
+    isComboColorOption,
+} from '@/utils/comboPricing';
 import { recordSecurityAudit } from '@/utils/securityGuard';
 import {
     createContext,
@@ -47,6 +51,32 @@ function getCartOwnerId(user: { id: string; email: string } | null): string {
 function getBaseProductId(productId: string, baseProductId?: string): string {
   if (baseProductId) return baseProductId;
   return productId.split('__')[0];
+}
+
+function resolveComboCandidateUnitPrice(
+  slotId: string | undefined,
+  catalogProducts?: Product[]
+): number | null {
+  if (!slotId) return null;
+  const [slotProdId, slotVarId] = String(slotId).split('__');
+  if (!slotProdId) return null;
+  const prod =
+    catalogProducts?.find((m) => m.id === slotProdId) ||
+    MOCK_PRODUCTS.find((m) => m.id === slotProdId);
+  if (!prod) return null;
+  if (slotVarId && slotVarId !== 'main') {
+    const matchedVar = (prod.colorOptions || []).find(
+      (c) => String(c.id) === slotVarId
+    );
+    if (matchedVar?.price && Number(matchedVar.price) > 0) {
+      return Number(matchedVar.price);
+    }
+  }
+  const firstVarPrice = prod.colorOptions?.[0]?.price;
+  if (firstVarPrice && Number(firstVarPrice) > 0) {
+    return Number(firstVarPrice);
+  }
+  return Number(prod.price) > 0 ? Number(prod.price) : null;
 }
 
 function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem {
@@ -110,9 +140,17 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
     colorOptions?.[0];
 
   const resolvedImage = colorOpt?.image || p.image || source.image || mock?.image || null;
-  // Always prefer live catalog variant price (or base price) when available so admin price edits apply immediately
-  const variantLivePrice =
-    colorOpt?.price && Number(colorOpt.price) > 0
+  // Always prefer live catalog variant price (or dynamic pair combo price when 2 combo slots are selected)
+  const slot1Price = resolveComboCandidateUnitPrice(p.comboSlot1Id, catalogProducts);
+  const slot2Price = resolveComboCandidateUnitPrice(p.comboSlot2Id, catalogProducts);
+  const dynamicPair =
+    isComboColorOption(colorOpt) && slot1Price && slot2Price
+      ? calculateDynamicPairComboPrice(slot1Price, slot2Price)
+      : null;
+
+  const variantLivePrice = dynamicPair
+    ? dynamicPair.comboPrice
+    : colorOpt?.price && Number(colorOpt.price) > 0
       ? Number(colorOpt.price)
       : undefined;
   const baseCatalogPrice =
@@ -541,7 +579,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
           ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
           : 'Tự dùng / Tiêu chuẩn';
         const nextAccEmoji = enableGiftBox ? '🎁' : '🛍️';
-        const nextProductId = `${baseId}__${colorPart}__${nextAccId}`;
+        const slotSuffix =
+          p.comboSlot1Id && p.comboSlot2Id
+            ? `__pair_${p.comboSlot1Id}_${p.comboSlot2Id}`
+            : '';
+        const nextProductId = `${baseId}__${colorPart}__${nextAccId}${slotSuffix}`;
         const nextNote = enableGiftBox
           ? giftCardNote !== undefined
             ? giftCardNote

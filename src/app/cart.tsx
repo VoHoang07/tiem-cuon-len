@@ -1,5 +1,8 @@
 import { BottomNav } from '@/components/BottomNav';
-import { PromoMilestoneAndPickerCard } from '@/components/PromoMilestoneAndPickerCard';
+import {
+    PromoMilestoneAndPickerCard,
+    type AppliedPromoSelection,
+} from '@/components/PromoMilestoneAndPickerCard';
 import {
     CART_CLEAR_ALL,
     CART_EMPTY_ALERT_MSG,
@@ -18,6 +21,7 @@ import { useAuth } from '@/store/AuthContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { useShop } from '@/store/ShopContext';
 import type { CartItem } from '@/types/product';
+import { computeRetailEligibleSubtotal } from '@/utils/comboPricing';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import { useRouter } from 'expo-router';
@@ -70,10 +74,15 @@ export default function CartScreen() {
   const { isAuthenticated } = useAuth();
   const { shippingConfig } = usePaymentMethods();
   const [lastClearedItems, setLastClearedItems] = useState<CartItem[]>([]);
-  const [appliedPromo, setAppliedPromo] = useState<{
-    code: string;
-    discountAmount: number;
-  }>({ code: '', discountAmount: 0 });
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromoSelection>({
+    code: '',
+    discountAmount: 0,
+  });
+
+  const { eligibleRetailSubtotal, hasComboItems } = React.useMemo(
+    () => computeRetailEligibleSubtotal(cart),
+    [cart]
+  );
 
   const isFreeShip =
     shippingConfig.freeshipEnabled &&
@@ -425,6 +434,8 @@ export default function CartScreen() {
       <Text style={styles.summaryTitle}>{CHECKOUT_ORDER_SUMMARY}</Text>
       <PromoMilestoneAndPickerCard
         subtotal={cartTotal}
+        eligibleRetailSubtotal={eligibleRetailSubtotal}
+        hasComboItems={hasComboItems}
         onPromoChange={setAppliedPromo}
       />
       <View style={styles.summaryRow}>
@@ -438,6 +449,20 @@ export default function CartScreen() {
           </Text>
           <Text style={[styles.summaryValue, { color: '#065F46', fontWeight: '900' }]}>
             -{formatVND(appliedPromo.discountAmount)}
+          </Text>
+        </View>
+      )}
+      {appliedPromo.bonusGiftProductName && (
+        <View style={styles.summaryRow}>
+          <Text
+            style={[
+              styles.summaryLabel,
+              { color: '#9D174D', fontWeight: '800', flex: 1, paddingRight: 8 },
+            ]}>
+            🎀 Quà tặng kèm ({appliedPromo.bonusGiftProductName})
+          </Text>
+          <Text style={[styles.summaryValue, { color: '#15803D', fontWeight: '900' }]}>
+            0₫
           </Text>
         </View>
       )}

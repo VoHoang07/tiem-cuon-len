@@ -1,5 +1,5 @@
 import { isCuratedComboProductId } from '@/data/comboCatalog';
-import { Product, ProductColorOption } from '@/types/product';
+import { CartItem, Product, ProductColorOption } from '@/types/product';
 
 export const DEFAULT_COMBO_OPTION_ID = 'c_combo_2';
 
@@ -39,8 +39,11 @@ const EXACT_COMBO2_PRICE_MAP: Record<number, number> = {
   255000: 479000,
   269000: 499000,
   270000: 499000,
+  279000: 519000,
   289000: 539000,
   345000: 649000,
+  350000: 659000,
+  359000: 669000,
   365000: 689000,
 };
 
@@ -63,6 +66,53 @@ export function calculateSmartCombo2Price(unitPrice: number): number {
   return Math.max(1000, discounted);
 }
 
+/**
+ * Computes dynamic Combo price for ANY two selected models based on their true individual retail prices (`price1 + price2`).
+ * Fixes mixed-tier products (e.g., Twinkle Noel 179k vs 249k, Bó Hoa Hồng 159k vs 279k vs 359k) so the shop never loses money.
+ */
+export function calculateDynamicPairComboPrice(
+  price1: number,
+  price2: number
+): { comboPrice: number; originalPairTotal: number; savings: number } {
+  const u1 = Math.max(1000, Math.round(Number(price1) || 0));
+  const u2 = Math.max(1000, Math.round(Number(price2) || 0));
+  const originalPairTotal = u1 + u2;
+
+  if (u1 === u2) {
+    const samePrice = calculateSmartCombo2Price(u1);
+    return {
+      comboPrice: samePrice,
+      originalPairTotal,
+      savings: Math.max(0, originalPairTotal - samePrice),
+    };
+  }
+
+  if (originalPairTotal <= 40000) {
+    const cp = Math.max(1000, originalPairTotal - 3000);
+    return {
+      comboPrice: cp,
+      originalPairTotal,
+      savings: Math.max(0, originalPairTotal - cp),
+    };
+  }
+
+  let comboPrice = Math.round((originalPairTotal * 0.925) / 10000) * 10000 - 1000;
+  if (comboPrice >= originalPairTotal) {
+    comboPrice = Math.max(1000, originalPairTotal - 9000);
+  }
+  // Guardrail: never discount more than 12% of the true pair sum
+  const minSafeFloor = Math.round((originalPairTotal * 0.88) / 1000) * 1000;
+  if (comboPrice < minSafeFloor) {
+    comboPrice = minSafeFloor + 9000 < originalPairTotal ? minSafeFloor : originalPairTotal - 9000;
+  }
+
+  return {
+    comboPrice: Math.max(1000, comboPrice),
+    originalPairTotal,
+    savings: Math.max(0, originalPairTotal - comboPrice),
+  };
+}
+
 export function isComboColorOption(opt?: ProductColorOption | null): boolean {
   if (!opt) return false;
   const optId = String(opt.id || '');
@@ -71,6 +121,62 @@ export function isComboColorOption(opt?: ProductColorOption | null): boolean {
   }
   const lower = String(opt.name || '').toLowerCase();
   return lower.includes('combo');
+}
+
+/**
+ * Checks whether a CartItem / CheckoutItem is already enjoying a discounted Combo price
+ * (so promo vouchers are NEVER double-stacked on top of Combo discounts).
+ */
+export function isDiscountedComboCartItem(item?: CartItem | null): boolean {
+  if (!item || !item.product) return false;
+  const p = item.product;
+  const baseId = String(p.baseProductId || p.id || '').split('__')[0];
+  if (isCuratedComboProductId(baseId)) return true;
+
+  const parts = String(p.id || '').split('__');
+  const colorId = String(p.selectedColorId || (parts.length >= 2 ? parts[1] : ''));
+  if (
+    colorId === DEFAULT_COMBO_OPTION_ID ||
+    colorId.startsWith('pkg_') ||
+    Boolean(p.comboSlot1Id || p.comboSlot2Id)
+  ) {
+    return true;
+  }
+
+  const labelLower = `${p.selectedColorName || ''} ${p.color || ''} ${
+    item.selectedColor || ''
+  }`.toLowerCase();
+  return labelLower.includes('combo');
+}
+
+/**
+ * Computes the subtotal of ONLY non-Combo retail items eligible for Promo Vouchers.
+ */
+export function computeRetailEligibleSubtotal(items: CartItem[]): {
+  eligibleRetailSubtotal: number;
+  comboSubtotal: number;
+  hasComboItems: boolean;
+} {
+  let eligibleRetailSubtotal = 0;
+  let comboSubtotal = 0;
+  let hasComboItems = false;
+
+  for (const ci of items || []) {
+    if (!ci || !ci.product) continue;
+    const lineTotal = (Number(ci.product.price) || 0) * (Number(ci.quantity) || 1);
+    if (isDiscountedComboCartItem(ci)) {
+      hasComboItems = true;
+      comboSubtotal += lineTotal;
+    } else {
+      eligibleRetailSubtotal += lineTotal;
+    }
+  }
+
+  return {
+    eligibleRetailSubtotal,
+    comboSubtotal,
+    hasComboItems,
+  };
 }
 
 /**
@@ -121,11 +227,17 @@ export function getProductColorOptionsWithCombo(
     return baseList;
   }
 
-  const singleUnitPrice =
+  const p1 =
     baseList[0]?.price && Number(baseList[0].price) > 0
       ? Number(baseList[0].price)
       : Number(product.price) || 0;
-  const comboPrice = calculateSmartCombo2Price(singleUnitPrice);
+  const secondItem = baseList[1] || baseList[0];
+  const p2 =
+    secondItem?.price && Number(secondItem.price) > 0
+      ? Number(secondItem.price)
+      : p1;
+
+  const { comboPrice } = calculateDynamicPairComboPrice(p1, p2);
   const label =
     baseList.length >= 2
       ? '🎁 Combo 2 Mẫu Tự Chọn'

@@ -1,6 +1,12 @@
 import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
-import { ChatConversation, ChatMessage, PingedProduct } from '@/types/chat';
+import {
+    ChatConversation,
+    ChatMessage,
+    IssuedVoucherBubblePayload,
+    PingedProduct,
+    VoucherProofPayload,
+} from '@/types/chat';
 import { Product } from '@/types/product';
 import {
     playChatNotificationChime,
@@ -112,7 +118,21 @@ function loadLocalMessages(): ChatMessage[] {
 function saveLocalMessages(items: ChatMessage[]) {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(items));
+      // Strip large proofImage base64 strings from localStorage so 5MB quota is never exceeded;
+      // Supabase row retains the compressed screenshot (~60KB) for Admin & Customer session sync.
+      const compact = items.slice(-150).map((m) => {
+        if (m.voucherProof?.proofImage?.startsWith('data:image/')) {
+          return {
+            ...m,
+            voucherProof: {
+              ...m.voucherProof,
+              proofImage: '',
+            },
+          };
+        }
+        return m;
+      });
+      window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(compact));
     }
   } catch {
     // ignore quota errors
@@ -136,6 +156,8 @@ function rowToChatMessage(row: any): ChatMessage | null {
       senderName: String(payload.senderName || 'Khách hàng'),
       text: String(payload.text || ''),
       product: payload.product || null,
+      voucherProof: payload.voucherProof || null,
+      issuedVoucher: payload.issuedVoucher || null,
       createdAt: String(row.district || new Date().toISOString()),
       readByAdmin: readAdminStr === '1' || readAdminStr === 'true',
       readByCustomer: readCustStr === '1' || readCustStr === 'true',
@@ -160,6 +182,8 @@ function chatMessageToRow(msg: ChatMessage) {
       senderName: msg.senderName,
       text: msg.text,
       product: sanitizeProduct(msg.product),
+      voucherProof: msg.voucherProof || null,
+      issuedVoucher: msg.issuedVoucher || null,
     }),
     isDefault: false,
   };
@@ -176,6 +200,11 @@ function mergeMessageLists(current: ChatMessage[], incoming: ChatMessage[]): Cha
       map.set(m.id, {
         ...existing,
         ...m,
+        voucherProof: m.voucherProof?.proofImage
+          ? m.voucherProof
+          : existing.voucherProof?.proofImage
+            ? existing.voucherProof
+            : m.voucherProof || existing.voucherProof,
         readByAdmin: Boolean(existing.readByAdmin || m.readByAdmin),
         readByCustomer: Boolean(existing.readByCustomer || m.readByCustomer),
       });
@@ -204,7 +233,11 @@ interface ChatContextType {
   sendMessage: (
     text: string,
     product?: PingedProduct | null,
-    targetConversationId?: string
+    targetConversationId?: string,
+    extra?: {
+      voucherProof?: VoucherProofPayload | null;
+      issuedVoucher?: IssuedVoucherBubblePayload | null;
+    }
   ) => void;
   conversations: ChatConversation[];
   myConversationId: string;
@@ -896,15 +929,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     (
       text: string,
       product?: PingedProduct | null,
-      targetConversationId?: string
+      targetConversationId?: string,
+      extra?: {
+        voucherProof?: VoucherProofPayload | null;
+        issuedVoucher?: IssuedVoucherBubblePayload | null;
+      }
     ) => {
       const now = Date.now();
-      if (!isAdmin && now - lastSentAtRef.current < 1000) return;
-      const trimmed = text.replace(/[<>]/g, '').trim().slice(0, 500);
+      if (!isAdmin && !extra?.voucherProof && now - lastSentAtRef.current < 1000) return;
+      const trimmed = text.replace(/[<>]/g, '').trim().slice(0, 600);
       const attachedProduct = sanitizeProduct(
         product !== undefined ? product : pendingProduct
       );
-      if (!trimmed && !attachedProduct) return;
+      if (!trimmed && !attachedProduct && !extra?.voucherProof && !extra?.issuedVoucher) {
+        return;
+      }
       lastSentAtRef.current = now;
 
       const convId = isAdmin
@@ -927,10 +966,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const existingConv = conversations.find((c) => c.conversationId === convId);
       const customerName = isAdmin
         ? existingConv?.customerName || 'Khách hàng'
-        : user?.name || existingConv?.customerName || 'Khách hàng';
+        : extra?.voucherProof?.customerName ||
+          user?.name ||
+          existingConv?.customerName ||
+          'Khách hàng';
       const customerEmail = isAdmin
         ? existingConv?.customerEmail
-        : user?.email || customerNotifyEmail || existingConv?.customerEmail;
+        : extra?.voucherProof?.customerEmail ||
+          user?.email ||
+          customerNotifyEmail ||
+          existingConv?.customerEmail;
 
       const newMsg: ChatMessage = {
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -945,6 +990,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             ? `Tiệm gửi bạn thông tin mẫu "${attachedProduct?.name}" nhé!`
             : `Mình quan tâm mẫu "${attachedProduct?.name}", tư vấn giúp mình nhé!`),
         product: attachedProduct,
+        voucherProof: extra?.voucherProof || null,
+        issuedVoucher: extra?.issuedVoucher || null,
         createdAt: new Date().toISOString(),
         readByAdmin: isAdmin,
         readByCustomer: !isAdmin,

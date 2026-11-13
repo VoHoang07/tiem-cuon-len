@@ -19,6 +19,7 @@ export interface ComboSlotCandidate {
   productName: string;
   image: any;
   hex?: string;
+  unitPrice?: number;
 }
 
 const composedCache = new Map<string, string>();

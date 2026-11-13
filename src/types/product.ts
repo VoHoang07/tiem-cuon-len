@@ -57,6 +57,8 @@ export interface Product {
   selectedAccessoryId?: string;
   selectedAccessoryName?: string;
   selectedAccessoryEmoji?: string;
+  comboSlot1Id?: string;
+  comboSlot2Id?: string;
   giftCardNote?: string;
   colorOptions?: ProductColorOption[];
   accessoryOptions?: ProductAccessoryOption[];

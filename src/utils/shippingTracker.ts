@@ -156,6 +156,9 @@ export function formatShippingSlipForClipboard(order: Order): string {
     `🛡️ Ô "Khai giá" (Giá trị hàng): ${formatVND(itemsValue || order.total)}`,
     `⚖️ Cân nặng gợi ý: 250g • Loại hàng: Đồ chơi / Quà tặng`,
     `🧶 Sản phẩm (${order.items.reduce((s, i) => s + i.quantity, 0)} món): ${itemsText}`,
+    addr?.bonusGiftProductName
+      ? `🎀 QUÀ TẶNG KÈM CẦN BỎ VÀO HỘP (Mã ${addr.promoCode || 'VD25'}): +01 ${addr.bonusGiftProductName} (0₫)`
+      : '',
     ]
     .filter(Boolean)
     .join('\n');
@@ -215,6 +218,9 @@ export function formatShippingSlipForClipboard(order: Order): string {
         return `${i.product.name} (x${i.quantity})${card}`;
       })
       .join(' + ');
+    const bonusGiftText = addr?.bonusGiftProductName
+      ? ` + [QUÀ TẶNG 0₫: ${addr.bonusGiftProductName}]`
+      : '';
     const noteText = addr?.note ? ` | Ghi chú: ${addr.note}` : '';
 
     return [
@@ -233,7 +239,7 @@ export function formatShippingSlipForClipboard(order: Order): string {
       10,
       'Người gửi trả (Shop trả)',
       'Cho xem hàng không thử',
-      `${itemsText}${noteText}`,
+      `${itemsText}${bonusGiftText}${noteText}`,
       order.status,
     ]
       .map(escapeCsvCell)

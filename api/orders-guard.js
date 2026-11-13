@@ -5,9 +5,13 @@ const {
   stripUnknownFieldsServer,
   verifyCsrfRequest,
   verifySupabaseUser,
+  calculateDynamicPairComboPriceServer,
+  resolveComboSlotUnitPriceServer,
   resolveAuthoritativeProductPrices,
   resolveAuthoritativeShippingConfig,
   resolveAuthoritativePromoDiscount,
+  issuePersonalMissionVoucherServer,
+  markPersonalVoucherUsedServer,
   logServerAuditEvent,
   withGlobalErrorHandler,
   sendOrderNotificationServer,
@@ -102,6 +106,61 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     });
   }
 
+  // ─── 0A. ADMIN ISSUE PERSONAL 1-TO-1 MISSION VOUCHER (`VD25-` / `FB15-`) ───
+  if (action === 'issue_personal_voucher') {
+    if (!authUser || !authUser.isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Chỉ Quản trị viên mới có quyền duyệt và cấp mã thưởng riêng.',
+      });
+    }
+    const cleanIssue = stripUnknownFieldsServer(rawBody, [
+      'missionType',
+      'targetUserId',
+      'targetEmail',
+      'targetCustomerName',
+      'targetOrderId',
+    ]);
+    const issued = await issuePersonalMissionVoucherServer({
+      missionType: sanitizeTextServer(cleanIssue.missionType, 40),
+      targetUserId: sanitizeTextServer(cleanIssue.targetUserId, 80),
+      targetEmail: sanitizeTextServer(cleanIssue.targetEmail, 120),
+      targetCustomerName: sanitizeTextServer(cleanIssue.targetCustomerName, 80),
+      targetOrderId: sanitizeTextServer(cleanIssue.targetOrderId, 80),
+      issuedByEmail: authUser.email,
+      adminAccessToken: authUser.accessToken,
+    });
+    if (!issued.ok) {
+      return res.status(400).json({ success: false, error: issued.error });
+    }
+    return res.status(200).json({ success: true, voucher: issued.voucher });
+  }
+
+  // ─── 0B. VALIDATE VOUCHER CODE FOR LOGGED-IN CUSTOMER BEFORE CHECKOUT ──────
+  if (action === 'validate_voucher') {
+    const cleanCheck = stripUnknownFieldsServer(rawBody, [
+      'promoCode',
+      'eligibleRetailSubtotal',
+      'phone',
+      'email',
+    ]);
+    const code = sanitizeTextServer(cleanCheck.promoCode, 40);
+    const retailSub = Math.max(0, Number(cleanCheck.eligibleRetailSubtotal) || 0);
+    const evalRes = await resolveAuthoritativePromoDiscount(code, retailSub, {
+      userId: authUser.id,
+      email: sanitizeTextServer(cleanCheck.email || authUser.email || '', 120),
+      phone: sanitizeTextServer(cleanCheck.phone || '', 24),
+    });
+    return res.status(200).json({
+      success: true,
+      valid: Boolean(evalRes.promoCode && evalRes.discountAmount > 0),
+      promoCode: evalRes.promoCode || '',
+      discountAmount: evalRes.discountAmount || 0,
+      title: evalRes.title || '',
+      error: evalRes.error || '',
+    });
+  }
+
   // ─── 1. CREATE ORDER (SERVER-SIDE PRICE CALCULATION & ANTI-MASS-ASSIGNMENT) ───
   if (action === 'create') {
     const cleanOrder = stripUnknownFieldsServer(rawBody.order, [
@@ -120,16 +179,39 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       });
     }
 
-    const baseIds = rawItems.map((it) => {
+    const rawShipAddrPreview =
+      cleanOrder.shippingAddress && typeof cleanOrder.shippingAddress === 'object'
+        ? cleanOrder.shippingAddress
+        : {};
+
+    const baseIdsSet = new Set();
+    for (const it of rawItems) {
       const p = (it && it.product) || {};
-      return String(p.baseProductId || p.id || '').split('__')[0];
-    });
+      const bid = String(p.baseProductId || p.id || '').split('__')[0];
+      if (bid) baseIdsSet.add(bid);
+      if (p.comboSlot1Id) {
+        const s1Prod = String(p.comboSlot1Id).split('__')[0];
+        if (s1Prod) baseIdsSet.add(s1Prod);
+      }
+      if (p.comboSlot2Id) {
+        const s2Prod = String(p.comboSlot2Id).split('__')[0];
+        if (s2Prod) baseIdsSet.add(s2Prod);
+      }
+    }
+    if (rawShipAddrPreview.bonusGiftProductId) {
+      const gBase = String(rawShipAddrPreview.bonusGiftProductId).split('__')[0];
+      if (gBase && !gBase.startsWith('gift_35k_')) {
+        baseIdsSet.add(gBase);
+      }
+    }
+    const baseIds = Array.from(baseIdsSet);
     const [priceMap, shippingCfg] = await Promise.all([
       resolveAuthoritativeProductPrices(baseIds),
       resolveAuthoritativeShippingConfig(),
     ]);
 
     let authoritativeSubtotal = 0;
+    let eligibleRetailSubtotal = 0;
     const sanitizedItems = [];
 
     for (const it of rawItems) {
@@ -150,6 +232,8 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         'selectedAccessoryId',
         'selectedAccessoryName',
         'selectedAccessoryEmoji',
+        'comboSlot1Id',
+        'comboSlot2Id',
         'giftCardNote',
       ]);
 
@@ -183,14 +267,38 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       const accessoryDelta = isGiftBoxOption ? 25000 : 0;
       const qty = Math.max(1, Math.min(99, Math.round(Number(it.quantity) || 1)));
 
+      const cleanSlot1 = rawProd.comboSlot1Id
+        ? sanitizeTextServer(rawProd.comboSlot1Id, 90)
+        : '';
+      const cleanSlot2 = rawProd.comboSlot2Id
+        ? sanitizeTextServer(rawProd.comboSlot2Id, 90)
+        : '';
+
+      const isComboLineItem =
+        baseId.startsWith('combo_') ||
+        selectedColorIdCandidate === 'c_combo_2' ||
+        selectedColorIdCandidate.startsWith('pkg_') ||
+        Boolean(cleanSlot1 || cleanSlot2) ||
+        selectedColorNameCandidate.includes('combo');
+
+      let dynamicComboUnitPrice = 0;
+      if (isComboLineItem && cleanSlot1 && cleanSlot2) {
+        const s1Unit = resolveComboSlotUnitPriceServer(cleanSlot1, priceMap);
+        const s2Unit = resolveComboSlotUnitPriceServer(cleanSlot2, priceMap);
+        if (s1Unit > 0 && s2Unit > 0) {
+          dynamicComboUnitPrice = calculateDynamicPairComboPriceServer(s1Unit, s2Unit);
+        }
+      }
+
       // RED TEAM FIX: Never fall back to client-supplied `rawProd.price`!
-      // Require product ID (or variant ID/name) to exist in the authoritative server catalog / Supabase DB.
       const baseServerUnitPrice =
-        (selectedColorIdCandidate &&
-          priceMap.get(`${baseId}__${selectedColorIdCandidate}`)) ||
-        (selectedColorNameCandidate &&
-          priceMap.get(`${baseId}__name:${selectedColorNameCandidate}`)) ||
-        priceMap.get(baseId);
+        dynamicComboUnitPrice > 0
+          ? dynamicComboUnitPrice
+          : (selectedColorIdCandidate &&
+              priceMap.get(`${baseId}__${selectedColorIdCandidate}`)) ||
+            (selectedColorNameCandidate &&
+              priceMap.get(`${baseId}__name:${selectedColorNameCandidate}`)) ||
+            priceMap.get(baseId);
       if (!baseId || typeof baseServerUnitPrice !== 'number' || baseServerUnitPrice <= 0) {
         await logServerAuditEvent(req, {
           eventType: 'ADMIN_SECURITY_ACTION',
@@ -211,16 +319,20 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       }
 
       const serverUnitPrice = baseServerUnitPrice + accessoryDelta;
-      authoritativeSubtotal += serverUnitPrice * qty;
+      const lineTotal = serverUnitPrice * qty;
+      authoritativeSubtotal += lineTotal;
+      if (!isComboLineItem) {
+        eligibleRetailSubtotal += lineTotal;
+      }
 
       sanitizedItems.push({
         product: {
-          id: sanitizeTextServer(rawProd.id || baseId, 100),
+          id: sanitizeTextServer(rawProd.id || baseId, 140),
           baseProductId: sanitizeTextServer(baseId, 80),
           name: sanitizeTextServer(rawProd.name, 160),
           category: sanitizeTextServer(rawProd.category || 'Crochet', 40),
           material: sanitizeTextServer(rawProd.material || '', 120),
-          color: sanitizeTextServer(rawProd.color || '', 80),
+          color: sanitizeTextServer(rawProd.color || '', 90),
           image: typeof rawProd.image === 'string' ? rawProd.image : null,
           price: serverUnitPrice,
           isMadeToOrder: rawProd.isMadeToOrder !== false,
@@ -228,7 +340,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
             ? sanitizeTextServer(rawProd.selectedColorId, 60)
             : undefined,
           selectedColorName: rawProd.selectedColorName
-            ? sanitizeTextServer(rawProd.selectedColorName, 80)
+            ? sanitizeTextServer(rawProd.selectedColorName, 90)
             : undefined,
           selectedColorHex: rawProd.selectedColorHex
             ? sanitizeTextServer(rawProd.selectedColorHex, 20)
@@ -237,6 +349,8 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
           selectedAccessoryName: isGiftBoxOption
             ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
             : 'Tự dùng / Tiêu chuẩn',
+          comboSlot1Id: cleanSlot1 || undefined,
+          comboSlot2Id: cleanSlot2 || undefined,
           giftCardNote:
             isGiftBoxOption && rawProd.giftCardNote
               ? sanitizeTextServer(rawProd.giftCardNote, 300)
@@ -269,6 +383,9 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
           'note',
           'promoCode',
           'discountAmount',
+          'bonusGiftProductId',
+          'bonusGiftProductName',
+          'bonusGiftValue',
           'customerAuthProvider',
           'isVerifiedAccount',
           ]);
@@ -315,11 +432,64 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       }
     }
 
-    const promoResult = resolveAuthoritativePromoDiscount(
+    const rawCustEmailForPromo = sanitizeTextServer(
+      rawAddr.email || authUser.email || '',
+      120
+    )
+      .trim()
+      .toLowerCase();
+
+    const promoResult = await resolveAuthoritativePromoDiscount(
       rawAddr.promoCode,
-      authoritativeSubtotal
+      eligibleRetailSubtotal,
+      {
+        userId: authUser.id,
+        email: rawCustEmailForPromo,
+        phone: cleanPhone,
+      }
     );
     const authoritativeDiscount = promoResult.discountAmount || 0;
+
+    // Authoritative 35k Bonus Gift Verification (ONLY granted when a valid `VD25-XXXXXX` code is redeemed,
+    // and strictly capped at <= 39.000₫ server catalog price so no expensive item can ever be injected as a free gift!)
+    let verifiedBonusGiftId;
+    let verifiedBonusGiftName;
+    let verifiedBonusGiftValue;
+    if (promoResult.promoCode && promoResult.promoCode.startsWith('VD25-')) {
+      const candidateGiftId = sanitizeTextServer(
+        rawAddr.bonusGiftProductId || '',
+        90
+      );
+      const candidateGiftName = sanitizeTextServer(
+        rawAddr.bonusGiftProductName || '',
+        120
+      );
+      if (candidateGiftId.startsWith('gift_35k_')) {
+        verifiedBonusGiftId = candidateGiftId;
+        verifiedBonusGiftName =
+          candidateGiftName || 'Sản phẩm quà tặng 35.000₫ của Tiệm';
+        verifiedBonusGiftValue = 35000;
+      } else if (candidateGiftId) {
+        const [gBase, gVar] = candidateGiftId.split('__');
+        const gPrice =
+          (gVar && gVar !== 'main' && priceMap.get(`${gBase}__${gVar}`)) ||
+          priceMap.get(gBase);
+        if (typeof gPrice === 'number' && gPrice > 0 && gPrice <= 39000) {
+          verifiedBonusGiftId = candidateGiftId;
+          verifiedBonusGiftName =
+            candidateGiftName || `Sản phẩm quà tặng (${gBase})`;
+          verifiedBonusGiftValue = gPrice;
+        } else {
+          verifiedBonusGiftId = 'gift_35k_shop_default';
+          verifiedBonusGiftName = '01 Móc khóa / Kẹp tóc 35.000₫ của Tiệm';
+          verifiedBonusGiftValue = 35000;
+        }
+      } else {
+        verifiedBonusGiftId = 'gift_35k_shop_default';
+        verifiedBonusGiftName = '01 Móc khóa / Kẹp tóc 35.000₫ của Tiệm';
+        verifiedBonusGiftValue = 35000;
+      }
+    }
     const authoritativeTotal = Math.max(
       0,
       authoritativeSubtotal - authoritativeDiscount + authoritativeShippingFee
@@ -370,6 +540,9 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         note: rawAddr.note ? sanitizeTextServer(rawAddr.note, 500) : undefined,
         promoCode: promoResult.promoCode || undefined,
         discountAmount: authoritativeDiscount > 0 ? authoritativeDiscount : undefined,
+        bonusGiftProductId: verifiedBonusGiftId,
+        bonusGiftProductName: verifiedBonusGiftName,
+        bonusGiftValue: verifiedBonusGiftValue,
         customerAuthProvider: sanitizeTextServer(
           rawAddr.customerAuthProvider ||
             (resolvedCustEmail ? 'gmail_verified' : 'guest'),
@@ -401,6 +574,15 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
         success: false,
         error: 'Không thể lưu đơn hàng vào cơ sở dữ liệu.',
       });
+    }
+
+    // Immediately burn personal 1-to-1 voucher (`VD25-` / `FB15-`) so it can never be reused on a 2nd order
+    if (promoResult.isPersonalVoucher && promoResult.promoCode) {
+      await markPersonalVoucherUsedServer(
+        promoResult.promoCode,
+        orderId,
+        authUser.accessToken
+      );
     }
 
     // Dispatch EmailJS notification server-side (keeps EmailJS keys off client bundle)

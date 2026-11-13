@@ -8,7 +8,7 @@ import {
     type PromoVoucher,
 } from '@/utils/promoEngine';
 import { Check, Clock, Gift, ShieldCheck, Sparkles, Tag } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     StyleSheet,
     Text,
@@ -30,7 +30,7 @@ function getRemainingCountdown() {
 
 function getTicketAccent(code: string) {
   switch (code) {
-    case 'CUONLEN35K':
+    case 'VIP20K':
       return {
         stubBg: '#9E3B46',
         border: '#E5B8BE',
@@ -38,25 +38,17 @@ function getTicketAccent(code: string) {
         badgeColor: '#9E3B46',
         btnBg: '#9E3B46',
       };
-    case 'KHAITRUONG20K':
+    case 'TIEMLEN10K':
       return {
-        stubBg: '#9A5435',
+        stubBg: '#6E4F37',
         border: '#E4C6B4',
         badgeBg: '#FDF3EC',
         badgeColor: '#9A5435',
         btnBg: '#6E4F37',
       };
-    case 'VIP50K':
-      return {
-        stubBg: '#4A3427',
-        border: '#D9C6B2',
-        badgeBg: '#F7EFE4',
-        badgeColor: '#4A3427',
-        btnBg: '#4A3427',
-      };
     default:
       return {
-        stubBg: '#6E4F37',
+        stubBg: '#5C4033',
         border: '#E4D3C0',
         badgeBg: '#FBF4EA',
         badgeColor: '#6E4F37',
@@ -249,20 +241,20 @@ export function GrandOpeningPromoSection() {
                     styles.sectionTitle,
                     isMobile && styles.sectionTitleMobile,
                   ]}>
-                  Ưu Đãi Mừng Khai Trương — Lưu Voucher Giảm Tới 50.000₫
+                  Ưu Đãi Đặc Biệt — Quà Khách Mới, Freeship 299k & Thưởng Khui Quà
                 </Text>
                 {isAdmin && (
                   <View style={styles.adminSafePill}>
                     <ShieldCheck size={11} color="#065F46" />
                     <Text style={styles.adminSafePillText}>
-                      Đã khóa mức tối thiểu chống lỗ
+                      Khóa 1 lần • Không cộng dồn Combo
                     </Text>
                   </View>
                 )}
-              </View>
-              <Text style={styles.sectionSub}>
-                Bấm “Lưu mã” để hệ thống tự động chọn mức giảm cao nhất tại Giỏ hàng & Thanh toán
-              </Text>
+                </View>
+                <Text style={styles.sectionSub}>
+                  Áp dụng cho sản phẩm mua lẻ • Sau khi nhận hàng, quay video/story khui hàng gắn link web nhận Gói Quà 60.000₫ (Voucher -25k + Tặng 1 SP 35k tự chọn)!
+                </Text>
             </View>
           </View>
         </View>

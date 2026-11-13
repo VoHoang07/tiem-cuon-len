@@ -226,29 +226,29 @@ export const CURATED_COMBO_DEFINITIONS: CuratedComboDefinition[] = [
     category: 'Keychains',
     material: 'Len Nhung Gấu & Xù Xiaoke cao cấp',
     description:
-      'Bộ đôi Charm treo túi xách làm mưa làm gió: kết hợp 1 bé Charm Bông Twinkle Twinkle bản chuẩn cùng 1 bé Twinkle Noel (hoặc chọn 2 bé Twinkle bất kỳ). Tiết kiệm tới 39.000₫ và được Tự động Freeship toàn quốc!',
+    'Bộ đôi Charm treo túi xách làm mưa làm gió: kết hợp 1 bé Charm Bông Twinkle Twinkle bản chuẩn cùng 1 bé Twinkle Noel (hoặc chọn 2 bé Twinkle bất kỳ). Giá Combo tự động tính ưu đãi theo đúng 2 mẫu bạn chọn & Tự động Freeship toàn quốc!',
     primaryProductId: 'user_1794152247063',
     secondaryProductId: 'user_1794155402893',
     memberProductIds: ['user_1794152247063', 'user_1794155402893'],
     packages: [
-      {
-        id: 'pkg_twinkle_pair_mix',
-        name: '🎄 1 Twinkle Thường + 1 Twinkle Noel (Freeship 0₫)',
-        price: 379000,
-        originalPrice: 418000,
-        hex: '#2563EB',
-        primaryProductId: 'user_1794152247063',
-        secondaryProductId: 'user_1794155402893',
-      },
-      {
-        id: 'pkg_twinkle_pair_regular',
-        name: '🌟 2 Bé Charm Bông Twinkle Twinkle Tự Chọn (Freeship 0₫)',
-        price: 469000,
-        originalPrice: 498000,
-        hex: '#1D4ED8',
-        primaryProductId: 'user_1794152247063',
-        secondaryProductId: 'user_1794152247063',
-      },
+    {
+      id: 'pkg_twinkle_pair_mix',
+      name: '🎄 1 Twinkle Thường + 1 Twinkle Noel (Freeship 0₫)',
+      price: 395000,
+      originalPrice: 428000,
+      hex: '#2563EB',
+      primaryProductId: 'user_1794152247063',
+      secondaryProductId: 'user_1794155402893',
+    },
+    {
+      id: 'pkg_twinkle_pair_regular',
+      name: '🌟 2 Bé Charm Bông Twinkle Twinkle Tự Chọn (Freeship 0₫)',
+      price: 469000,
+      originalPrice: 498000,
+      hex: '#1D4ED8',
+      primaryProductId: 'user_1794152247063',
+      secondaryProductId: 'user_1794152247063',
+    },
     ],
   },
   {
@@ -402,17 +402,26 @@ export function buildCuratedComboProducts(liveProducts: Product[]): Product[] {
         (g) => g.colorId && c.id && g.colorId === c.id
       );
       const rawImg = c.image || matchedGallery?.image || mp.image || null;
+      const unitPrice =
+        c.price && Number(c.price) > 0
+          ? Number(c.price)
+          : Number(mp.price) || 0;
       return {
         id: `${mp.id}__${c.id || idx}`,
         label: String(c.name || `Mẫu ${idx + 1}`).trim(),
         productName: mp.name,
         image: resolveImageUri(rawImg) || rawImg,
         hex: c.hex || '#D4A373',
+        unitPrice,
       };
     });
     }
     const fallbackImg =
       rawColors[0]?.image || mp.gallery?.[0]?.image || mp.image || null;
+    const singleUnitPrice =
+      rawColors[0]?.price && Number(rawColors[0].price) > 0
+        ? Number(rawColors[0].price)
+        : Number(mp.price) || 0;
     return [
     {
       id: `${mp.id}__main`,
@@ -420,6 +429,7 @@ export function buildCuratedComboProducts(liveProducts: Product[]): Product[] {
       productName: mp.name,
       image: resolveImageUri(fallbackImg) || fallbackImg,
       hex: rawColors[0]?.hex || '#D4A373',
+      unitPrice: singleUnitPrice,
     },
     ];
     }

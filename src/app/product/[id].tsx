@@ -31,13 +31,13 @@ import {
     Review,
 } from '@/types/product';
 import {
+    calculateDynamicPairComboPrice,
     getProductColorOptionsWithCombo,
     isComboColorOption,
 } from '@/utils/comboPricing';
 import { ComboSlotCandidate } from '@/utils/comboStudioComposer';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
-import { saveVoucherToWallet } from '@/utils/promoEngine';
 import { recordSecurityAudit } from '@/utils/securityGuard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -535,13 +535,23 @@ export default function ProductDetailScreen() {
   };
 
   const accessoryDelta = activeAccessory?.priceDelta ?? 0;
-  const baseVariantPrice =
-    activeColor?.price && Number(activeColor.price) > 0
+  const isComboActive = isComboColorOption(activeColor);
+
+  const dynamicPairPricing =
+    isComboActive && selectedSlot1?.unitPrice && selectedSlot2?.unitPrice
+      ? calculateDynamicPairComboPrice(
+          selectedSlot1.unitPrice,
+          selectedSlot2.unitPrice
+        )
+      : null;
+
+  const baseVariantPrice = dynamicPairPricing
+    ? dynamicPairPricing.comboPrice
+    : activeColor?.price && Number(activeColor.price) > 0
       ? Number(activeColor.price)
       : product.price;
   const effectivePrice = baseVariantPrice + accessoryDelta;
 
-  const isComboActive = isComboColorOption(activeColor);
   const singleRefPrice =
     singleModelOptions[0]?.price && Number(singleModelOptions[0].price) > 0
       ? Number(singleModelOptions[0].price)
@@ -549,11 +559,13 @@ export default function ProductDetailScreen() {
   const matchedCuratedPkg = curatedComboDef?.packages.find(
     (pk) => pk.id === activeColor?.id
   );
-  const comboSavings = matchedCuratedPkg
-    ? Math.max(0, matchedCuratedPkg.originalPrice - matchedCuratedPkg.price)
-    : isComboActive
-    ? Math.max(0, singleRefPrice * 2 - baseVariantPrice)
-    : 0;
+  const comboSavings = dynamicPairPricing
+    ? dynamicPairPricing.savings
+    : matchedCuratedPkg
+      ? Math.max(0, matchedCuratedPkg.originalPrice - matchedCuratedPkg.price)
+      : isComboActive
+        ? Math.max(0, singleRefPrice * 2 - baseVariantPrice)
+        : 0;
   const resolvedColorDisplayName =
     isComboActive && comboNote.trim()
       ? `${activeColor?.name ?? '🎁 Combo 2 Mẫu'}: ${comboNote.trim()}`.slice(0, 78)
@@ -563,7 +575,11 @@ export default function ProductDetailScreen() {
     const colorId = activeColor?.id ?? 'c1';
     const accId = activeAccessory?.id ?? 'no_box';
     const isGiftSet = accId === 'gift_box_letter';
-    const variantId = `${product.id}__${colorId}__${accId}`;
+    const slotSuffix =
+      isComboActive && selectedSlot1?.id && selectedSlot2?.id
+        ? `__pair_${selectedSlot1.id}_${selectedSlot2.id}`
+        : '';
+    const variantId = `${product.id}__${colorId}__${accId}${slotSuffix}`;
     return {
       ...product,
       id: variantId,
@@ -577,6 +593,8 @@ export default function ProductDetailScreen() {
         ? 'Set Quà Tặng Đặc Biệt (+25.000₫)'
         : 'Tự dùng / Tiêu chuẩn',
       selectedAccessoryEmoji: activeAccessory?.emoji,
+      comboSlot1Id: isComboActive ? selectedSlot1?.id : undefined,
+      comboSlot2Id: isComboActive ? selectedSlot2?.id : undefined,
       giftCardNote: isGiftSet ? giftCardNote.trim() : undefined,
       image:
         (isComboActive && selectedSlot1?.image) ||
@@ -615,13 +633,12 @@ export default function ProductDetailScreen() {
     };
 
     addReview(product.id, newReview);
-    saveVoucherToWallet('TRIAN15K');
     setReviewText('');
     setReviewRating(5);
     setShowReviewForm(false);
     Alert.alert(
       '🎉 Cảm ơn bạn đã đánh giá!',
-      'Tiệm Cuộn Len tặng bạn mã TRIAN15K (Giảm 15.000₫ cho đơn từ 129.000₫) — Mã đã được lưu tự động vào Ví Voucher của bạn!'
+      'Để nhận thêm Voucher 25.000₫ (Đăng Story/Video khui quà trên FB, IG hoặc TikTok gắn link web) hoặc 15.000₫ (Follow + Share bài Fanpage), bạn ghé trang Chi tiết Đơn hàng đã hoàn thành để gửi ảnh màn hình nhận mã riêng nhé!'
     );
     };
 
@@ -676,9 +693,11 @@ export default function ProductDetailScreen() {
           ? '🎁 Set Quà Tặng Đặc Biệt (+25.000₫)'
           : '🛍️ Tự dùng / Tiêu chuẩn',
         giftCardNote: isGiftSet ? giftCardNote.trim() : '',
+        comboSlot1Id: isComboActive ? selectedSlot1?.id ?? '' : '',
+        comboSlot2Id: isComboActive ? selectedSlot2?.id ?? '' : '',
         unitPrice: String(effectivePrice),
-      },
-    });
+        },
+        });
   };
 
   const handleDelete = () => {

@@ -13,13 +13,21 @@ import { validateRealCustomerEmail } from '@/utils/contactTrustValidator';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
 import {
+    issuePersonalVoucherAsAdmin,
+    savePersonalVoucherToWallet,
+} from '@/utils/promoEngine';
+import {
     recordSecurityAudit,
     rememberVisitorKnownIdentity,
 } from '@/utils/securityGuard';
+import * as Clipboard from 'expo-clipboard';
 import { usePathname, useRouter } from 'expo-router';
 import {
+    Check,
     CheckCheck,
+    Copy,
     ExternalLink,
+    Gift,
     MessageCircle,
     Search,
     Send,
@@ -29,8 +37,11 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
     Image,
     KeyboardAvoidingView,
+    Linking,
     Platform,
     ScrollView,
     StyleSheet,
@@ -98,6 +109,13 @@ export function ShopChatWidget() {
     const [notifPerm, setNotifPerm] = useState<string>(() =>
       getChatNotificationPermission()
     );
+    const [issuingProofMsgId, setIssuingProofMsgId] = useState<string | null>(
+      null
+    );
+    const [copiedVoucherCode, setCopiedVoucherCode] = useState<string | null>(
+      null
+    );
+    const [zoomedProofUri, setZoomedProofUri] = useState<string | null>(null);
 
     useEffect(() => {
       if (isOpen) {
@@ -339,6 +357,99 @@ export function ShopChatWidget() {
     } catch {
       return '';
     }
+  };
+
+  const approvedProofKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const m of displayedMessages) {
+      if (m.issuedVoucher?.missionType) {
+        keys.add(m.issuedVoucher.missionType);
+      }
+    }
+    return keys;
+  }, [displayedMessages]);
+
+  const handleApproveAndIssueVoucher = async (msg: ChatMessage) => {
+    const proof = msg.voucherProof;
+    if (!proof || !isAdmin || issuingProofMsgId) return;
+
+    const conv = activeAdminConversation;
+    const targetUserId =
+      proof.userId ||
+      (conv && !conv.conversationId.startsWith('guest_')
+        ? conv.conversationId
+        : '');
+    const targetEmail =
+      proof.customerEmail || conv?.customerEmail || msg.customerEmail || '';
+    const targetCustomerName =
+      proof.customerName || conv?.customerName || msg.customerName || 'Khách hàng';
+
+    setIssuingProofMsgId(msg.id);
+    const res = await issuePersonalVoucherAsAdmin({
+      missionType: proof.missionType,
+      targetUserId,
+      targetEmail,
+      targetCustomerName,
+      targetOrderId: proof.orderId,
+    });
+    setIssuingProofMsgId(null);
+
+    if (!res.ok || !res.code) {
+      Alert.alert(
+        'Không thể tạo mã',
+        res.error || 'Vui lòng kiểm tra lại kết nối hoặc đăng nhập Admin.'
+      );
+      return;
+    }
+
+    const discount = res.discountAmount || (proof.missionType === 'video_unbox_25k' ? 25000 : 15000);
+    const minSub = res.minRetailSubtotal || (proof.missionType === 'video_unbox_25k' ? 159000 : 119000);
+    const isVideoGift = proof.missionType === 'video_unbox_25k';
+    const missionLabel = isVideoGift
+      ? 'Quay Video / Story khui hàng (FB/IG/TikTok) gắn link web'
+      : 'Follow Fanpage FB + Share bài công khai';
+
+    const replyText = isVideoGift
+      ? `🎉 Cảm ơn bạn đã đánh giá 5★ và gửi minh chứng "${missionLabel}"!\n🎁 Mã Gói Quà 60.000₫ độc quyền gắn riêng cho tài khoản của bạn là: ${res.code}\n• Đặc quyền 1: Giảm trực tiếp ${formatVND(
+          discount
+        )}\n• Đặc quyền 2: Tự chọn thêm 01 sản phẩm giá 35.000₫ (Móc khóa / Kẹp tóc) của Tiệm miễn phí 0₫ ngay tại Giỏ hàng (áp dụng đơn mua lẻ từ ${formatVND(
+          minSub
+        )}, dùng 1 lần). Bạn bấm "Lưu vào Ví" bên dưới nhé!`
+      : `🎉 Cảm ơn bạn đã đánh giá 5★ và gửi minh chứng "${missionLabel}"!\n🎁 Mã Voucher độc quyền gắn riêng cho tài khoản của bạn là: ${res.code} (Giảm ${formatVND(
+          discount
+        )} cho đơn mua lẻ từ ${formatVND(
+          minSub
+        )}, dùng 1 lần, không áp chồng Combo). Bạn bấm nút "Lưu vào Ví" bên dưới nhé!`;
+
+    sendMessage(replyText, null, conv?.conversationId, {
+      issuedVoucher: {
+        code: res.code,
+        missionType: proof.missionType,
+        discountAmount: discount,
+        minRetailSubtotal: minSub,
+        title: res.title || missionLabel,
+      },
+    });
+  };
+
+  const handleSaveIssuedVoucher = async (
+    issued: NonNullable<ChatMessage['issuedVoucher']>
+  ) => {
+    savePersonalVoucherToWallet({
+      code: issued.code,
+      discountAmount: issued.discountAmount,
+      minRetailSubtotal: issued.minRetailSubtotal,
+      title: issued.title,
+    });
+    try {
+      await Clipboard.setStringAsync(issued.code);
+    } catch {
+      // ignore
+    }
+    setCopiedVoucherCode(issued.code);
+    setTimeout(() => {
+      setCopiedVoucherCode((prev) => (prev === issued.code ? null : prev));
+    }, 2800);
   };
 
   const pendingThumb = resolveProductImage(pendingProduct);
@@ -748,6 +859,230 @@ export function ShopChatWidget() {
                         </TouchableOpacity>
                       )}
 
+                      {/* Customer Feedback + Screenshot Proof Card inside Bubble */}
+                      {msg.voucherProof && (
+                        <View
+                          style={{
+                            backgroundColor: isMine
+                              ? 'rgba(255,253,249,0.14)'
+                              : '#FFFBEB',
+                            borderWidth: 1,
+                            borderColor: isMine
+                              ? 'rgba(253,230,138,0.45)'
+                              : '#FCD34D',
+                            borderRadius: 11,
+                            padding: 8,
+                            marginBottom: 6,
+                            gap: 6,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '900',
+                              color: isMine ? '#FDE68A' : '#92400E',
+                            }}>
+                            {msg.voucherProof.missionType === 'video_unbox_25k'
+                              ? '🎬 MỤC 1: VIDEO/STORY KHUI HÀNG + LINK WEB → GÓI QUÀ 60K (-25K + 1 SP 35K)'
+                              : '👍 MỤC 2: FOLLOW FANPAGE FB + SHARE BÀI CÔNG KHAI (-15.000₫)'}
+                          </Text>
+
+                          {msg.voucherProof.proofImage ? (
+                            <TouchableOpacity
+                              onPress={() =>
+                                setZoomedProofUri(
+                                  msg.voucherProof?.proofImage || null
+                                )
+                              }
+                              activeOpacity={0.85}
+                              style={{
+                                width: '100%',
+                                height: 150,
+                                borderRadius: 9,
+                                overflow: 'hidden',
+                                backgroundColor: '#EFE6DA',
+                              }}>
+                              {Platform.OS === 'web' ? (
+                                React.createElement('img', {
+                                  src: msg.voucherProof.proofImage,
+                                  alt: 'Ảnh minh chứng nhận Voucher',
+                                  style: {
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    display: 'block',
+                                  },
+                                })
+                              ) : (
+                                <Image
+                                  source={{ uri: msg.voucherProof.proofImage }}
+                                  style={{ width: '100%', height: '100%' }}
+                                  resizeMode="cover"
+                                />
+                              )}
+                            </TouchableOpacity>
+                          ) : null}
+
+                          {msg.voucherProof.postUrl ? (
+                            <TouchableOpacity
+                              onPress={() => {
+                                const u = msg.voucherProof?.postUrl || '';
+                                if (u.startsWith('http')) {
+                                  Linking.openURL(u);
+                                }
+                              }}
+                              activeOpacity={0.8}>
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: '700',
+                                  color: isMine ? '#BAE6FD' : '#0369A1',
+                                  textDecorationLine: 'underline',
+                                }}
+                                numberOfLines={1}>
+                                🔗 Link bài đăng: {msg.voucherProof.postUrl}
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+
+                          {isAdmin && (
+                            <TouchableOpacity
+                              onPress={() => void handleApproveAndIssueVoucher(msg)}
+                              disabled={
+                                issuingProofMsgId === msg.id ||
+                                approvedProofKeys.has(msg.voucherProof.missionType)
+                              }
+                              activeOpacity={0.85}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                backgroundColor: approvedProofKeys.has(
+                                  msg.voucherProof.missionType
+                                )
+                                  ? '#15803D'
+                                  : '#9E3B46',
+                                paddingVertical: 7,
+                                paddingHorizontal: 10,
+                                borderRadius: 8,
+                              }}>
+                              {issuingProofMsgId === msg.id ? (
+                                <ActivityIndicator size="small" color="#FFFDF9" />
+                              ) : (
+                                <Gift size={13} color="#FFFDF9" />
+                              )}
+                              <Text
+                                style={{
+                                  fontSize: 11.5,
+                                  fontWeight: '900',
+                                  color: '#FFFDF9',
+                                }}>
+                                {approvedProofKeys.has(msg.voucherProof.missionType)
+                                  ? '✅ Đã cấp mã riêng cho khách này'
+                                  : msg.voucherProof.missionType ===
+                                      'video_unbox_25k'
+                                    ? '🎟️ Duyệt & Cấp Gói Quà 60k (-25k + Chọn 1 SP 35k)'
+                                    : '🎟️ Duyệt ảnh & Cấp mã riêng -15.000₫'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Issued Personal 1-to-1 Voucher Ticket inside Bubble */}
+                      {msg.issuedVoucher && (
+                        <View
+                          style={{
+                            backgroundColor: '#ECFDF5',
+                            borderWidth: 1.5,
+                            borderColor: '#6EE7B7',
+                            borderRadius: 11,
+                            padding: 9,
+                            marginBottom: 6,
+                            gap: 5,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '900',
+                              color: '#065F46',
+                            }}>
+                            {msg.issuedVoucher.missionType === 'video_unbox_25k'
+                              ? `🎁 GÓI QUÀ 60K ĐỘC QUYỀN (-${formatVND(
+                                  msg.issuedVoucher.discountAmount
+                                )} + CHỌN 1 SP 35K 0₫)`
+                              : `🎟️ VOUCHER ĐỘC QUYỀN 1 TÀI KHOẢN (-${formatVND(
+                                  msg.issuedVoucher.discountAmount
+                                )})`}
+                          </Text>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              backgroundColor: '#FFFFFF',
+                              borderWidth: 1,
+                              borderColor: '#A7F3D0',
+                              borderRadius: 8,
+                              paddingHorizontal: 9,
+                              paddingVertical: 6,
+                            }}>
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                fontWeight: '900',
+                                color: '#047857',
+                                letterSpacing: 0.5,
+                              }}>
+                              {msg.issuedVoucher.code}
+                            </Text>
+                            {!isAdmin && (
+                              <TouchableOpacity
+                                onPress={() =>
+                                  void handleSaveIssuedVoucher(msg.issuedVoucher!)
+                                }
+                                activeOpacity={0.85}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  backgroundColor: '#047857',
+                                  paddingHorizontal: 9,
+                                  paddingVertical: 4,
+                                  borderRadius: 6,
+                                }}>
+                                {copiedVoucherCode === msg.issuedVoucher.code ? (
+                                  <Check size={12} color="#FFFFFF" />
+                                ) : (
+                                  <Copy size={12} color="#FFFFFF" />
+                                )}
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: '800',
+                                    color: '#FFFFFF',
+                                  }}>
+                                  {copiedVoucherCode === msg.issuedVoucher.code
+                                    ? 'Đã lưu vào Ví!'
+                                    : 'Lưu vào Ví'}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: '700',
+                              color: '#065F46',
+                            }}>
+                            Áp dụng đơn mua lẻ từ{' '}
+                            {formatVND(msg.issuedVoucher.minRetailSubtotal)} • Dùng
+                            1 lần duy nhất • Tài khoản khác không dùng được
+                          </Text>
+                        </View>
+                      )}
+
                       <Text
                         style={[
                           styles.messageText,
@@ -1008,11 +1343,58 @@ export function ShopChatWidget() {
               </Text>
             </View>
           )}
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-}
+          </TouchableOpacity>
+          )}
+
+          {/* Fullscreen Zoom Modal when clicking a Proof Screenshot */}
+          {zoomedProofUri && (
+          <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setZoomedProofUri(null)}
+          style={{
+            position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.84)',
+            zIndex: 9999,
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 18,
+          }}>
+          {Platform.OS === 'web' ? (
+            React.createElement('img', {
+              src: zoomedProofUri,
+              alt: 'Ảnh minh chứng phóng to',
+              style: {
+                maxWidth: '92vw',
+                maxHeight: '85vh',
+                objectFit: 'contain',
+                borderRadius: 14,
+              },
+            })
+          ) : (
+            <Image
+              source={{ uri: zoomedProofUri }}
+              style={{ width: '100%', height: '80%' }}
+              resizeMode="contain"
+            />
+          )}
+          <Text
+            style={{
+              marginTop: 10,
+              color: '#FFFDF9',
+              fontSize: 13,
+              fontWeight: '700',
+            }}>
+            Chạm bất kỳ đâu để đóng ảnh
+          </Text>
+          </TouchableOpacity>
+          )}
+          </View>
+          );
+          }
 
 const styles = StyleSheet.create({
   rootOverlay: {

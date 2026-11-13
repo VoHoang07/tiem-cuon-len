@@ -1,18 +1,32 @@
+import { useAuth } from '@/store/AuthContext';
+import { useOrders } from '@/store/OrderContext';
+import { useProducts } from '@/store/ProductContext';
 import { formatVND } from '@/utils/formatCurrency';
 import {
     PROMO_OPT_OUT_SENTINEL,
     evaluatePromoCode,
     getActivePromoVouchers,
     getBestApplicableVoucher,
+    getEligible35kBonusGiftChoices,
     getNextUnlockableVoucher,
+    getSelectedBonusGiftId,
     getSelectedPromoCode,
+    savePersonalVoucherToWallet,
+    setSelectedBonusGiftId,
     setSelectedPromoCode,
     subscribePromoChanges,
+    validatePromoCodeWithServer,
+    type BonusGiftChoice,
+    type PromoEvaluationContext,
     type PromoVoucher,
 } from '@/utils/promoEngine';
 import { Check, Gift, Sparkles, Tag, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
+    Image,
+    Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -20,41 +34,101 @@ import {
     View,
 } from 'react-native';
 
+export interface AppliedPromoSelection {
+  code: string;
+  discountAmount: number;
+  bonusGiftProductId?: string;
+  bonusGiftProductName?: string;
+  bonusGiftValue?: number;
+}
+
 interface PromoMilestoneAndPickerCardProps {
+  /** Total cart subtotal (including Combos) — used for displaying Freeship 299k progress */
   subtotal: number;
-  onPromoChange?: (result: { code: string; discountAmount: number }) => void;
+  /** Subtotal of ONLY non-Combo retail items — strictly used for Voucher eligibility! */
+  eligibleRetailSubtotal?: number;
+  hasComboItems?: boolean;
+  customerEmail?: string;
+  customerPhone?: string;
+  onPromoChange?: (result: AppliedPromoSelection) => void;
 }
 
 export function PromoMilestoneAndPickerCard({
   subtotal,
+  eligibleRetailSubtotal,
+  hasComboItems = false,
+  customerEmail,
+  customerPhone,
   onPromoChange,
 }: PromoMilestoneAndPickerCardProps) {
+  const { user } = useAuth();
+  const { orders } = useOrders();
+  const { products: catalogProducts } = useProducts();
+
+  const retailSub =
+    eligibleRetailSubtotal !== undefined ? eligibleRetailSubtotal : subtotal;
+
+  const bonusGiftChoices = useMemo<BonusGiftChoice[]>(
+    () => getEligible35kBonusGiftChoices(catalogProducts),
+    [catalogProducts]
+  );
+
+  const [selectedGiftId, setSelectedGiftIdState] = useState<string>(() =>
+    getSelectedBonusGiftId()
+  );
+
+  const promoCtx = useMemo<PromoEvaluationContext>(() => {
+    const myValidOrders = (orders || []).filter(
+      (o) =>
+        o.status !== 'Đã hủy' &&
+        ((user?.id && o.userId === user.id) ||
+          (customerPhone &&
+            o.shippingAddress?.phone &&
+            o.shippingAddress.phone.replace(/[^0-9]/g, '') ===
+              customerPhone.replace(/[^0-9]/g, '')))
+    );
+    const usedPromoCodes = myValidOrders
+      .map((o) => o.shippingAddress?.promoCode)
+      .filter((c): c is string => Boolean(c));
+
+    return {
+      hasPriorOrders: myValidOrders.length > 0,
+      usedPromoCodes,
+      hasComboItems,
+    };
+  }, [orders, user?.id, customerPhone, hasComboItems]);
+
   const [vouchers, setVouchers] = useState<PromoVoucher[]>(() =>
-    getActivePromoVouchers()
+    getActivePromoVouchers(promoCtx)
   );
   const [selectedCode, setSelectedCodeState] = useState<string>(() =>
     getSelectedPromoCode()
   );
   const [manualInput, setManualInput] = useState('');
   const [manualError, setManualError] = useState<string | null>(null);
+  const [checkingServer, setCheckingServer] = useState(false);
   const userManualChoiceRef = useRef<boolean>(false);
 
   useEffect(() => {
+    setVouchers(getActivePromoVouchers(promoCtx));
+  }, [promoCtx]);
+
+  useEffect(() => {
     const unsub = subscribePromoChanges(() => {
-      setVouchers(getActivePromoVouchers());
+      setVouchers(getActivePromoVouchers(promoCtx));
       setSelectedCodeState(getSelectedPromoCode());
+      setSelectedGiftIdState(getSelectedBonusGiftId());
     });
     return unsub;
-  }, []);
+  }, [promoCtx]);
 
-  // Auto-select the best eligible voucher ONLY when the user has not explicitly opted out (`__NONE__`)
-  // and has not manually picked another valid voucher.
+  // Preserve manual opt-out (`__NONE__`) per Rule #20; otherwise pick best eligible voucher on retailSub
   useEffect(() => {
     if (selectedCode === PROMO_OPT_OUT_SENTINEL) {
       return;
     }
 
-    const best = getBestApplicableVoucher(subtotal);
+    const best = getBestApplicableVoucher(retailSub, promoCtx);
     if (!selectedCode) {
       if (best) {
         setSelectedPromoCode(best.code);
@@ -63,8 +137,7 @@ export function PromoMilestoneAndPickerCard({
       return;
     }
 
-    const currentEval = evaluatePromoCode(selectedCode, subtotal);
-    // If subtotal dropped below the currently selected voucher's minimum, fall back to the best eligible one
+    const currentEval = evaluatePromoCode(selectedCode, retailSub, promoCtx);
     if (!currentEval.valid) {
       const fallback = best ? best.code : '';
       setSelectedPromoCode(fallback);
@@ -72,7 +145,6 @@ export function PromoMilestoneAndPickerCard({
       return;
     }
 
-    // Only auto-upgrade to a higher tier if the user hasn't manually picked a specific voucher
     if (
       !userManualChoiceRef.current &&
       best &&
@@ -81,27 +153,65 @@ export function PromoMilestoneAndPickerCard({
       setSelectedPromoCode(best.code);
       setSelectedCodeState(best.code);
     }
-  }, [subtotal, selectedCode]);
+  }, [retailSub, selectedCode, promoCtx]);
 
   const evalResult = useMemo(
-    () => evaluatePromoCode(selectedCode, subtotal),
-    [selectedCode, subtotal]
+    () => evaluatePromoCode(selectedCode, retailSub, promoCtx),
+    [selectedCode, retailSub, promoCtx]
   );
+
+  const isVd25GiftActive = Boolean(
+    evalResult.valid &&
+      (evalResult.code.startsWith('VD25-') ||
+        evalResult.voucher?.grantsFreeGiftMaxPrice)
+  );
+
+  const activeBonusGift: BonusGiftChoice | null = useMemo(() => {
+    if (!isVd25GiftActive || bonusGiftChoices.length === 0) return null;
+    return (
+      bonusGiftChoices.find((g) => g.id === selectedGiftId) ||
+      bonusGiftChoices[0] ||
+      null
+    );
+  }, [isVd25GiftActive, bonusGiftChoices, selectedGiftId]);
+
+  useEffect(() => {
+    if (isVd25GiftActive && activeBonusGift && selectedGiftId !== activeBonusGift.id) {
+      setSelectedBonusGiftId(activeBonusGift.id);
+      setSelectedGiftIdState(activeBonusGift.id);
+    }
+  }, [isVd25GiftActive, activeBonusGift, selectedGiftId]);
 
   useEffect(() => {
     onPromoChange?.({
       code: evalResult.valid ? evalResult.code : '',
       discountAmount: evalResult.valid ? evalResult.discountAmount : 0,
+      bonusGiftProductId:
+        evalResult.valid && activeBonusGift ? activeBonusGift.id : undefined,
+      bonusGiftProductName:
+        evalResult.valid && activeBonusGift
+          ? activeBonusGift.displayLabel
+          : undefined,
+      bonusGiftValue:
+        evalResult.valid && activeBonusGift
+          ? activeBonusGift.originalPrice
+          : undefined,
     });
-  }, [evalResult.valid, evalResult.code, evalResult.discountAmount, onPromoChange]);
+  }, [
+    evalResult.valid,
+    evalResult.code,
+    evalResult.discountAmount,
+    activeBonusGift,
+    onPromoChange,
+  ]);
 
   const nextUnlock = useMemo(
-    () => getNextUnlockableVoucher(subtotal),
-    [subtotal]
+    () => getNextUnlockableVoucher(retailSub, promoCtx),
+    [retailSub, promoCtx]
   );
 
   const progressPct = useMemo(() => {
-    const maxTarget = 299000;
+    const maxTarget = 399000;
     return Math.min(100, Math.max(4, Math.round((subtotal / maxTarget) * 100)));
   }, [subtotal]);
 
@@ -112,24 +222,42 @@ export function PromoMilestoneAndPickerCard({
     setSelectedCodeState(PROMO_OPT_OUT_SENTINEL);
   };
 
-  const handleSelectChip = (v: PromoVoucher) => {
-    const eligible = subtotal >= v.minOrderSubtotal;
+  const handleSelectChip = async (v: PromoVoucher) => {
+    const eligible = retailSub >= v.minOrderSubtotal;
     const isCurrentlyActive = evalResult.valid && evalResult.code === v.code;
 
-    // Clicking an already active voucher toggles it OFF (same as Bỏ chọn)
     if (isCurrentlyActive) {
       handleClearSelection();
       return;
     }
 
     if (!eligible) {
-      const shortfall = Math.max(0, v.minOrderSubtotal - subtotal);
+      const shortfall = Math.max(0, v.minOrderSubtotal - retailSub);
       setManualError(
-        `Mã ${v.code} áp dụng cho đơn từ ${formatVND(
-          v.minOrderSubtotal
-        )} (Cần mua thêm ${formatVND(shortfall)} nữa).`
+        retailSub <= 0 && hasComboItems
+          ? 'Các gói Combo đã được giảm giá ưu đãi sẵn nên không áp chồng thêm Voucher. Bạn mua thêm sản phẩm lẻ để dùng mã nhé!'
+          : `Mã ${v.code} áp dụng khi sản phẩm mua lẻ đạt từ ${formatVND(
+              v.minOrderSubtotal
+            )} (Cần mua thêm ${formatVND(shortfall)} sản phẩm lẻ nữa).`
       );
       return;
+    }
+
+    if (v.isPersonalMission) {
+      setCheckingServer(true);
+      const srv = await validatePromoCodeWithServer({
+        promoCode: v.code,
+        eligibleRetailSubtotal: retailSub,
+        email: customerEmail || user?.email,
+        phone: customerPhone,
+      });
+      setCheckingServer(false);
+      if (srv.checkedOnServer && !srv.valid) {
+        setManualError(
+          srv.error || 'Mã thưởng riêng không hợp lệ với tài khoản hiện tại.'
+        );
+        return;
+      }
     }
 
     userManualChoiceRef.current = true;
@@ -138,37 +266,70 @@ export function PromoMilestoneAndPickerCard({
     setSelectedCodeState(v.code);
   };
 
-  const handleApplyManual = () => {
+  const handleApplyManual = async () => {
     const cleaned = manualInput.trim().toUpperCase();
     if (!cleaned) return;
-    const res = evaluatePromoCode(cleaned, subtotal);
-    if (!res.valid) {
+
+    const localRes = evaluatePromoCode(cleaned, retailSub, promoCtx);
+    if (!localRes.valid) {
       setManualError(
-        res.error || 'Mã giảm giá chưa đủ điều kiện hoặc không hợp lệ.'
+        localRes.error || 'Mã giảm giá chưa đủ điều kiện hoặc không hợp lệ.'
       );
       return;
     }
+
+    setCheckingServer(true);
+    const srv = await validatePromoCodeWithServer({
+      promoCode: cleaned,
+      eligibleRetailSubtotal: retailSub,
+      email: customerEmail || user?.email,
+      phone: customerPhone,
+    });
+    setCheckingServer(false);
+
+    if (srv.checkedOnServer && !srv.valid) {
+      setManualError(
+        srv.error || 'Mã giảm giá không hợp lệ hoặc không thuộc tài khoản này.'
+      );
+      return;
+    }
+
+    if (cleaned.startsWith('VD25-') || cleaned.startsWith('FB15-')) {
+      savePersonalVoucherToWallet({
+        code: cleaned,
+        discountAmount: srv.discountAmount || localRes.discountAmount,
+        minRetailSubtotal: localRes.voucher?.minOrderSubtotal || 119000,
+        title: srv.title || localRes.voucher?.title || 'Mã thưởng nhiệm vụ riêng',
+      });
+    }
+
     userManualChoiceRef.current = true;
     setManualError(null);
     setManualInput('');
-    setSelectedPromoCode(res.code);
-    setSelectedCodeState(res.code);
+    setSelectedPromoCode(localRes.code);
+    setSelectedCodeState(localRes.code);
   };
 
-  if (vouchers.length === 0) return null;
+  const isComboOnlyCart = hasComboItems && retailSub <= 0;
 
   return (
     <View style={styles.card}>
-      {/* Milestone Upsell Bar */}
+      {/* Milestone Upsell Bar (Direction 2: 159k -10k First Order | 299k Freeship | 399k -20k) */}
       <View style={styles.milestoneBox}>
         <View style={styles.milestoneHeader}>
           <Sparkles size={14} color="#B45309" />
           <Text style={styles.milestoneTitle}>
-            {nextUnlock
-              ? `💡 Mua thêm ${formatVND(nextUnlock.shortfall)} để mở khóa mã ${
-                  nextUnlock.voucher.code
-                } (${nextUnlock.voucher.title})!`
-              : '🎉 Tuyệt vời! Đơn hàng đã mở khóa tối đa ưu đãi Khai Trương & Freeship!'}
+            {subtotal < 299000
+              ? `🚚 Mua thêm ${formatVND(
+                  299000 - subtotal
+                )} để được Miễn phí vận chuyển toàn quốc (Đơn ≥299k)!`
+              : nextUnlock && retailSub > 0
+                ? `💡 Đã Freeship 0₫! Mua thêm ${formatVND(
+                    nextUnlock.shortfall
+                  )} sản phẩm lẻ để mở khóa mã ${nextUnlock.voucher.code} (-${formatVND(
+                    nextUnlock.voucher.discountAmount
+                  )})!`
+                : '🎉 Đơn hàng đã được Miễn phí vận chuyển toàn quốc (0₫)!'}
           </Text>
         </View>
 
@@ -180,40 +341,59 @@ export function PromoMilestoneAndPickerCard({
 
         <View style={styles.milestonesRow}>
           {[
-            { label: '99k: -10k', target: 99000 },
-            { label: '179k: -20k', target: 179000 },
-            { label: '299k: -35k + Freeship', target: 299000 },
-          ].map((m) => {
-            const reached = subtotal >= m.target;
-            return (
-              <View key={m.target} style={styles.milestoneStep}>
-                <View
-                  style={[
-                    styles.milestoneDot,
-                    reached && styles.milestoneDotReached,
-                  ]}>
-                  {reached && <Check size={9} color="#FFFDF9" strokeWidth={3} />}
-                </View>
-                <Text
-                  style={[
-                    styles.milestoneStepText,
-                    reached && styles.milestoneStepTextReached,
-                  ]}>
-                  {m.label}
-                </Text>
+            {
+              label: 'Lẻ ≥159k: -10k (Khách mới)',
+              reached: !promoCtx.hasPriorOrders && retailSub >= 159000,
+            },
+            {
+              label: 'Tổng ≥299k: Freeship 0₫',
+              reached: subtotal >= 299000,
+            },
+            {
+              label: 'Lẻ ≥399k: -20k',
+              reached: retailSub >= 399000,
+            },
+          ].map((m) => (
+            <View key={m.label} style={styles.milestoneStep}>
+              <View
+                style={[
+                  styles.milestoneDot,
+                  m.reached && styles.milestoneDotReached,
+                ]}>
+                {m.reached && <Check size={9} color="#FFFDF9" strokeWidth={3} />}
               </View>
-            );
-          })}
+              <Text
+                style={[
+                  styles.milestoneStepText,
+                  m.reached && styles.milestoneStepTextReached,
+                ]}>
+                {m.label}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
 
-      {/* 1-Tap Quick Voucher Chips (2x2 Balanced Grid) */}
+      {/* Combo Non-Stacking Fair Notice */}
+      {hasComboItems && (
+        <View style={styles.comboGuardNotice}>
+          <Text style={styles.comboGuardText}>
+            {isComboOnlyCart
+              ? '💝 Các gói Combo trong giỏ đã được giảm giá ưu đãi trực tiếp (Mã giảm giá chỉ áp dụng cho sản phẩm mua lẻ nguyên giá, không trừ chồng lên Combo).'
+              : `ℹ️ Mã giảm giá chỉ tính trên phần sản phẩm mua lẻ (${formatVND(
+                  retailSub
+                )}), không cộng dồn lên gói Combo đã giảm sẵn.`}
+          </Text>
+        </View>
+      )}
+
+      {/* Voucher Chips + Manual Input */}
       <View style={styles.pickerSection}>
         <View style={styles.pickerHeaderRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <Tag size={13} color="#6E4F37" />
             <Text style={styles.pickerLabel}>
-              Chọn Mã Giảm Giá Khai Trương:
+              Mã Giảm Giá (Tối đa 1 mã / đơn):
             </Text>
           </View>
           {evalResult.valid ? (
@@ -231,72 +411,86 @@ export function PromoMilestoneAndPickerCard({
           ) : null}
         </View>
 
-        <View style={styles.chipsWrap}>
-          {vouchers.map((v) => {
-            const eligible = subtotal >= v.minOrderSubtotal;
-            const active = evalResult.valid && evalResult.code === v.code;
-            const shortfall = Math.max(0, v.minOrderSubtotal - subtotal);
+        {vouchers.length > 0 && !isComboOnlyCart && (
+          <View style={styles.chipsWrap}>
+            {vouchers.map((v) => {
+              const eligible = retailSub >= v.minOrderSubtotal;
+              const active = evalResult.valid && evalResult.code === v.code;
+              const shortfall = Math.max(0, v.minOrderSubtotal - retailSub);
 
-            return (
-              <TouchableOpacity
-                key={v.code}
-                style={[
-                  styles.voucherChip,
-                  active && styles.voucherChipActive,
-                  !eligible && styles.voucherChipLocked,
-                ]}
-                onPress={() => handleSelectChip(v)}
-                activeOpacity={0.8}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: 6,
-                    }}>
+              return (
+                <TouchableOpacity
+                  key={v.code}
+                  style={[
+                    styles.voucherChip,
+                    active && styles.voucherChipActive,
+                    !eligible && styles.voucherChipLocked,
+                  ]}
+                  onPress={() => void handleSelectChip(v)}
+                  activeOpacity={0.8}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 6,
+                      }}>
+                      <Text
+                        style={[
+                          styles.chipCode,
+                          active && { color: '#FFFDF9' },
+                        ]}>
+                        🎟️ {v.code}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.chipDiscount,
+                          active && { color: '#FDE68A' },
+                        ]}>
+                        (-{formatVND(v.discountAmount)})
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: '700',
+                          color: active ? '#E5D5C5' : '#7A6555',
+                        }}>
+                        • {v.badge}
+                      </Text>
+                    </View>
                     <Text
                       style={[
-                        styles.chipCode,
-                        active && { color: '#FFFDF9' },
+                        styles.chipSub,
+                        active && { color: '#F5EFE6' },
                       ]}>
-                      🎟️ {v.code}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.chipDiscount,
-                        active && { color: '#FDE68A' },
-                      ]}>
-                      (-{formatVND(v.discountAmount)})
+                      {active
+                        ? '✓ Đang dùng (Chạm lần nữa để bỏ chọn)'
+                        : eligible
+                          ? `✓ Đủ điều kiện (Đơn lẻ ≥${Math.round(
+                              v.minOrderSubtotal / 1000
+                            )}k • Dùng 1 lần)`
+                          : `Mua thêm ${formatVND(
+                              shortfall
+                            )} SP lẻ (Đơn lẻ ≥${Math.round(
+                              v.minOrderSubtotal / 1000
+                            )}k)`}
                     </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.chipSub,
-                      active && { color: '#F5EFE6' },
-                    ]}>
-                    {active
-                      ? '✓ Đang dùng (Chạm lần nữa để bỏ chọn)'
-                      : eligible
-                      ? `✓ Đủ điều kiện (Đơn ≥${Math.round(
-                          v.minOrderSubtotal / 1000
-                        )}k)`
-                      : `Cần mua thêm ${formatVND(shortfall)} (Đơn ≥${Math.round(
-                          v.minOrderSubtotal / 1000
-                        )}k)`}
-                  </Text>
-                </View>
-                {active && <Check size={14} color="#FDE68A" strokeWidth={2.8} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                  {active && (
+                    <Check size={14} color="#FDE68A" strokeWidth={2.8} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
-        {/* Manual Code Input */}
+        {/* Manual Code Input (for Personal 1-to-1 Mission Codes VD25-... / FB15-...) */}
         <View style={styles.manualRow}>
           <TextInput
             style={styles.manualInput}
-            placeholder="Nhập mã giảm giá (VD: CHAOBAN10K)..."
+            placeholder="Nhập mã riêng Tiệm tặng qua Chat (VD: VD25-XXXX, FB15-XXXX)..."
             placeholderTextColor="#A1887F"
             value={manualInput}
             onChangeText={(txt) => {
@@ -305,13 +499,18 @@ export function PromoMilestoneAndPickerCard({
             }}
             autoCapitalize="characters"
             returnKeyType="done"
-            onSubmitEditing={handleApplyManual}
+            onSubmitEditing={() => void handleApplyManual()}
           />
           <TouchableOpacity
             style={styles.applyBtn}
-            onPress={handleApplyManual}
+            onPress={() => void handleApplyManual()}
+            disabled={checkingServer}
             activeOpacity={0.85}>
-            <Text style={styles.applyBtnText}>Áp dụng</Text>
+            {checkingServer ? (
+              <ActivityIndicator size="small" color="#FFFDF9" />
+            ) : (
+              <Text style={styles.applyBtnText}>Áp dụng</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -328,14 +527,173 @@ export function PromoMilestoneAndPickerCard({
           <View style={styles.appliedBanner}>
             <Gift size={14} color="#065F46" />
             <Text style={styles.appliedBannerText}>
-              Đã áp mã <Text style={{ fontWeight: '900' }}>{evalResult.code}</Text> — Giảm trực tiếp{' '}
+              Đã áp mã{' '}
+              <Text style={{ fontWeight: '900' }}>{evalResult.code}</Text> — Giảm
+              trực tiếp{' '}
               <Text style={{ fontWeight: '900' }}>
                 -{formatVND(evalResult.discountAmount)}
-              </Text>{' '}
-              vào đơn hàng!
+              </Text>
+              {isVd25GiftActive
+                ? ' + Mở khóa chọn 01 sản phẩm 35.000₫ của Tiệm miễn phí (0₫) bên dưới!'
+                : ' trên sản phẩm lẻ!'}
             </Text>
           </View>
         ) : null}
+
+        {/* Interactive 0₫ Shop Product Gift Picker when VD25-XXXXXX is applied */}
+        {isVd25GiftActive && bonusGiftChoices.length > 0 && (
+          <View
+            style={{
+              backgroundColor: '#FDF2F8',
+              borderWidth: 1.5,
+              borderColor: '#F472B6',
+              borderRadius: 12,
+              padding: 10,
+              gap: 8,
+            }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 6,
+              }}>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '900',
+                  color: '#9D174D',
+                  flex: 1,
+                }}>
+                🎀 Chọn 01 sản phẩm giá 35.000₫ của Tiệm làm quà tặng kèm (Giá 0₫):
+              </Text>
+              <View
+                style={{
+                  backgroundColor: '#9D174D',
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 999,
+                }}>
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: '900',
+                    color: '#FFFFFF',
+                  }}>
+                  MIỄN PHÍ 0₫
+                </Text>
+              </View>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+              {bonusGiftChoices.map((gift) => {
+                const isPicked = activeBonusGift?.id === gift.id;
+                return (
+                  <TouchableOpacity
+                    key={gift.id}
+                    onPress={() => {
+                      setSelectedBonusGiftId(gift.id);
+                      setSelectedGiftIdState(gift.id);
+                    }}
+                    activeOpacity={0.85}
+                    style={{
+                      width: 118,
+                      backgroundColor: isPicked ? '#FCE7F3' : '#FFFFFF',
+                      borderWidth: 1.5,
+                      borderColor: isPicked ? '#BE185D' : '#FBCFE8',
+                      borderRadius: 11,
+                      padding: 6,
+                      gap: 4,
+                    }}>
+                    <View
+                      style={{
+                        width: '100%',
+                        height: 76,
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        backgroundColor: '#FAF5EF',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                      {gift.image ? (
+                        Platform.OS === 'web' ? (
+                          React.createElement('img', {
+                            src: gift.image,
+                            alt: gift.displayLabel,
+                            style: {
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                            },
+                          })
+                        ) : (
+                          <Image
+                            source={{ uri: gift.image }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode="cover"
+                          />
+                        )
+                      ) : (
+                        <Text style={{ fontSize: 24 }}>🎁</Text>
+                      )}
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: isPicked ? '900' : '700',
+                        color: '#3B281E',
+                      }}
+                      numberOfLines={2}>
+                      {gift.displayLabel}
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 5,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: '900',
+                          color: '#15803D',
+                        }}>
+                        0₫
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          color: '#9CA3AF',
+                          textDecorationLine: 'line-through',
+                        }}>
+                        {formatVND(gift.originalPrice)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {activeBonusGift && (
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '800',
+                  color: '#831843',
+                }}>
+                ✓ Đã chọn quà tặng kèm:{' '}
+                <Text style={{ color: '#065F46' }}>
+                  {activeBonusGift.displayLabel} (0₫)
+                </Text>
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -413,6 +771,20 @@ const styles = StyleSheet.create({
   milestoneStepTextReached: {
     color: '#15803D',
     fontWeight: '800',
+  },
+  comboGuardNotice: {
+    backgroundColor: '#FAF4EC',
+    borderWidth: 1,
+    borderColor: '#E5D5C3',
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  comboGuardText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6E5239',
+    lineHeight: 15.5,
   },
   pickerSection: {
     gap: 7,
@@ -498,14 +870,16 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     paddingHorizontal: 10,
     paddingVertical: 6.5,
-    fontSize: 12,
+    fontSize: 16,
     color: '#3B281E',
   },
   applyBtn: {
     backgroundColor: '#6E4F37',
     paddingHorizontal: 12,
-    paddingVertical: 7.5,
+    paddingVertical: 8,
     borderRadius: 9,
+    minWidth: 72,
+    alignItems: 'center',
   },
   applyBtnText: {
     fontSize: 11.5,

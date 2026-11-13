@@ -30,7 +30,7 @@ const SOCIAL_PROOF_EVENTS: SocialProofEvent[] = [
   {
     buyer: 'Bạn Khánh Linh',
     city: 'Cầu Giấy, Hà Nội',
-    action: 'vừa áp mã KHAITRUONG20K & đặt',
+    action: 'vừa đặt mua',
     itemName: 'Combo Cặp Đôi Cung Hoàng Đạo',
     productId: 'combo_couple_zodiac_01',
     timeAgo: '6 phút trước',
@@ -46,8 +46,8 @@ const SOCIAL_PROOF_EVENTS: SocialProofEvent[] = [
   {
     buyer: 'Bạn Hoàng Nam',
     city: 'Đà Nẵng',
-    action: 'vừa áp mã CUONLEN35K (Freeship) & đặt',
-    itemName: 'Combo Ấm Áp Đà Lạt (Khăn + Mũ Len)',
+    action: 'vừa được Freeship 0₫ & đặt',
+    itemName: 'Combo Ấm Áp Đà Lạt (Chùm Tai & Thú Bông)',
     productId: 'combo_winter_dalat_06',
     timeAgo: '15 phút trước',
   },

@@ -3,6 +3,7 @@ import {
     ComboSlotCandidate,
     resolveImageUri,
 } from '@/utils/comboStudioComposer';
+import { formatVND } from '@/utils/formatCurrency';
 import { Plus, Sparkles } from 'lucide-react-native';
 import React from 'react';
 import {
@@ -235,7 +236,18 @@ export function ComboSlotSelector({
                   numberOfLines={1}>
                   {cand.label}
                 </Text>
-              </TouchableOpacity>
+                {cand.unitPrice && cand.unitPrice > 0 ? (
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: '800',
+                      color: active ? '#B45309' : '#7A6555',
+                    }}
+                    numberOfLines={1}>
+                    Lẻ: {formatVND(cand.unitPrice)}
+                  </Text>
+                ) : null}
+                </TouchableOpacity>
             );
           })}
         </ScrollView>

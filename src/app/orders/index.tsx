@@ -1,7 +1,7 @@
 import {
-  getOrderStatusColor,
-  getOrderStatusLabel,
-  ORDER_STATUS_NEXT,
+    getOrderStatusColor,
+    getOrderStatusLabel,
+    ORDER_STATUS_NEXT,
 } from '@/constants/orderStatus';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/store/AuthContext';
@@ -9,37 +9,37 @@ import { useOrders } from '@/store/OrderContext';
 import type { Order, OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
 import {
-  exportOrdersToGoshipCsv,
-  formatShippingSlipForClipboard,
-  getCarrierTrackingUrl,
-  getCodCollectAmount,
+    exportOrdersToGoshipCsv,
+    formatShippingSlipForClipboard,
+    getCarrierTrackingUrl,
+    getCodCollectAmount,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import {
-  ArrowRightCircle,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Home,
-  QrCode,
-  ShoppingBag,
-  Trash2,
-  Truck,
+    ArrowRightCircle,
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Copy,
+    Home,
+    QrCode,
+    ShoppingBag,
+    Trash2,
+    Truck,
 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  Linking,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Alert,
+    FlatList,
+    Linking,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -194,6 +194,30 @@ export default function OrdersScreen() {
                     .map((i) => `💌 Thiệp: "${i.product.giftCardNote}"`)
                     .join(' • ')}
                 </Text>
+              )}
+              {item.shippingAddress?.bonusGiftProductName && (
+                <View
+                  style={{
+                    marginTop: 5,
+                    alignSelf: 'flex-start',
+                    backgroundColor: '#FDF2F8',
+                    borderWidth: 1,
+                    borderColor: '#F472B6',
+                    borderRadius: 8,
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '800',
+                      color: '#9D174D',
+                    }}>
+                    {isAdmin
+                      ? `🎀 NHỚ BỎ KÈM QUÀ TẶNG (0₫): ${item.shippingAddress.bonusGiftProductName}`
+                      : `🎀 Quà tặng kèm (0₫): ${item.shippingAddress.bonusGiftProductName}`}
+                  </Text>
+                </View>
               )}
               <Text style={styles.orderDate}>
                 {new Date(item.createdAt).toLocaleDateString('vi-VN')} • {item.paymentMethod}

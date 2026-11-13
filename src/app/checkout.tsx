@@ -1,5 +1,8 @@
 import { HiddenBotField } from '@/components/HiddenBotField';
-import { PromoMilestoneAndPickerCard } from '@/components/PromoMilestoneAndPickerCard';
+import {
+    PromoMilestoneAndPickerCard,
+    type AppliedPromoSelection,
+} from '@/components/PromoMilestoneAndPickerCard';
 import { VintageGiftCardPreview } from '@/components/VintageGiftCardPreview';
 import {
     CHECKOUT_DELIVERY,
@@ -20,12 +23,18 @@ import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { useShop } from '@/store/ShopContext';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
-import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
+import {
+    calculateDynamicPairComboPrice,
+    computeRetailEligibleSubtotal,
+    getProductColorOptionsWithCombo,
+    isComboColorOption,
+} from '@/utils/comboPricing';
 import {
     validateRealCustomerEmail,
     validateVietnamRealPhone,
 } from '@/utils/contactTrustValidator';
 import { formatVND } from '@/utils/formatCurrency';
+import { markVoucherConsumedLocally } from '@/utils/promoEngine';
 import {
     checkRateLimit,
     getOrCaptureVisitorTrafficSource,
@@ -88,8 +97,10 @@ export default function CheckoutScreen() {
     selectedAccessoryId,
     selectedAccessory,
     giftCardNote,
+    comboSlot1Id,
+    comboSlot2Id,
     unitPrice,
-  } = useLocalSearchParams<{
+    } = useLocalSearchParams<{
     mode?: string;
     productId?: string;
     quantity?: string;
@@ -98,8 +109,10 @@ export default function CheckoutScreen() {
     selectedAccessoryId?: string;
     selectedAccessory?: string;
     giftCardNote?: string;
+    comboSlot1Id?: string;
+    comboSlot2Id?: string;
     unitPrice?: string;
-  }>();
+    }>();
   const isBuyNow = mode === 'buyNow' || mode === 'buy_now';
 
   const { cart, clearCart, products, updateCartItemPackaging } = useShop();
@@ -145,10 +158,10 @@ export default function CheckoutScreen() {
     }
     return '';
   });
-  const [appliedPromo, setAppliedPromo] = useState<{
-    code: string;
-    discountAmount: number;
-  }>({ code: '', discountAmount: 0 });
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromoSelection>({
+    code: '',
+    discountAmount: 0,
+  });
 
   useEffect(() => {
     const e = (user?.email || '').trim().toLowerCase();
@@ -204,15 +217,43 @@ export default function CheckoutScreen() {
       : 'Tự dùng / Tiêu chuẩn';
     const resolvedAccessoryEmoji = isGiftBox ? '🎁' : '🛍️';
 
-    const baseVariantPrice =
-      matchedColor?.price && Number(matchedColor.price) > 0
+    const resolveSlotUnit = (slotRaw?: string): number | null => {
+      if (!slotRaw) return null;
+      const [sProdId, sVarId] = String(slotRaw).split('__');
+      const sProd = products.find((p) => p.id === sProdId);
+      if (!sProd) return null;
+      if (sVarId && sVarId !== 'main') {
+        const mv = (sProd.colorOptions || []).find(
+          (c) => String(c.id) === sVarId
+        );
+        if (mv?.price && Number(mv.price) > 0) return Number(mv.price);
+      }
+      const fPrice = sProd.colorOptions?.[0]?.price;
+      if (fPrice && Number(fPrice) > 0) return Number(fPrice);
+      return Number(sProd.price) > 0 ? Number(sProd.price) : null;
+    };
+
+    const s1Unit = resolveSlotUnit(comboSlot1Id);
+    const s2Unit = resolveSlotUnit(comboSlot2Id);
+    const dynamicCombo =
+      isComboColorOption(matchedColor) && s1Unit && s2Unit
+        ? calculateDynamicPairComboPrice(s1Unit, s2Unit)
+        : null;
+
+    const baseVariantPrice = dynamicCombo
+      ? dynamicCombo.comboPrice
+      : matchedColor?.price && Number(matchedColor.price) > 0
         ? Number(matchedColor.price)
         : Math.max(1000, Number(base.price));
     const authoritativePrice = baseVariantPrice + accessoryDelta;
     const colorLabel = (selectedColor || matchedColor?.name || '').trim();
+    const slotSuffix =
+      comboSlot1Id && comboSlot2Id
+        ? `__pair_${comboSlot1Id}_${comboSlot2Id}`
+        : '';
     return {
       ...base,
-      id: `${base.id}__${matchedColor?.id || 'c1'}__${resolvedAccessoryId}`,
+      id: `${base.id}__${matchedColor?.id || 'c1'}__${resolvedAccessoryId}${slotSuffix}`,
       baseProductId: base.id,
       name: colorLabel ? `${base.name} (${colorLabel})` : base.name,
       color: colorLabel || base.color,
@@ -222,11 +263,13 @@ export default function CheckoutScreen() {
       selectedAccessoryId: resolvedAccessoryId,
       selectedAccessoryName: resolvedAccessoryName,
       selectedAccessoryEmoji: resolvedAccessoryEmoji,
+      comboSlot1Id: comboSlot1Id ? String(comboSlot1Id) : undefined,
+      comboSlot2Id: comboSlot2Id ? String(comboSlot2Id) : undefined,
       giftCardNote: isGiftBox ? buyNowGiftNote : undefined,
       image: matchedColor?.image || base.image,
       price: authoritativePrice,
     };
-  }, [
+    }, [
     isBuyNow,
     productId,
     products,
@@ -234,9 +277,11 @@ export default function CheckoutScreen() {
     selectedColor,
     selectedAccessoryId,
     selectedAccessory,
+    comboSlot1Id,
+    comboSlot2Id,
     buyNowGiftOverride,
     buyNowGiftNote,
-  ]);
+    ]);
 
   const buyNowQtyNum = Math.max(1, Math.min(99, parseInt(buyNowQty ?? '1', 10) || 1));
 
@@ -251,6 +296,11 @@ export default function CheckoutScreen() {
   const subtotal = useMemo(() => {
     return checkoutItems.reduce((sum, ci) => sum + ci.product.price * ci.quantity, 0);
   }, [checkoutItems]);
+
+  const { eligibleRetailSubtotal, hasComboItems } = useMemo(
+    () => computeRetailEligibleSubtotal(checkoutItems),
+    [checkoutItems]
+  );
 
   const initialSessionDraft = useMemo(() => {
     try {
@@ -811,7 +861,10 @@ export default function CheckoutScreen() {
           appliedPromo.discountAmount > 0
             ? appliedPromo.discountAmount
             : undefined,
-      },
+        bonusGiftProductId: appliedPromo.bonusGiftProductId || undefined,
+        bonusGiftProductName: appliedPromo.bonusGiftProductName || undefined,
+        bonusGiftValue: appliedPromo.bonusGiftValue || undefined,
+        },
       paymentMethod: selectedPayment.title,
       status,
       createdAt: new Date().toISOString(),
@@ -823,6 +876,10 @@ export default function CheckoutScreen() {
       addOrder(order).catch(() => {}),
       new Promise((resolve) => setTimeout(resolve, 1800)),
     ]);
+
+    if (appliedPromo.code) {
+      markVoucherConsumedLocally(appliedPromo.code);
+    }
 
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -1587,6 +1644,10 @@ export default function CheckoutScreen() {
               <View style={styles.divider} />
               <PromoMilestoneAndPickerCard
                 subtotal={subtotal}
+                eligibleRetailSubtotal={eligibleRetailSubtotal}
+                hasComboItems={hasComboItems}
+                customerEmail={customerEmailInput.trim().toLowerCase() || user?.email}
+                customerPhone={selectedAddress?.phone}
                 onPromoChange={setAppliedPromo}
               />
               <View style={styles.subRow}>
@@ -1608,6 +1669,29 @@ export default function CheckoutScreen() {
                       { color: '#065F46', fontWeight: '900' },
                     ]}>
                     -{formatVND(appliedPromo.discountAmount)}
+                  </Text>
+                </View>
+              )}
+              {appliedPromo.bonusGiftProductName && (
+                <View style={styles.subRow}>
+                  <Text
+                    style={[
+                      styles.subLabel,
+                      {
+                        color: '#9D174D',
+                        fontWeight: '800',
+                        flex: 1,
+                        paddingRight: 8,
+                      },
+                    ]}>
+                    🎀 Quà tặng kèm ({appliedPromo.bonusGiftProductName})
+                  </Text>
+                  <Text
+                    style={[
+                      styles.subValue,
+                      { color: '#15803D', fontWeight: '900' },
+                    ]}>
+                    0₫
                   </Text>
                 </View>
               )}

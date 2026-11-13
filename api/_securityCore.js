@@ -23,6 +23,7 @@ const SUPABASE_SERVICE_KEY =
 const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
 const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
 const SHOP_CONFIG_PARTITION = '__TCL_SHOP_CONFIG_V1__';
+const PERSONAL_VOUCHER_PARTITION = '__TCL_PERSONAL_VOUCHER_V1__';
 const HOLDER_USER_ID = '57090d46-4e82-4fa0-93bb-1ff5e46c22c2';
 
 // Server-only EmailJS configuration (kept out of client bundle)
@@ -130,6 +131,135 @@ const STATIC_CATALOG_PRICES = {
   vw_acc_bracelet_06: 45000,
   vw_stem_pastel_07: 75000,
   vw_stem_glitter_08: 39000,
+  // 28 Active Bundled Catalog Products & All Individual Model Variant Prices
+  user_1794237712564: 189000,
+  user_1794237712564__c_1794237614898_1: 189000,
+  user_1794237712564__c_1794237614898_2: 189000,
+  user_1794237712564__c_1794237614898_3: 189000,
+  user_1794237712564__c_1794237614898_4: 189000,
+  user_1794233156945: 89000,
+  user_1794233156945__c_1794231762946_1: 89000,
+  user_1794233156945__c_1794232857632_2: 89000,
+  user_1794233156945__c_1794232857632_4: 89000,
+  user_1794233156945__c_1794232857632_5: 89000,
+  user_1794233156945__c_1794232857632_6: 89000,
+  user_1794212097527: 159000,
+  user_1794212097527__c_1794211667754_1: 159000,
+  user_1794212097527__c_1794211708211_2: 159000,
+  user_1794212097527__c_1794211717825_3: 279000,
+  user_1794212097527__c_1794211721657_4: 279000,
+  user_1794212097527__c_1794211726067_5: 359000,
+  user_1794212097527__c_1794211729899_6: 359000,
+  user_1794156959442: 95000,
+  user_1794156959442__c_1794156656125_1: 95000,
+  user_1794156959442__c_1794156665809_2: 95000,
+  user_1794156959442__c_1794156669391_3: 95000,
+  user_1794156959442__c_1794156672485_4: 95000,
+  user_1794156959442__c_1794156675613_5: 95000,
+  user_1794155402893: 179000,
+  user_1794155402893__c_1794154326039_2: 179000,
+  user_1794155402893__c_1794154331551_3: 249000,
+  user_1794155402893__c_1794154336495_4: 249000,
+  user_1794155402893__c_1794154341457_5: 179000,
+  user_1794155402893__c_1794154346182_6: 249000,
+  user_1794155402893__c_1794154750715_6: 179000,
+  user_1794152247063: 249000,
+  user_1794152247063__c_1794151762917_1: 249000,
+  user_1794152247063__c_1794151769355_2: 249000,
+  user_1794152247063__c_1794151772555_3: 249000,
+  user_1794152247063__c_1794151776664_4: 249000,
+  user_1794152247063__c_1794151779569_5: 249000,
+  user_1794152247063__c_1794152017278_6: 249000,
+  user_1793987529864: 65000,
+  user_1793987529864__c_1793987161557_1: 65000,
+  user_1793987529864__c_1793987165201_2: 65000,
+  user_1793987529864__c_1793987182174_3: 65000,
+  user_1793987529864__c_1793987199983_4: 65000,
+  user_1793987529864__c_1793987209371_5: 65000,
+  user_1793987529864__c_1793987392353_6: 65000,
+  user_1793985079054: 365000,
+  user_1793985079054__c_1793984225582_1: 365000,
+  user_1793985079054__c_1793984239521_2: 350000,
+  user_1793985079054__c_1793984243388_3: 350000,
+  user_1793985079054__c_1793984246706_4: 350000,
+  user_1793985079054__c_1793984252897_5: 350000,
+  user_1793985079054__c_1793984258973_6: 350000,
+  user_1793985079054__c_1793984263755_7: 350000,
+  user_1793981290544: 249000,
+  user_1793981290544__c_1793980521212_1: 249000,
+  user_1793981290544__c_1793980820399_2: 249000,
+  user_1793981290544__c_1793980825202_3: 249000,
+  user_1793976261276: 139000,
+  user_1793976261276__c_1793976215781_1: 139000,
+  user_1793958733621: 49000,
+  user_1793958733621__c_1793958591942_1: 49000,
+  user_1793958181855: 49000,
+  user_1793958181855__c_1793958000336_1: 49000,
+  user_1793956553782: 69000,
+  user_1793956553782__c_1793956417108_1: 69000,
+  user_1793956553782__c_1793956421634_2: 69000,
+  user_1793955545289: 49000,
+  user_1793955545289__c_1793954257159_1: 49000,
+  user_1793955545289__c_1793955268124_2: 49000,
+  user_1793955545289__c_1793955283824_3: 49000,
+  user_1793955545289__c_1793955318111_4: 49000,
+  user_1793955545289__c_1793955355143_5: 49000,
+  user_1793955545289__c_1793955383931_6: 49000,
+  user_1793955545289__c_1793955422149_7: 49000,
+  user_1793955545289__c_1793955452644_8: 49000,
+  user_1793955545289__c_1793955471835_9: 49000,
+  user_1793906593712: 249000,
+  user_1793906593712__c_1793906202767_1: 249000,
+  user_1793906593712__c_1793906202767_2: 249000,
+  user_1793906593712__c_1793906202767_3: 189000,
+  user_1793905231278: 159000,
+  user_1793905231278__c_1793904987933_2: 159000,
+  user_1793905231278__c_1793904987933_3: 159000,
+  user_1793885702524: 189000,
+  user_1793885702524__c_1793885604415_2: 189000,
+  user_1793885702524__c_1793885604415_3: 189000,
+  user_1793885702524__c_1793885604415_4: 189000,
+  user_1793884910153: 149000,
+  user_1793884910153__c_1793884790378_1: 149000,
+  user_1793884910153__c_1793884790378_2: 149000,
+  user_1793884910153__c_1793884790378_3: 149000,
+  user_1793817035699: 345000,
+  user_1793817035699__c_1793816582953_1: 345000,
+  user_1793817035699__c_1793816621139_2: 345000,
+  user_1793817035699__c_1793816675157_3: 345000,
+  user_1793817035699__c_1793816698913_4: 345000,
+  user_1793817035699__c_1793816844678_5: 345000,
+  user_1793817035699__c_1793816927315_6: 345000,
+  user_1793815539213: 279000,
+  user_1793815539213__c_1793815153681_1: 279000,
+  user_1793815539213__c_1793815178234_2: 279000,
+  user_1793815539213__c_1793815203209_3: 279000,
+  user_1793815539213__c_1793815265543_4: 279000,
+  user_1793811032427: 39000,
+  user_1793811032427__c_1: 39000,
+  user_1793811032427__c_2: 39000,
+  user_1793809415860: 45000,
+  user_1793809415860__c_1: 45000,
+  user_1793809415860__c_1793810239811_2: 45000,
+  user_1793806143788: 49000,
+  user_1793806143788__c_2: 49000,
+  user_1793806143788__c_1793811081128_3: 49000,
+  user_1793804889048: 49000,
+  user_1793804889048__c_1: 49000,
+  user_1793804889048__c_2: 49000,
+  user_1793721241087: 69000,
+  user_1793721241087__c_1793721040375_1: 69000,
+  user_1793721241087__c_1793721040375_2: 69000,
+  user_1793721241087__c_1793721040375_3: 69000,
+  user_1793721241087__c_1793721040375_4: 69000,
+  user_1793721241087__c_1793721040375_5: 69000,
+  user_1793721241087__c_1793721040375_6: 69000,
+  user_1793721241087__c_1793721040375_7: 69000,
+  user_1793721241087__c_1793721040375_8: 69000,
+  user_1793721241087__c_1793721040375_9: 69000,
+  user_1793721241087__c_1793721040375_10: 69000,
+  user_1793721241087__c_1793721040375_11: 69000,
+  user_1793721241087__c_1793721040375_12: 69000,
   // 6 Curated Theme Combos + Package Variants
   combo_couple_zodiac_01: 139000,
   combo_couple_zodiac_01__pkg_couple_2zodiac: 139000,
@@ -144,8 +274,8 @@ const STATIC_CATALOG_PRICES = {
   combo_muse_flower_plush_04: 145000,
   combo_muse_flower_plush_04__pkg_muse_delicate: 145000,
   combo_muse_flower_plush_04__pkg_muse_premium: 199000,
-  combo_twinkle_universe_05: 379000,
-  combo_twinkle_universe_05__pkg_twinkle_pair_mix: 379000,
+  combo_twinkle_universe_05: 395000,
+  combo_twinkle_universe_05__pkg_twinkle_pair_mix: 395000,
   combo_twinkle_universe_05__pkg_twinkle_pair_regular: 469000,
   combo_winter_dalat_06: 219000,
   combo_winter_dalat_06__pkg_winter_earmuff: 219000,
@@ -468,12 +598,15 @@ const EXACT_COMBO2_PRICE_MAP_SERVER = {
   255000: 479000,
   269000: 499000,
   270000: 499000,
+  279000: 519000,
   289000: 539000,
   345000: 649000,
+  350000: 659000,
+  359000: 669000,
   365000: 689000,
-};
+  };
 
-function calculateSmartCombo2PriceServer(unitPrice) {
+  function calculateSmartCombo2PriceServer(unitPrice) {
   const cleanUnit = Math.max(1000, Math.round(Number(unitPrice) || 0));
   if (EXACT_COMBO2_PRICE_MAP_SERVER[cleanUnit]) {
     return EXACT_COMBO2_PRICE_MAP_SERVER[cleanUnit];
@@ -487,7 +620,43 @@ function calculateSmartCombo2PriceServer(unitPrice) {
     return Math.max(1000, twoTotal - 9000);
   }
   return Math.max(1000, discounted);
-}
+  }
+
+  function calculateDynamicPairComboPriceServer(price1, price2) {
+  const u1 = Math.max(1000, Math.round(Number(price1) || 0));
+  const u2 = Math.max(1000, Math.round(Number(price2) || 0));
+  const originalPairTotal = u1 + u2;
+  if (u1 === u2) {
+    return calculateSmartCombo2PriceServer(u1);
+  }
+  if (originalPairTotal <= 40000) {
+    return Math.max(1000, originalPairTotal - 3000);
+  }
+  let comboPrice = Math.round((originalPairTotal * 0.925) / 10000) * 10000 - 1000;
+  if (comboPrice >= originalPairTotal) {
+    comboPrice = Math.max(1000, originalPairTotal - 9000);
+  }
+  const minSafeFloor = Math.round((originalPairTotal * 0.88) / 1000) * 1000;
+  if (comboPrice < minSafeFloor) {
+    comboPrice =
+      minSafeFloor + 9000 < originalPairTotal ? minSafeFloor : originalPairTotal - 9000;
+  }
+  return Math.max(1000, comboPrice);
+  }
+
+  function resolveComboSlotUnitPriceServer(slotId, priceMap) {
+  if (!slotId || typeof slotId !== 'string') return 0;
+  const parts = slotId.split('__');
+  const slotProdId = parts[0];
+  const slotVarId = parts[1] || '';
+  if (!slotProdId) return 0;
+  if (slotVarId && slotVarId !== 'main') {
+    const exact = priceMap.get(`${slotProdId}__${slotVarId}`);
+    if (typeof exact === 'number' && exact > 0) return exact;
+  }
+  const base = priceMap.get(slotProdId);
+  return typeof base === 'number' && base > 0 ? base : 0;
+  }
 
 /**
  * Resolves authoritative product prices from the Supabase `products` table + server catalog
@@ -758,18 +927,265 @@ async function logServerAuditEvent(req, payload = {}) {
 }
 
 /**
- * Server-Authoritative Grand Opening Promo Vouchers (Anti-Loss Protection):
- * Enforces strict minimum order subtotals on the Server so no client can fake a discount on small orders.
+ * Server-Authoritative Profit-Protected Promo Vouchers (Direction 2 + Personal 1-to-1 Social Mission Vouchers):
+ * - Public vouchers NEVER stack on top of discounted Combo items (`eligibleRetailSubtotal` only).
+ * - `TIEMLEN10K`: Strictly for first-time customers only (0 prior non-cancelled orders by userId, email, or phone).
+ * - `VIP20K`: Single-use per customer (cannot be reused across multiple orders).
+ * - Personal Mission Vouchers (`VD25-XXXXXX` for Video Unboxing + Web Link, `FB15-XXXXXX` for FB Follow + Public Share):
+ *   HMAC-signed on Server, bound 1-to-1 to the exact recipient (`boundUserId` / `boundEmail`), and burned (`status: 'USED'`) immediately upon order creation.
  */
 const AUTHORITATIVE_PROMO_VOUCHERS = {
-  CHAOBAN10K: { minOrderSubtotal: 99000, discountAmount: 10000 },
-  TRIAN15K: { minOrderSubtotal: 129000, discountAmount: 15000 },
-  KHAITRUONG20K: { minOrderSubtotal: 179000, discountAmount: 20000 },
-  CUONLEN35K: { minOrderSubtotal: 299000, discountAmount: 35000 },
-  VIP50K: { minOrderSubtotal: 429000, discountAmount: 50000 },
+  TIEMLEN10K: {
+    minRetailSubtotal: 159000,
+    discountAmount: 10000,
+    newCustomerOnly: true,
+    singleUsePerUser: true,
+  },
+  VIP20K: {
+    minRetailSubtotal: 399000,
+    discountAmount: 20000,
+    newCustomerOnly: false,
+    singleUsePerUser: true,
+  },
 };
 
-function resolveAuthoritativePromoDiscount(rawCode, authoritativeSubtotal) {
+const PERSONAL_MISSION_SPECS = {
+  video_unbox_25k: {
+    prefix: 'VD25',
+    discountAmount: 25000,
+    minRetailSubtotal: 159000,
+    title: 'Gói Quà 60.000₫: Giảm 25k + Tặng 1 SP 35k tự chọn của Tiệm',
+  },
+  fb_follow_share_15k: {
+    prefix: 'FB15',
+    discountAmount: 15000,
+    minRetailSubtotal: 119000,
+    title: 'Follow Fanpage FB + Chia sẻ bài công khai (-15.000₫)',
+  },
+};
+
+function signPersonalVoucherRecord(payload) {
+  const canonical = [
+    String(payload.code || '').trim().toUpperCase(),
+    String(payload.missionType || '').trim(),
+    String(payload.discountAmount || 0),
+    String(payload.minRetailSubtotal || 0),
+    String(payload.boundUserId || '').trim(),
+    String(payload.boundEmail || '').trim().toLowerCase(),
+    String(payload.createdAt || '').trim(),
+  ].join('|');
+  return crypto
+    .createHmac('sha256', BLOCKLIST_HMAC_SECRET)
+    .update(canonical)
+    .digest('hex');
+}
+
+function verifyPersonalVoucherRecord(record) {
+  if (!record || typeof record !== 'object' || !record.sig) return false;
+  const expected = signPersonalVoucherRecord(record);
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(String(record.sig)),
+      Buffer.from(expected)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function fetchUserPastValidOrders(userId, email, phone) {
+  const matchedOrders = new Map();
+  const headers = {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+  };
+
+  try {
+    if (userId) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/orders?userId=eq.${encodeURIComponent(
+          userId
+        )}&select=id,status,shippingAddress&limit=50`,
+        { headers }
+      );
+      if (r.ok) {
+        const rows = await r.json();
+        if (Array.isArray(rows)) {
+          for (const row of rows) {
+            if (row && row.id && row.status !== 'Đã hủy') {
+              matchedOrders.set(row.id, row);
+            }
+          }
+        }
+      }
+    }
+
+    // Also inspect recent orders for matching phone/email so creating a 2nd guest account cannot bypass new-customer check
+    if (phone || email) {
+      const r2 = await fetch(
+        `${SUPABASE_URL}/rest/v1/orders?select=id,userId,status,shippingAddress&order=createdAt.desc&limit=120`,
+        { headers }
+      );
+      if (r2.ok) {
+        const rows2 = await r2.json();
+        const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
+        const cleanEmail = String(email || '').trim().toLowerCase();
+        if (Array.isArray(rows2)) {
+          for (const row of rows2) {
+            if (!row || !row.id || row.status === 'Đã hủy') continue;
+            const addr = row.shippingAddress || {};
+            const rowPhone = String(addr.phone || '').replace(/[^0-9]/g, '');
+            const rowEmail = String(addr.email || '').trim().toLowerCase();
+            if (
+              (cleanPhone && rowPhone && cleanPhone === rowPhone) ||
+              (cleanEmail && rowEmail && cleanEmail === rowEmail)
+            ) {
+              matchedOrders.set(row.id, row);
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return Array.from(matchedOrders.values());
+}
+
+async function issuePersonalMissionVoucherServer({
+  missionType,
+  targetUserId,
+  targetEmail,
+  targetCustomerName,
+  targetOrderId,
+  issuedByEmail,
+  adminAccessToken,
+}) {
+  const spec = PERSONAL_MISSION_SPECS[missionType];
+  if (!spec) {
+    return { ok: false, error: 'Loại nhiệm vụ thưởng không hợp lệ.' };
+  }
+  const cleanUid = sanitizeTextServer(targetUserId || '', 80);
+  const cleanEmail = sanitizeTextServer(targetEmail || '', 120).toLowerCase();
+  if (!cleanUid && !cleanEmail) {
+    return {
+      ok: false,
+      error: 'Cần có Tài khoản hoặc Gmail của khách hàng để khóa mã riêng 1-1.',
+    };
+  }
+
+  const randSuffix = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const code = `${spec.prefix}-${randSuffix}`;
+  const nowIso = new Date().toISOString();
+
+  const record = {
+    code,
+    missionType,
+    title: spec.title,
+    discountAmount: spec.discountAmount,
+    minRetailSubtotal: spec.minRetailSubtotal,
+    boundUserId: cleanUid,
+    boundEmail: cleanEmail,
+    customerName: sanitizeTextServer(targetCustomerName || 'Khách hàng', 80),
+    sourceOrderId: sanitizeTextServer(targetOrderId || '', 80),
+    issuedBy: sanitizeTextServer(issuedByEmail || 'Admin', 120),
+    status: 'ACTIVE',
+    createdAt: nowIso,
+  };
+  record.sig = signPersonalVoucherRecord(record);
+
+  const row = {
+    id: `pv_${code}`,
+    userId: HOLDER_USER_ID,
+    fullName: PERSONAL_VOUCHER_PARTITION,
+    phone: cleanUid || cleanEmail,
+    city: code,
+    district: nowIso,
+    ward: 'ACTIVE',
+    detailAddress: JSON.stringify(record),
+    isDefault: false,
+  };
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${adminAccessToken || SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify(row),
+  });
+
+  if (!res.ok) {
+    return { ok: false, error: 'Không thể lưu mã cá nhân vào hệ thống.' };
+  }
+  return { ok: true, voucher: record };
+}
+
+async function markPersonalVoucherUsedServer(code, usedByOrderId, authToken) {
+  const cleanCode = String(code || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '');
+  if (!cleanCode.startsWith('VD25-') && !cleanCode.startsWith('FB15-')) return;
+
+  try {
+    const getRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/addresses?id=eq.${encodeURIComponent(
+        `pv_${cleanCode}`
+      )}&fullName=eq.${PERSONAL_VOUCHER_PARTITION}&select=id,detailAddress&limit=1`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        },
+      }
+    );
+    const rows = getRes.ok ? await getRes.json() : [];
+    const existing = Array.isArray(rows) ? rows[0] : null;
+    if (!existing || !existing.detailAddress) return;
+    const parsed =
+      typeof existing.detailAddress === 'string'
+        ? JSON.parse(existing.detailAddress)
+        : existing.detailAddress;
+
+    const updatedRecord = {
+      ...parsed,
+      status: 'USED',
+      usedOrderId: usedByOrderId,
+      usedAt: new Date().toISOString(),
+    };
+
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/addresses?id=eq.${encodeURIComponent(
+        `pv_${cleanCode}`
+      )}`,
+      {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${authToken || SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          ward: 'USED',
+          detailAddress: JSON.stringify(updatedRecord),
+        }),
+      }
+    );
+  } catch {
+    // ignore
+  }
+}
+
+async function resolveAuthoritativePromoDiscount(
+  rawCode,
+  eligibleRetailSubtotal,
+  actorContext = {}
+) {
   const code = String(rawCode || '')
     .trim()
     .toUpperCase()
@@ -777,17 +1193,154 @@ function resolveAuthoritativePromoDiscount(rawCode, authoritativeSubtotal) {
   if (!code) {
     return { promoCode: '', discountAmount: 0 };
   }
+
+  const retailSub = Math.max(0, Number(eligibleRetailSubtotal) || 0);
+  if (retailSub <= 0) {
+    return {
+      promoCode: '',
+      discountAmount: 0,
+      error:
+        'Mã giảm giá chỉ áp dụng cho các sản phẩm mua lẻ nguyên giá (không áp chồng lên gói Combo đã giảm giá sẵn).',
+    };
+  }
+
+  const userId = String(actorContext.userId || '').trim();
+  const email = String(actorContext.email || '').trim().toLowerCase();
+  const phone = String(actorContext.phone || '').trim();
+
+  // 1. Check Personal 1-to-1 Mission Vouchers (`VD25-XXXXXX` / `FB15-XXXXXX`)
+  if (code.startsWith('VD25-') || code.startsWith('FB15-')) {
+    try {
+      const pvRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/addresses?id=eq.${encodeURIComponent(
+          `pv_${code}`
+        )}&fullName=eq.${PERSONAL_VOUCHER_PARTITION}&select=id,ward,detailAddress&limit=1`,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          },
+        }
+      );
+      const pvRows = pvRes.ok ? await pvRes.json() : [];
+      const row = Array.isArray(pvRows) ? pvRows[0] : null;
+      if (!row || !row.detailAddress) {
+        return {
+          promoCode: '',
+          discountAmount: 0,
+          error: `Mã thưởng "${code}" không tồn tại hoặc không hợp lệ.`,
+        };
+      }
+      const parsed =
+        typeof row.detailAddress === 'string'
+          ? JSON.parse(row.detailAddress)
+          : row.detailAddress;
+
+      if (!verifyPersonalVoucherRecord(parsed)) {
+        return {
+          promoCode: '',
+          discountAmount: 0,
+          error: 'Chữ ký bảo mật của mã thưởng không hợp lệ.',
+        };
+      }
+
+      if (row.ward === 'USED' || parsed.status === 'USED') {
+        return {
+          promoCode: '',
+          discountAmount: 0,
+          error: `Mã "${code}" đã được sử dụng ở đơn trước và không thể dùng lại lần 2.`,
+        };
+      }
+
+      // Strict 1-to-1 Account Binding Check
+      const boundUid = String(parsed.boundUserId || '').trim();
+      const boundEmail = String(parsed.boundEmail || '').trim().toLowerCase();
+      const uidMatched = boundUid && userId && boundUid === userId;
+      const emailMatched = boundEmail && email && boundEmail === email;
+      if ((boundUid || boundEmail) && !uidMatched && !emailMatched) {
+        return {
+          promoCode: '',
+          discountAmount: 0,
+          error:
+            'Mã thưởng này được cấp độc quyền cho tài khoản khác — tài khoản của bạn không thể sử dụng.',
+        };
+      }
+
+      const minReq = Number(parsed.minRetailSubtotal) || 0;
+      if (retailSub < minReq) {
+        return {
+          promoCode: '',
+          discountAmount: 0,
+          error: `Mã ${code} áp dụng cho sản phẩm mua lẻ từ ${minReq.toLocaleString(
+            'vi-VN'
+          )}₫ (không tính món Combo).`,
+        };
+      }
+
+      return {
+        promoCode: code,
+        discountAmount: Number(parsed.discountAmount) || 0,
+        isPersonalVoucher: true,
+        title: parsed.title,
+      };
+    } catch {
+      return {
+        promoCode: '',
+        discountAmount: 0,
+        error: 'Không thể xác thực mã thưởng lúc này. Vui lòng thử lại.',
+      };
+    }
+  }
+
+  // 2. Check Public Store Vouchers (`TIEMLEN10K`, `VIP20K`)
   const rule = AUTHORITATIVE_PROMO_VOUCHERS[code];
   if (!rule) {
-    return { promoCode: '', discountAmount: 0 };
+    return {
+      promoCode: '',
+      discountAmount: 0,
+      error: `Mã "${code}" không tồn tại hoặc đã hết hạn.`,
+    };
   }
-  const sub = Number(authoritativeSubtotal) || 0;
-  if (sub < rule.minOrderSubtotal) {
-    return { promoCode: '', discountAmount: 0 };
+
+  if (retailSub < rule.minRetailSubtotal) {
+    return {
+      promoCode: '',
+      discountAmount: 0,
+      error: `Mã ${code} chỉ áp dụng khi tổng sản phẩm mua lẻ đạt từ ${rule.minRetailSubtotal.toLocaleString(
+        'vi-VN'
+      )}₫ (không tính các gói Combo đã giảm giá).`,
+    };
   }
+
+  const pastOrders = await fetchUserPastValidOrders(userId, email, phone);
+  if (rule.newCustomerOnly && pastOrders.length > 0) {
+    return {
+      promoCode: '',
+      discountAmount: 0,
+      error: `Mã ${code} chỉ dành riêng cho đơn hàng đầu tiên của khách hàng mới.`,
+    };
+  }
+
+  if (rule.singleUsePerUser) {
+    const alreadyUsed = pastOrders.some(
+      (ord) =>
+        String((ord.shippingAddress && ord.shippingAddress.promoCode) || '')
+          .trim()
+          .toUpperCase() === code
+    );
+    if (alreadyUsed) {
+      return {
+        promoCode: '',
+        discountAmount: 0,
+        error: `Bạn đã sử dụng mã ${code} ở đơn hàng trước rồi (mỗi khách chỉ dùng 1 lần).`,
+      };
+    }
+  }
+
   return {
     promoCode: code,
     discountAmount: rule.discountAmount,
+    isPersonalVoucher: false,
   };
 }
 
@@ -892,6 +1445,11 @@ async function sendOrderNotificationServer(order) {
     if (addr.promoCode && Number(addr.discountAmount) > 0) {
       itemLines.push(
         `🎟️ Mã giảm giá (${addr.promoCode}): -${formatPrice(addr.discountAmount)}`
+      );
+    }
+    if (addr.bonusGiftProductName) {
+      itemLines.push(
+        `🎀 QUÀ TẶNG KÈM CẦN GÓI CHUNG (Mã ${addr.promoCode || 'VD25'}): +01 ${addr.bonusGiftProductName} — Miễn phí 0đ`
       );
     }
     itemLines.push(`🚚 Vận chuyển: ${shippingMethod} — ${formatPrice(shippingFee)}`);
@@ -1054,9 +1612,10 @@ async function sendOrderNotificationServer(order) {
             `💝 Cảm ơn ${
               addr.fullName || 'bạn'
             } đã tin tưởng và đón nhận sản phẩm thủ công từ Tiệm Cuộn Len!`,
-            `🌟 Mời bạn ghé trang đơn hàng để đánh giá 5 sao kèm hình ảnh thực tế và nhận ngay Mã Quà Tri Ân giảm 15.000₫ cho lần mua tiếp theo:`,
-            `🎁 Mã Voucher Tri Ân của bạn: TRIAN15K (Giảm 15.000₫ cho đơn từ 129.000₫)`,
-            `👉 Đánh giá & lưu mã ngay tại: https://www.tiemcuonlen.shop/orders/${order.id}`,
+            `🌟 Mời bạn ghé trang chi tiết đơn hàng để đánh giá 5 sao và tham gia 2 mục nhận Voucher độc quyền cho lần mua tiếp theo:`,
+            `🎬 Mục 1 — Nhận Gói Quà 60.000₫ (Giảm 25.000₫ + Tặng kèm 01 sản phẩm 35.000₫ tự chọn của Tiệm): Quay video khui hàng đăng Story/Bài viết lên Facebook, Instagram hoặc TikTok kèm tên & link web tiemcuonlen.shop`,
+            `👍 Mục 2 — Tặng mã riêng -15.000₫: Follow Fanpage Facebook của Tiệm & chia sẻ bài viết ở chế độ công khai`,
+            `👉 Gửi đánh giá & ảnh màn hình nhận mã riêng tại: https://www.tiemcuonlen.shop/orders/${order.id}`,
           ];
 
           const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
@@ -1075,10 +1634,10 @@ async function sendOrderNotificationServer(order) {
                 customer_phone: String(addr.phone || ''),
                 customer_address: 'Đơn hàng đã giao thành công',
                 items_list: lines.join('\n\n'),
-                total: '🎁 Tặng mã: TRIAN15K (-15.000₫)',
+                total: '🎁 Cơ hội nhận Voucher 25k & 15k',
                 payment_method: 'Hoàn thành đơn hàng',
                 order_date: nowStr,
-                subject: `💝 Cảm ơn bạn! Tiệm Cuộn Len tặng bạn mã TRIAN15K (-15.000₫)`,
+                subject: `💝 Cảm ơn bạn! Đánh giá đơn #${order.id} để nhận Voucher 25.000₫ từ Tiệm Cuộn Len`,
                 email: candidateCustEmail,
               },
             }),
@@ -1311,9 +1870,14 @@ async function sendOrderNotificationServer(order) {
     isIpBlockedOnServer,
     syncBlockedIpInMemoryCache,
     verifySupabaseUser,
+    calculateDynamicPairComboPriceServer,
+    resolveComboSlotUnitPriceServer,
     resolveAuthoritativeProductPrices,
     resolveAuthoritativeShippingConfig,
     resolveAuthoritativePromoDiscount,
+    issuePersonalMissionVoucherServer,
+    markPersonalVoucherUsedServer,
+    PERSONAL_VOUCHER_PARTITION,
     logServerAuditEvent,
     withGlobalErrorHandler,
     sendOrderNotificationServer,
