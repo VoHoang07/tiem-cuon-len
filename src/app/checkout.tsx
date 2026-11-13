@@ -32,6 +32,7 @@ import {
     getVisitorSelfReportedSource,
     isCurrentIpBlocked,
     recordSecurityAudit,
+    rememberVisitorKnownIdentity,
     setVisitorSelfReportedSource,
     validateHiddenBotField,
 } from '@/utils/securityGuard';
@@ -524,6 +525,32 @@ export default function CheckoutScreen() {
   );
 
   useEffect(() => {
+    if (isAdmin || checkoutItems.length === 0) return;
+    const summaryText = checkoutItems
+      .slice(0, 3)
+      .map((ci) => `${ci.product.name} ×${ci.quantity}`)
+      .join(', ');
+    void recordSecurityAudit({
+      eventType: 'CHECKOUT_STARTED',
+      severity: 'INFO',
+      path: '/checkout',
+      method: isBuyNow ? 'BUY_NOW_CHECKOUT' : 'CART_CHECKOUT',
+      userEmail: user?.email,
+      userId: user?.id,
+      customerName: selectedAddress?.fullName || user?.name,
+      customerPhone: selectedAddress?.phone,
+      isAdminActor: false,
+      dedupeKey: `checkout_start_${checkoutItems.length}_${subtotal}`,
+      dedupeWindowMs: 45_000,
+      details: {
+        itemCount: checkoutItems.length,
+        total: checkoutTotal,
+        summary: summaryText,
+      },
+    });
+  }, [isAdmin, checkoutItems.length, subtotal]);
+
+  useEffect(() => {
     if (!selectedAddressId && userAddresses.length > 0) {
       const defaultAddr = getDefaultAddress();
       setSelectedAddressId(defaultAddr?.id ?? userAddresses[0].id);
@@ -805,17 +832,29 @@ export default function CheckoutScreen() {
       // ignore
     }
 
+    rememberVisitorKnownIdentity({
+      name: selectedAddress.fullName,
+      phone: selectedAddress.phone,
+      email: customerEmailInput.trim().toLowerCase() || user?.email,
+      userId: user?.id,
+    });
+
     void recordSecurityAudit({
       eventType: 'CHECKOUT_ORDER_CREATED',
       severity: 'INFO',
       path: '/checkout',
       method: selectedPayment.type.toUpperCase(),
-      userEmail: user?.email,
+      userEmail: customerEmailInput.trim().toLowerCase() || user?.email,
       userId: user?.id,
+      customerName: selectedAddress.fullName,
+      customerPhone: selectedAddress.phone,
       details: {
         orderId,
         total: checkoutTotal,
         itemCount: checkoutItems.length,
+        customerName: selectedAddress.fullName,
+        customerPhone: selectedAddress.phone,
+        customerEmail: customerEmailInput.trim().toLowerCase() || user?.email || '',
         shippingMethod: shippingMethodLabel,
         paymentMethod: selectedPayment.title,
         howFoundShop: howFoundShop || getOrCaptureVisitorTrafficSource(),
@@ -1636,7 +1675,7 @@ export default function CheckoutScreen() {
                     gap: 6,
                   }}>
                   {[
-                    '🎵 TikTok (Copy link từ kênh)',
+                    '🎵 Xem từ kênh TikTok',
                     '🔍 Tự tìm trên Google',
                     '💬 Bạn bè / Zalo',
                     '📘 Facebook / IG',

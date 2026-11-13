@@ -8,6 +8,7 @@ import { useAuth } from '@/store/AuthContext';
 import { useProducts } from '@/store/ProductContext';
 import { CartItem, Product } from '@/types/product';
 import { getProductColorOptionsWithCombo } from '@/utils/comboPricing';
+import { recordSecurityAudit } from '@/utils/securityGuard';
 import {
     createContext,
     useCallback,
@@ -145,7 +146,7 @@ function rehydrateCartItem(ci: CartItem, catalogProducts?: Product[]): CartItem 
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { products: catalogProducts } = useProducts();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartHydrated, setCartHydrated] = useState(false);
@@ -441,22 +442,71 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return nextCart;
       });
 
-      await syncCartToSupabase(rehydrated.product.id, newQty);
-    },
-    [persistCart, syncCartToSupabase, catalogProducts]
-  );
+      if (role !== 'admin') {
+        void recordSecurityAudit({
+          eventType: 'CART_ADD_ITEM',
+          severity: 'INFO',
+          method: 'ADD_TO_CART',
+          userEmail: user?.email,
+          userId: user?.id,
+          customerName: user?.name,
+          isAdminActor: false,
+          dedupeKey: `cart_add_${rehydrated.product.id}`,
+          dedupeWindowMs: 4000,
+          details: {
+            productId: getBaseProductId(
+              rehydrated.product.id,
+              rehydrated.product.baseProductId
+            ),
+            productName: rehydrated.product.name,
+            variant:
+              rehydrated.product.selectedColorName ||
+              rehydrated.product.color ||
+              '',
+            packaging: rehydrated.product.selectedAccessoryName || '',
+            quantity,
+            price: rehydrated.product.price,
+          },
+        });
+      }
 
-  const removeFromCart = useCallback(
-    (productId: string) => {
+      await syncCartToSupabase(rehydrated.product.id, newQty);
+      },
+      [persistCart, syncCartToSupabase, catalogProducts, role, user?.email, user?.id, user?.name]
+      );
+
+      const removeFromCart = useCallback(
+      (productId: string) => {
       setCart((prev) => {
+        const removedTarget = prev.find((ci) => ci.product.id === productId);
+        if (removedTarget && role !== 'admin') {
+          void recordSecurityAudit({
+            eventType: 'CART_REMOVE_ITEM',
+            severity: 'INFO',
+            method: 'REMOVE_FROM_CART',
+            userEmail: user?.email,
+            userId: user?.id,
+            customerName: user?.name,
+            isAdminActor: false,
+            dedupeKey: `cart_rm_${productId}`,
+            dedupeWindowMs: 4000,
+            details: {
+              productId: getBaseProductId(
+                removedTarget.product.id,
+                removedTarget.product.baseProductId
+              ),
+              productName: removedTarget.product.name,
+            },
+          });
+        }
         const next = prev.filter((ci) => ci.product.id !== productId);
         persistCart(next);
         syncCartToSupabase(productId, null);
         return next;
       });
-    },
-    [persistCart, syncCartToSupabase]
-  );
+      },
+      [persistCart, syncCartToSupabase, role, user?.email, user?.id, user?.name]
+      );
 
   const updateCartQuantity = useCallback(
     (productId: string, quantity: number) => {

@@ -1,19 +1,22 @@
-import { Stack, useRouter, useSegments, usePathname, useGlobalSearchParams, type Href } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { View, Platform } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ShopProvider } from '@/store/ShopContext';
-import { AuthProvider, useAuth } from '@/store/AuthContext';
-import { OrderProvider } from '@/store/OrderContext';
-import { AddressProvider } from '@/store/AddressContext';
-import { PaymentMethodsProvider } from '@/store/PaymentMethodsContext';
-import { ChatProvider } from '@/store/ChatContext';
 import { BottomNav } from '@/components/BottomNav';
 import { ShopChatWidget } from '@/components/ShopChatWidget';
 import { YarnRollIntro } from '@/components/YarnRollIntro';
 import { COLORS } from '@/constants/theme';
-import { recordSecurityAudit } from '@/utils/securityGuard';
+import { AddressProvider } from '@/store/AddressContext';
+import { AuthProvider, useAuth } from '@/store/AuthContext';
+import { ChatProvider } from '@/store/ChatContext';
+import { OrderProvider } from '@/store/OrderContext';
+import { PaymentMethodsProvider } from '@/store/PaymentMethodsContext';
+import { ShopProvider } from '@/store/ShopContext';
+import {
+    recordSecurityAudit,
+    rememberVisitorKnownIdentity,
+} from '@/utils/securityGuard';
+import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments, type Href } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { Platform, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const PROTECTED_ROUTES = new Set([
   'checkout',
@@ -27,7 +30,7 @@ const PROTECTED_ROUTES = new Set([
 ]);
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, role } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const pathname = usePathname();
@@ -39,26 +42,41 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }>();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (user?.email || user?.name || user?.id) {
+      rememberVisitorKnownIdentity({
+        email: user?.email,
+        name: user?.name,
+        userId: user?.id,
+      });
+    }
+  }, [user?.email, user?.name, user?.id]);
+
+  useEffect(() => {
+    if (isLoading || role === 'admin') return;
+    const cleanPath = pathname || '/';
+    // Product detail & checkout screens log richer dedicated events (PRODUCT_VIEW / CHECKOUT_STARTED)
+    if (cleanPath.startsWith('/product/') || cleanPath === '/checkout') {
+      return;
+    }
     try {
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        const lastVisitLogged = Number(window.sessionStorage.getItem('tcl_session_audit_ts') || '0');
-        if (Date.now() - lastVisitLogged > 15 * 60 * 1000) {
-          window.sessionStorage.setItem('tcl_session_audit_ts', String(Date.now()));
-          recordSecurityAudit({
-            eventType: 'PAGE_VISIT',
-            severity: 'INFO',
-            path: pathname || '/',
-            method: 'GET_SESSION',
-            userEmail: user?.email || 'Khách (Guest)',
-            userId: user?.id || null,
-          });
-        }
+      if (typeof window !== 'undefined') {
+        void recordSecurityAudit({
+          eventType: 'PAGE_VISIT',
+          severity: 'INFO',
+          path: cleanPath,
+          method: 'ROUTE_VISIT',
+          userEmail: user?.email || 'Khách (Guest)',
+          userId: user?.id || null,
+          customerName: user?.name || null,
+          isAdminActor: role === 'admin',
+          dedupeKey: `route_${cleanPath}`,
+          dedupeWindowMs: 45_000,
+        });
       }
     } catch {
       // ignore
     }
-  }, [isLoading, user?.email, user?.id, pathname]);
+  }, [isLoading, role, user?.email, user?.id, user?.name, pathname]);
 
   useEffect(() => {
     if (isLoading) return;

@@ -12,6 +12,10 @@ import {
 import { validateRealCustomerEmail } from '@/utils/contactTrustValidator';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji } from '@/utils/getCategoryEmoji';
+import {
+    recordSecurityAudit,
+    rememberVisitorKnownIdentity,
+} from '@/utils/securityGuard';
 import { usePathname, useRouter } from 'expo-router';
 import {
     CheckCheck,
@@ -73,7 +77,7 @@ export function ShopChatWidget() {
     saveCustomerNotifyEmail,
     } = useChat();
     const { products } = useShop();
-    const { role } = useAuth();
+    const { user, role } = useAuth();
     const isAdmin = role === 'admin';
 
     const { width: rawWindowWidth } = useWindowDimensions();
@@ -100,8 +104,28 @@ export function ShopChatWidget() {
         setNotifPerm(getChatNotificationPermission());
         setGuestEmailDraft(customerNotifyEmail || '');
         setGuestEmailError(null);
+        if (!isAdmin) {
+          void recordSecurityAudit({
+            eventType: 'CHAT_OPENED',
+            severity: 'INFO',
+            method: 'OPEN_CHAT',
+            userEmail: customerNotifyEmail || user?.email,
+            userId: user?.id,
+            customerName: user?.name,
+            isAdminActor: false,
+            dedupeKey: `chat_open_${pendingProduct?.id || 'general'}`,
+            dedupeWindowMs: 60_000,
+            details: pendingProduct
+              ? {
+                  productId: pendingProduct.id,
+                  productName: pendingProduct.name,
+                  price: pendingProduct.price,
+                }
+              : {},
+          });
+        }
       }
-    }, [isOpen, customerNotifyEmail]);
+    }, [isOpen, customerNotifyEmail, isAdmin, pendingProduct?.id]);
 
     const handleSaveGuestEmail = () => {
       const check = validateRealCustomerEmail(guestEmailDraft);
@@ -116,6 +140,7 @@ export function ShopChatWidget() {
       }
       setGuestEmailError(null);
       saveCustomerNotifyEmail(check.normalized);
+      rememberVisitorKnownIdentity({ email: check.normalized });
       setIsEditingGuestEmail(false);
       playChatNotificationChime();
     };
@@ -241,6 +266,22 @@ export function ShopChatWidget() {
 
   const handleSend = () => {
     if (!inputText.trim() && !pendingProduct) return;
+    if (!isAdmin) {
+      void recordSecurityAudit({
+        eventType: 'CHAT_MESSAGE_SENT',
+        severity: 'INFO',
+        method: 'SEND_CHAT',
+        userEmail: customerNotifyEmail || user?.email,
+        userId: user?.id,
+        customerName: user?.name,
+        isAdminActor: false,
+        details: {
+          preview: inputText.trim().slice(0, 70),
+          productName: pendingProduct?.name || undefined,
+          customerEmail: customerNotifyEmail || user?.email || undefined,
+        },
+      });
+    }
     sendMessage(
       inputText,
       pendingProduct,
@@ -251,6 +292,22 @@ export function ShopChatWidget() {
   };
 
   const handleQuickPrompt = (promptText: string) => {
+    if (!isAdmin) {
+      void recordSecurityAudit({
+        eventType: 'CHAT_MESSAGE_SENT',
+        severity: 'INFO',
+        method: 'QUICK_CHAT',
+        userEmail: customerNotifyEmail || user?.email,
+        userId: user?.id,
+        customerName: user?.name,
+        isAdminActor: false,
+        details: {
+          preview: promptText.slice(0, 70),
+          productName: pendingProduct?.name || undefined,
+          customerEmail: customerNotifyEmail || user?.email || undefined,
+        },
+      });
+    }
     sendMessage(
       promptText,
       pendingProduct,

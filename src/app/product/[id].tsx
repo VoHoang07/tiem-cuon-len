@@ -38,6 +38,7 @@ import { ComboSlotCandidate } from '@/utils/comboStudioComposer';
 import { formatVND } from '@/utils/formatCurrency';
 import { getCategoryEmoji, getCategoryLabel } from '@/utils/getCategoryEmoji';
 import { saveVoucherToWallet } from '@/utils/promoEngine';
+import { recordSecurityAudit } from '@/utils/securityGuard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
     ChevronLeft,
@@ -371,6 +372,95 @@ export default function ProductDetailScreen() {
       .filter((p) => p.category === product.category && p.id !== product.id)
       .slice(0, 4);
   }, [products, product]);
+
+  const activeVariantNameForAudit = useMemo(() => {
+    const matched =
+      colorOptions.find((c) => c.id === selectedColorId) ??
+      colorOptions[0] ??
+      null;
+    return matched?.name || product?.color || '';
+  }, [colorOptions, selectedColorId, product?.color]);
+
+  const latestAuditMetaRef = useRef({
+    productName: '',
+    variant: '',
+    price: 0,
+    userEmail: '' as string | undefined,
+    userId: '' as string | undefined,
+    userName: '' as string | undefined,
+    isAdmin: false,
+  });
+
+  useEffect(() => {
+    latestAuditMetaRef.current = {
+      productName: product?.name || '',
+      variant: activeVariantNameForAudit,
+      price: product?.price || 0,
+      userEmail: user?.email,
+      userId: user?.id,
+      userName: user?.name,
+      isAdmin: role === 'admin',
+    };
+  }, [
+    product?.name,
+    product?.price,
+    activeVariantNameForAudit,
+    user?.email,
+    user?.id,
+    user?.name,
+    role,
+  ]);
+
+  useEffect(() => {
+    if (!product?.id || !product?.name || role === 'admin') return;
+    const viewedAtMs = Date.now();
+    const productIdStr = String(product.id);
+
+    void recordSecurityAudit({
+      eventType: 'PRODUCT_VIEW',
+      severity: 'INFO',
+      path: `/product/${productIdStr}`,
+      method: 'VIEW_PRODUCT',
+      userEmail: user?.email,
+      userId: user?.id,
+      customerName: user?.name,
+      isAdminActor: false,
+      dedupeKey: `prod_view_${productIdStr}`,
+      dedupeWindowMs: 30_000,
+      details: {
+        productId: productIdStr,
+        productName: product.name,
+        variant: activeVariantNameForAudit || undefined,
+        price: product.price,
+      },
+    });
+
+    return () => {
+      const dwellSec = Math.round((Date.now() - viewedAtMs) / 1000);
+      const snap = latestAuditMetaRef.current;
+      if (!snap.isAdmin && dwellSec >= 10 && snap.productName) {
+        void recordSecurityAudit({
+          eventType: 'PRODUCT_ENGAGED',
+          severity: 'INFO',
+          path: `/product/${productIdStr}`,
+          method: 'DWELL_TIME',
+          userEmail: snap.userEmail,
+          userId: snap.userId,
+          customerName: snap.userName,
+          isAdminActor: false,
+          dedupeKey: `prod_dwell_${productIdStr}`,
+          dedupeWindowMs: 15_000,
+          details: {
+            productId: productIdStr,
+            productName: snap.productName,
+            variant: snap.variant || undefined,
+            price: snap.price,
+            durationSec: Math.min(dwellSec, 1800),
+          },
+        });
+      }
+    };
+  }, [product?.id]);
 
   if (!product) {
     return (

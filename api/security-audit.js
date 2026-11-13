@@ -83,7 +83,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
 
     const [logsRes, blockRes] = await Promise.all([
       fetch(
-        `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}&order=district.desc&limit=120`,
+        `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}&order=district.desc&limit=400`,
         {
           headers: {
             apikey: SUPABASE_KEY,
@@ -354,6 +354,12 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
     'method',
     'userEmail',
     'actorUserId',
+    'visitorId',
+    'sessionId',
+    'visitorNumber',
+    'isAdminActor',
+    'customerName',
+    'customerPhone',
     'ip',
     'location',
     'asn',
@@ -384,6 +390,25 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
     sanitizeTextServer(body.location || 'VN', 100);
 
   const nowIso = new Date().toISOString();
+  const safeVisitorId = sanitizeTextServer(body.visitorId || '', 64);
+  const safeSessionId = sanitizeTextServer(body.sessionId || '', 64);
+  const safeCustomerName = sanitizeTextServer(body.customerName || '', 80);
+  const safeCustomerPhone = sanitizeTextServer(body.customerPhone || '', 24);
+  const safeVisitorNum = Math.max(1, Math.min(9999, Number(body.visitorNumber) || 1));
+  const safeIsAdminActor = Boolean(body.isAdminActor);
+
+  const rawDetails = body.details && typeof body.details === 'object' ? body.details : {};
+  const sanitizedDetails = {};
+  for (const [k, v] of Object.entries(rawDetails).slice(0, 18)) {
+    const cleanKey = sanitizeTextServer(k, 40);
+    if (!cleanKey) continue;
+    if (typeof v === 'number' || typeof v === 'boolean') {
+      sanitizedDetails[cleanKey] = v;
+    } else if (v !== null && v !== undefined) {
+      sanitizedDetails[cleanKey] = sanitizeTextServer(String(v), 220);
+    }
+  }
+
   const logRow = {
     id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     userId: HOLDER_USER_ID,
@@ -402,6 +427,12 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       method,
       userEmail,
       userId: body.actorUserId ? sanitizeTextServer(body.actorUserId, 60) : null,
+      visitorId: safeVisitorId || undefined,
+      sessionId: safeSessionId || undefined,
+      visitorNumber: safeVisitorNum,
+      isAdminActor: safeIsAdminActor,
+      customerName: safeCustomerName || undefined,
+      customerPhone: safeCustomerPhone || undefined,
       userAgent: telemetry.userAgent || sanitizeTextServer(body.userAgent || '', 260),
       screenSize: sanitizeTextServer(body.screenSize || '', 40),
       language: sanitizeTextServer(body.language || 'vi-VN', 30),
@@ -409,7 +440,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         sanitizeTextServer(body.referer || '', 220) ||
         telemetry.referer ||
         'Direct',
-      details: body.details && typeof body.details === 'object' ? body.details : {},
+      details: sanitizedDetails,
       timestamp: nowIso,
     }),
     isDefault: false,
