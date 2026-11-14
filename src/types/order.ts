@@ -1,5 +1,5 @@
-import { Product } from './product';
 import { Address } from './address';
+import { Product } from './product';
 
 export type OrderStatus =
   | 'pending_payment'
@@ -19,11 +19,12 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
-  userId: string;
+  userId?: string;
   items: OrderItem[];
   total: number;
   shippingAddress: Address;
   paymentMethod: string;
   status: OrderStatus;
   createdAt: string;
+  isMaskedGuestView?: boolean;
 }

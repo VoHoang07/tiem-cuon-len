@@ -9,10 +9,13 @@ import { useOrders } from '@/store/OrderContext';
 import type { Order, OrderStatus } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
 import {
+    computeHandmadeCraftingSchedule,
     exportOrdersToGoshipCsv,
     formatShippingSlipForClipboard,
+    getCachedGuestTrackedOrders,
     getCarrierTrackingUrl,
     getCodCollectAmount,
+    lookupPublicOrdersByPhoneOrCode,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -21,15 +24,19 @@ import {
     Check,
     ChevronLeft,
     ChevronRight,
+    Clock,
     Copy,
     Home,
+    LogIn,
     QrCode,
+    Search,
     ShoppingBag,
     Trash2,
     Truck,
 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     FlatList,
     Linking,
@@ -37,6 +44,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     useWindowDimensions,
     View,
@@ -55,10 +63,40 @@ const STATUS_FILTERS: { key: 'ALL' | OrderStatus; label: string }[] = [
 export default function OrdersScreen() {
   const router = useRouter();
   const { orders, getOrdersByUser, refetchOrders, deleteOrder, updateOrderStatus } = useOrders();
-  const { user, role } = useAuth();
+  const { user, role, isAuthenticated } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  const initialGuestCache = useMemo(() => getCachedGuestTrackedOrders(), []);
+  const [guestLookupQuery, setGuestLookupQuery] = useState<string>(
+    initialGuestCache.lastQuery
+  );
+  const [guestOrders, setGuestOrders] = useState<Order[]>(
+    initialGuestCache.orders
+  );
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
+  const [hasSearchedGuest, setHasSearchedGuest] = useState(
+    initialGuestCache.orders.length > 0
+  );
+
+  const handleGuestLookup = async () => {
+    if (!guestLookupQuery.trim()) {
+      setGuestError('Vui lòng nhập Số điện thoại nhận hàng hoặc Mã đơn hàng.');
+      return;
+    }
+    setGuestError(null);
+    setGuestLoading(true);
+    const res = await lookupPublicOrdersByPhoneOrCode(guestLookupQuery);
+    setGuestLoading(false);
+    setHasSearchedGuest(true);
+    if (!res.ok) {
+      setGuestError(res.error || 'Không thể tra cứu đơn hàng lúc này.');
+      return;
+    }
+    setGuestOrders(res.orders);
+  };
 
   const handleCopySlip = async (order: Order) => {
     const text = formatShippingSlipForClipboard(order);
@@ -72,7 +110,11 @@ export default function OrdersScreen() {
   const isAdmin = role === 'admin';
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
-  const baseOrders = isAdmin ? orders : getOrdersByUser(user?.id ?? '');
+  const baseOrders = isAdmin
+    ? orders
+    : isAuthenticated
+      ? getOrdersByUser(user?.id ?? '')
+      : guestOrders;
 
   const displayOrders = useMemo(() => {
     if (statusFilter === 'ALL') return baseOrders;
@@ -220,19 +262,79 @@ export default function OrdersScreen() {
                 </View>
               )}
               <Text style={styles.orderDate}>
-                {new Date(item.createdAt).toLocaleDateString('vi-VN')} • {item.paymentMethod}
+                {new Date(item.createdAt).toLocaleDateString('vi-VN')} •{' '}
+                {item.status === 'pending_payment'
+                  ? 'Chuyển khoản QR (Chưa nhận thanh toán)'
+                  : item.paymentMethod}
               </Text>
+              {!isAdmin && item.status === 'pending_payment' && (
+                <View
+                  style={{
+                    marginTop: 5,
+                    backgroundColor: '#FEF2F2',
+                    borderWidth: 1,
+                    borderColor: '#FECACA',
+                    borderRadius: 8,
+                    paddingHorizontal: 9,
+                    paddingVertical: 5,
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '800',
+                      color: '#B91C1C',
+                    }}>
+                    ⏳ Đơn chưa hoàn tất đặt: Vui lòng bấm &ldquo;Quét mã QR thanh toán&rdquo; bên dưới để Tiệm bắt đầu chuẩn bị mẫu nhé!
+                  </Text>
+                </View>
+              )}
 
-              {/* Shipping & Tracking Pill */}
+              {/* Shipping & Handmade Crafting Schedule Pill */}
               <View style={styles.shippingMetaRow}>
                 {trackingCode ? (
                   <View style={styles.trackingBadge}>
                     <Truck size={12} color="#2E7D32" />
                     <Text style={styles.trackingBadgeText} numberOfLines={1}>
-                      {carrier ? `${carrier}: ` : 'Mã vận đơn: '}
+                      {carrier ? `${carrier}: ` : 'SPX: '}
                       {trackingCode}
+                      {item.shippingAddress?.goshipStatusText
+                        ? ` • ${item.shippingAddress.goshipStatusText}`
+                        : ''}
                     </Text>
                   </View>
+                ) : item.status === 'Đang xử lý' ||
+                  item.status === 'Đang chuẩn bị hàng' ? (
+                  (() => {
+                    const sched = computeHandmadeCraftingSchedule(item);
+                    return (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          backgroundColor: '#FFFBEB',
+                          borderWidth: 1,
+                          borderColor: '#FDE68A',
+                          borderRadius: 8,
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          maxWidth: '100%',
+                        }}>
+                        <Clock size={12} color="#B45309" />
+                        <Text
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: '800',
+                            color: '#92400E',
+                            flexShrink: 1,
+                          }}
+                          numberOfLines={2}>
+                          {sched.activeStageTitle} • Dự kiến gửi SPX:{' '}
+                          {sched.expectedShipWindowText}
+                        </Text>
+                      </View>
+                    );
+                  })()
                 ) : item.shippingAddress?.shippingMethod ? (
                   <View style={styles.shipMethodBadge}>
                     <Truck size={12} color="#5C4332" />
@@ -246,16 +348,31 @@ export default function OrdersScreen() {
                   <View
                     style={[
                       styles.codBadge,
-                      codAmount === 0 && styles.codBadgePaid,
+                      codAmount === 0 &&
+                        item.status !== 'pending_payment' &&
+                        styles.codBadgePaid,
+                      item.status === 'pending_payment' && {
+                        backgroundColor: '#FEE2E2',
+                        borderColor: '#EF4444',
+                        borderWidth: 1,
+                      },
                     ]}>
                     <Text
                       style={[
                         styles.codBadgeText,
-                        codAmount === 0 && styles.codBadgeTextPaid,
+                        codAmount === 0 &&
+                          item.status !== 'pending_payment' &&
+                          styles.codBadgeTextPaid,
+                        item.status === 'pending_payment' && {
+                          color: '#B91C1C',
+                          fontWeight: '900',
+                        },
                       ]}>
-                      {codAmount > 0
-                        ? `Thu COD: ${formatVND(codAmount)}`
-                        : 'Thu COD: 0₫ (Đã CK)'}
+                      {item.status === 'pending_payment'
+                        ? `⛔ CHƯA CHUYỂN KHOẢN (${formatVND(item.total)})`
+                        : codAmount > 0
+                          ? `Thu COD: ${formatVND(codAmount)}`
+                          : '✅ Đã chuyển khoản (Thu COD: 0₫)'}
                     </Text>
                   </View>
                 )}
@@ -273,16 +390,16 @@ export default function OrdersScreen() {
 
           <View style={[styles.actionRow, isMobile && styles.actionRowMobile]}>
             <View style={styles.actionLeft}>
-              {item.status === 'pending_payment' && (
+              {item.status === 'pending_payment' && !isAdmin && (
                 <TouchableOpacity
                   style={styles.payNowBtn}
                   onPress={() => router.push(`/payment/${item.id}`)}
                   activeOpacity={0.8}>
                   <QrCode size={14} color="#FAF5EE" />
-                  <Text style={styles.payNowBtnText}>Thanh toán QR</Text>
+                  <Text style={styles.payNowBtnText}>Quét mã QR thanh toán</Text>
                 </TouchableOpacity>
               )}
-              {isAdmin && (
+              {isAdmin && item.status !== 'pending_payment' && (
                 <TouchableOpacity
                   style={[styles.copySlipBtn, isCopied && styles.copySlipBtnDone]}
                   onPress={() => handleCopySlip(item)}
@@ -301,13 +418,15 @@ export default function OrdersScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
-              {!isAdmin && trackingCode && trackingUrl ? (
+              {!isAdmin && trackingCode ? (
                 <TouchableOpacity
                   style={styles.trackOrderBtn}
-                  onPress={() => Linking.openURL(trackingUrl)}
+                  onPress={() => router.push(`/orders/${item.id}`)}
                   activeOpacity={0.8}>
                   <Truck size={14} color="#2E7D32" />
-                  <Text style={styles.trackOrderBtnText}>Tra cứu vận đơn</Text>
+                  <Text style={styles.trackOrderBtnText}>
+                    Xem trạm SPX trực tiếp
+                  </Text>
                 </TouchableOpacity>
               ) : null}
               {isAdmin && nextStatus ? (
@@ -317,29 +436,33 @@ export default function OrdersScreen() {
                   activeOpacity={0.8}>
                   <ArrowRightCircle size={15} color="#3D2B1F" />
                   <Text style={styles.advanceBtnText}>
-                    Chuyển: {getOrderStatusLabel(nextStatus)}
+                    {item.status === 'pending_payment'
+                      ? 'Xác nhận tiền đã về (Duyệt tay)'
+                      : `Chuyển: ${getOrderStatusLabel(nextStatus)}`}
                   </Text>
                 </TouchableOpacity>
               ) : null}
-            </View>
+              </View>
 
-            <TouchableOpacity
-              style={[
-                styles.deleteBtn,
-                confirmDeleteId === item.id && {
-                  backgroundColor: '#FEE2E2',
-                  borderColor: '#EF4444',
-                  borderWidth: 1,
-                },
-              ]}
-              onPress={() => handleDelete(item)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Trash2 size={15} color={COLORS.error} />
-              <Text style={styles.deleteBtnText}>
-                {confirmDeleteId === item.id ? 'Bấm lần nữa để xoá' : 'Xoá'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              {!item.isMaskedGuestView && (
+              <TouchableOpacity
+                style={[
+                  styles.deleteBtn,
+                  confirmDeleteId === item.id && {
+                    backgroundColor: '#FEE2E2',
+                    borderColor: '#EF4444',
+                    borderWidth: 1,
+                  },
+                ]}
+                onPress={() => handleDelete(item)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Trash2 size={15} color={COLORS.error} />
+                <Text style={styles.deleteBtnText}>
+                  {confirmDeleteId === item.id ? 'Bấm lần nữa để xoá' : 'Xoá'}
+                </Text>
+              </TouchableOpacity>
+              )}
+              </View>
         </View>
       </View>
     );
@@ -365,16 +488,177 @@ export default function OrdersScreen() {
         </View>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, isMobile && styles.headerTitleMobile]} numberOfLines={1}>
-            {isAdmin ? 'Quản lý đơn hàng' : 'Đơn hàng của tôi'}
+            {isAdmin
+              ? 'Quản lý đơn hàng & Vận đơn SPX'
+              : isAuthenticated
+                ? 'Hành trình đơn hàng của tôi'
+                : 'Tra cứu hành trình đơn hàng'}
           </Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>
             {isAdmin
               ? `${baseOrders.length} đơn đặt hàng toàn hệ thống`
-              : `${baseOrders.length} đơn hàng đã đặt`}
+              : isAuthenticated
+                ? `Tự động hiển thị ${baseOrders.length} đơn hàng của tài khoản bạn`
+                : 'Kiểm tra tiến độ đan 5–6 ngày & hành trình bưu cục SPX'}
           </Text>
         </View>
         <View style={{ width: isMobile ? 38 : 80 }} />
-      </View>
+        </View>
+
+        {/* GUEST PUBLIC LOOKUP CARD (Only shown when NOT logged in; logged-in users see all orders immediately!) */}
+        {!isAuthenticated && (
+        <View
+          style={{
+            marginHorizontal: isMobile ? 12 : 20,
+            marginBottom: 12,
+            backgroundColor: '#FFFDF9',
+            borderWidth: 1.5,
+            borderColor: '#DFCBB5',
+            borderRadius: 18,
+            padding: 14,
+            gap: 10,
+            ...SHADOWS.small,
+          }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: '900',
+                color: '#3D2B1F',
+                flex: 1,
+                minWidth: 180,
+              }}>
+              🔍 Nhập Số điện thoại nhận hàng hoặc Mã đơn để xem ngay:
+            </Text>
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: '/login',
+                  params: { redirect: '/orders' },
+                })
+              }
+              activeOpacity={0.8}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: '#F3ECE2',
+                borderWidth: 1,
+                borderColor: '#D8C3AD',
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: 999,
+              }}>
+              <LogIn size={13} color="#3D2B1F" />
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: '800',
+                  color: '#3D2B1F',
+                }}>
+                Đăng nhập để tự hiện mọi đơn
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+            <View
+              style={{
+                flex: 1,
+                minWidth: 200,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                backgroundColor: '#FAF6F0',
+                borderWidth: 1,
+                borderColor: '#DCCAB8',
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+              }}>
+              <Search size={16} color={COLORS.mediumText} />
+              <TextInput
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: 16,
+                  color: COLORS.darkText,
+                }}
+                placeholder="VD: 0901234567 hoặc CUONLEN-..."
+                placeholderTextColor={COLORS.lightText}
+                value={guestLookupQuery}
+                onChangeText={(txt) => {
+                  setGuestLookupQuery(txt);
+                  if (guestError) setGuestError(null);
+                }}
+                returnKeyType="search"
+                onSubmitEditing={() => void handleGuestLookup()}
+                autoCapitalize="characters"
+              />
+            </View>
+            <TouchableOpacity
+              onPress={() => void handleGuestLookup()}
+              disabled={guestLoading}
+              activeOpacity={0.85}
+              style={{
+                backgroundColor: '#3D2B1F',
+                paddingHorizontal: 18,
+                paddingVertical: 11,
+                borderRadius: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}>
+              {guestLoading ? (
+                <ActivityIndicator size="small" color="#FFFDF9" />
+              ) : (
+                <Truck size={15} color="#FFFDF9" />
+              )}
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: '900',
+                  color: '#FFFDF9',
+                }}>
+                Tra cứu đơn
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {guestError ? (
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: '700',
+                color: '#B91C1C',
+              }}>
+              ⚠️ {guestError}
+            </Text>
+          ) : (
+            <Text
+              style={{
+                fontSize: 11.5,
+                color: '#6E5643',
+                lineHeight: 16,
+              }}>
+              🧶 Vì sản phẩm đan mới thủ công tỉ mỉ trong 5–6 ngày, bạn có thể vào kiểm tra tiến độ xưởng đan & hành trình bưu cục SPX bất cứ lúc nào (số nhà chi tiết được tự động ẩn bảo mật khi chưa đăng nhập).
+            </Text>
+          )}
+        </View>
+        )}
 
       {/* Status Filter Bar for both Admin and Client */}
       <ScrollView
@@ -487,11 +771,19 @@ export default function OrdersScreen() {
   const ListEmpty = (
     <View style={[styles.constrained, styles.empty]}>
       <ShoppingBag size={64} color={COLORS.lightText} />
-      <Text style={styles.emptyTitle}>Chưa có đơn hàng nào</Text>
+      <Text style={styles.emptyTitle}>
+        {!isAuthenticated && !hasSearchedGuest
+          ? 'Nhập SĐT ở trên để xem tiến độ đơn hàng'
+          : 'Chưa tìm thấy đơn hàng nào'}
+      </Text>
       <Text style={styles.emptySubtext}>
         {isAdmin
           ? 'Các đơn đặt hàng mới từ khách sẽ hiển thị tại đây'
-          : 'Đơn hàng của bạn sẽ xuất hiện ở đây sau khi đặt mua'}
+          : !isAuthenticated
+            ? hasSearchedGuest
+              ? 'Không tìm thấy đơn hàng khớp với SĐT / Mã đơn vừa nhập. Bạn kiểm tra lại SĐT lúc đặt hoặc bấm Đăng nhập nhé!'
+              : 'Nếu bạn đã có tài khoản, bấm nút "Đăng nhập để tự hiện mọi đơn" phía trên sẽ hiển thị toàn bộ đơn ngay lập tức.'
+            : 'Đơn hàng của bạn sẽ xuất hiện tự động ở đây ngay sau khi đặt mua'}
       </Text>
     </View>
   );

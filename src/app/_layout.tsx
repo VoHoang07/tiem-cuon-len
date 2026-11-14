@@ -21,7 +21,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 const PROTECTED_ROUTES = new Set([
   'checkout',
   'payment',
-  'orders',
   'addresses',
   'add-product',
   'edit-product',

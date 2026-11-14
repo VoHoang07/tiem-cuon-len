@@ -576,8 +576,8 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       });
     }
 
-    // Immediately burn personal 1-to-1 voucher (`VD25-` / `FB15-`) so it can never be reused on a 2nd order
-    if (promoResult.isPersonalVoucher && promoResult.promoCode) {
+    // Burn personal 1-to-1 voucher (`VD25-` / `FB15-`) immediately for COD, or defer until payment is confirmed for QR
+    if (isCod && promoResult.isPersonalVoucher && promoResult.promoCode) {
       await markPersonalVoucherUsedServer(
         promoResult.promoCode,
         orderId,
@@ -663,6 +663,13 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       ...existingOrder,
       shippingAddress: updatedAddr,
     });
+    if (existingOrder.shippingAddress && existingOrder.shippingAddress.promoCode) {
+      await markPersonalVoucherUsedServer(
+        existingOrder.shippingAddress.promoCode,
+        orderId,
+        authUser && authUser.accessToken
+      );
+    }
     return res.status(200).json({ success: true, sent });
   }
 
@@ -770,6 +777,19 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
 
     // Automatically notify the customer by Email when order is Shipped or Completed
     if (authUser.isAdmin) {
+      if (
+        existingOrder.status === 'pending_payment' &&
+        nextStatus !== 'pending_payment' &&
+        nextStatus !== 'Đã hủy' &&
+        existingOrder.shippingAddress &&
+        existingOrder.shippingAddress.promoCode
+      ) {
+        await markPersonalVoucherUsedServer(
+          existingOrder.shippingAddress.promoCode,
+          orderId,
+          authUser.accessToken
+        );
+      }
       const mergedOrder = {
         ...existingOrder,
         status: nextStatus,

@@ -5,9 +5,10 @@ const {
   HOLDER_USER_ID,
   sanitizeTextServer,
   stripUnknownFieldsServer,
+  markPersonalVoucherUsedServer,
   withGlobalErrorHandler,
   sendOrderNotificationServer,
-} = require('./_securityCore');
+  } = require('./_securityCore');
 
 const SEPAY_LOG_PARTITION = '__TCL_SEPAY_LOG_V1__';
 
@@ -207,6 +208,12 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
       );
       orderUpdated = patchRes.ok;
       if (orderUpdated) {
+        if (updatedAddr.promoCode) {
+          await markPersonalVoucherUsedServer(
+            updatedAddr.promoCode,
+            matchedOrder.id
+          );
+        }
         await sendOrderNotificationServer({
           ...matchedOrder,
           status: newStatus,

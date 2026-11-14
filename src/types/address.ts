@@ -1,3 +1,17 @@
+export type CraftingStageKey =
+  | 'yarn_prep'
+  | 'crocheting'
+  | 'finishing_giftbox'
+  | 'packed_waiting_spx'
+  | 'handed_to_spx';
+
+export interface GoshipHistoryEvent {
+  status: number;
+  statusText: string;
+  description: string;
+  timestamp: string;
+}
+
 export interface Address {
   id: string;
   userId: string;
@@ -15,6 +29,12 @@ export interface Address {
   shippingCarrier?: string;
   trackingCode?: string;
   shippedAt?: string;
+  craftingStage?: CraftingStageKey | string;
+  craftingNote?: string;
+  craftingUpdatedAt?: string;
+  goshipShipmentId?: string;
+  goshipStatusText?: string;
+  goshipHistory?: GoshipHistoryEvent[];
   note?: string;
   promoCode?: string;
   discountAmount?: number;
@@ -24,4 +44,4 @@ export interface Address {
   customerAuthProvider?: string;
   isVerifiedAccount?: boolean;
   emailNotifiedAt?: string;
-  }
+}

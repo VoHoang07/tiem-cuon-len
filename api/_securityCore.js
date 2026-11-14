@@ -1012,7 +1012,12 @@ async function fetchUserPastValidOrders(userId, email, phone) {
         const rows = await r.json();
         if (Array.isArray(rows)) {
           for (const row of rows) {
-            if (row && row.id && row.status !== 'Đã hủy') {
+            if (
+              row &&
+              row.id &&
+              row.status !== 'Đã hủy' &&
+              row.status !== 'pending_payment'
+            ) {
               matchedOrders.set(row.id, row);
             }
           }
@@ -1032,7 +1037,14 @@ async function fetchUserPastValidOrders(userId, email, phone) {
         const cleanEmail = String(email || '').trim().toLowerCase();
         if (Array.isArray(rows2)) {
           for (const row of rows2) {
-            if (!row || !row.id || row.status === 'Đã hủy') continue;
+            if (
+              !row ||
+              !row.id ||
+              row.status === 'Đã hủy' ||
+              row.status === 'pending_payment'
+            ) {
+              continue;
+            }
             const addr = row.shippingAddress || {};
             const rowPhone = String(addr.phone || '').replace(/[^0-9]/g, '');
             const rowEmail = String(addr.email || '').trim().toLowerCase();

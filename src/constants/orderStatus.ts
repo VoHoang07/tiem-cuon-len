@@ -2,7 +2,7 @@ import type { OrderStatus } from '@/types/order';
 
 // Vietnamese labels for every order status
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  pending_payment: 'Chờ thanh toán',
+  pending_payment: '⏳ Chưa thanh toán (Chờ quét QR)',
   awaiting_confirmation: 'Chờ xác nhận thanh toán',
   placed: 'Đã đặt hàng',
   'Đang xử lý': 'Đang xử lý',
@@ -14,7 +14,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 
 // Color scheme for status badges
 export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
-  pending_payment: '#E8A840',
+  pending_payment: '#DC2626',
   awaiting_confirmation: '#E8A840',
   placed: '#6BAF5C',
   'Đang xử lý': '#E8A840',

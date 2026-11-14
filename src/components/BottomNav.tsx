@@ -1,41 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
-  useWindowDimensions,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, usePathname, type Href } from 'expo-router';
-import {
-  ShoppingCart,
-  Heart,
-  PlusCircle,
-  User,
-  Home,
-  ShoppingBag,
-  Package,
-} from 'lucide-react-native';
-import { COLORS, SHADOWS } from '@/constants/theme';
-import { useShop } from '@/store/ShopContext';
-import { useAuth } from '@/store/AuthContext';
-import { useOrders } from '@/store/OrderContext';
 import { TAB_BAR_CONTENT_HEIGHT } from '@/constants/layout';
 import {
-  NAV_HOME,
-  NAV_FAVORITES,
-  NAV_ADD,
-  NAV_CART,
-  NAV_PROFILE,
+    NAV_ADD,
+    NAV_CART,
+    NAV_FAVORITES,
+    NAV_HOME,
+    NAV_PROFILE,
 } from '@/constants/strings';
+import { COLORS, SHADOWS } from '@/constants/theme';
+import { useAuth } from '@/store/AuthContext';
+import { useOrders } from '@/store/OrderContext';
+import { useShop } from '@/store/ShopContext';
+import { usePathname, useRouter, type Href } from 'expo-router';
+import {
+    Heart,
+    Home,
+    Package,
+    PlusCircle,
+    ShoppingBag,
+    ShoppingCart,
+    Truck,
+    User,
+} from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import {
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
   const { cartCount, favorites } = useShop();
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const { orders } = useOrders();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -48,6 +49,14 @@ export function BottomNav() {
   const isWideWeb = mounted && Platform.OS === 'web' && windowWidth >= 640;
   const isAdmin = role === 'admin';
   const pendingOrdersCount = orders.filter((o) => o.status === 'Đang xử lý').length;
+  const activeCustomerOrdersCount = user?.id
+    ? orders.filter(
+        (o) =>
+          o.userId === user.id &&
+          o.status !== 'Hoàn thành' &&
+          o.status !== 'Đã hủy'
+      ).length
+    : 0;
 
   const adminTabs = [
     { route: '/', icon: Home, label: NAV_HOME, badge: 0 },
@@ -59,6 +68,7 @@ export function BottomNav() {
 
   const customerTabs = [
     { route: '/', icon: Home, label: NAV_HOME, badge: 0 },
+    { route: '/orders', icon: Truck, label: 'Theo dõi đơn', badge: activeCustomerOrdersCount },
     { route: '/favorites', icon: Heart, label: NAV_FAVORITES, badge: favorites.length },
     { route: '/cart', icon: ShoppingCart, label: NAV_CART, badge: cartCount },
     { route: '/profile', icon: User, label: NAV_PROFILE, badge: 0 },

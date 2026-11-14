@@ -877,7 +877,7 @@ export default function CheckoutScreen() {
       new Promise((resolve) => setTimeout(resolve, 1800)),
     ]);
 
-    if (appliedPromo.code) {
+    if (selectedPayment.type === 'cod' && appliedPromo.code) {
       markVoucherConsumedLocally(appliedPromo.code);
     }
 

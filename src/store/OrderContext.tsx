@@ -83,7 +83,7 @@ function ordersSignature(items: Order[]): string {
   return items
     .map(
       (o) =>
-        `${o.id}:${o.status}:${o.total}:${o.items?.length || 0}:${o.shippingAddress?.shippingCarrier || ''}:${o.shippingAddress?.trackingCode || ''}`
+        `${o.id}:${o.status}:${o.total}:${o.items?.length || 0}:${o.shippingAddress?.shippingCarrier || ''}:${o.shippingAddress?.trackingCode || ''}:${o.shippingAddress?.craftingStage || ''}:${o.shippingAddress?.craftingUpdatedAt || ''}:${o.shippingAddress?.goshipStatusText || ''}`
     )
     .join('|');
 }

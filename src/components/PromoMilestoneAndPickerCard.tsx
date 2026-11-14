@@ -81,6 +81,7 @@ export function PromoMilestoneAndPickerCard({
     const myValidOrders = (orders || []).filter(
       (o) =>
         o.status !== 'Đã hủy' &&
+        o.status !== 'pending_payment' &&
         ((user?.id && o.userId === user.id) ||
           (customerPhone &&
             o.shippingAddress?.phone &&

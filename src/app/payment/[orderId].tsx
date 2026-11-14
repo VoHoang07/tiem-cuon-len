@@ -7,6 +7,7 @@ import { usePaymentMethods } from '@/store/PaymentMethodsContext';
 import { useShop } from '@/store/ShopContext';
 import { type PaymentMethod } from '@/types/payment-method';
 import { formatVND } from '@/utils/formatCurrency';
+import { markVoucherConsumedLocally } from '@/utils/promoEngine';
 import { sendOrderNotificationForOrder } from '@/utils/sendOrderNotification';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -490,6 +491,9 @@ export default function PaymentScreen() {
     if (!confirmed || !order?.id) return;
     if (notifiedOrderIdRef.current === order.id) return;
     notifiedOrderIdRef.current = order.id;
+    if (order.shippingAddress?.promoCode) {
+      markVoucherConsumedLocally(order.shippingAddress.promoCode);
+    }
     sendOrderNotificationForOrder(order).catch(() => {});
     if (paramBuyNow !== '1') {
       clearCart();
@@ -795,7 +799,7 @@ export default function PaymentScreen() {
             <View style={styles.livePill}>
               <View style={styles.liveDot} />
               <Text style={styles.livePillText}>
-                Realtime SePay • Tự động xác nhận tức thì
+                ⏳ Đang chờ quét QR • SePay tự xác nhận tức thì
               </Text>
             </View>
             {remainingSeconds > 0 ? (
@@ -988,11 +992,33 @@ export default function PaymentScreen() {
           )}
         </View>
 
-        <TouchableOpacity
-          style={styles.laterLink}
-          onPress={() => router.replace('/orders')}>
-          <Text style={styles.laterLinkText}>Để sau, xem danh sách đơn hàng</Text>
-        </TouchableOpacity>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+            marginTop: 10,
+          }}>
+          <TouchableOpacity
+            style={styles.laterLink}
+            onPress={() => router.replace('/orders')}>
+            <Text style={styles.laterLinkText}>
+              Lưu mã chờ thanh toán sau
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.laterLink}
+            onPress={async () => {
+              await updateOrderStatus(order.id, 'Đã hủy');
+              router.replace('/checkout');
+            }}>
+            <Text style={[styles.laterLinkText, { color: '#B91C1C' }]}>
+              Đổi phương thức thanh toán khác (Hủy mã QR này)
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Bank App Detector & Selector Modal */}

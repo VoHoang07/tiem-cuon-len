@@ -380,6 +380,16 @@ export default function HomeScreen() {
             ) : (
               <>
                 {!isMobile && (
+                  <TouchableOpacity
+                    style={styles.loginPillBtn}
+                    onPress={() => router.push('/orders')}
+                    activeOpacity={0.8}>
+                    <Truck size={15} color="#3D2B1F" />
+                    <Text style={styles.loginPillText}>Theo dõi đơn</Text>
+                  </TouchableOpacity>
+                )}
+
+                {!isMobile && (
                   /* Client: Quick Favorites Button (on mobile it is in BottomNav) */
                   <TouchableOpacity
                     style={styles.iconActionBtn}
