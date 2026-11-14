@@ -251,6 +251,16 @@ export function ShopChatWidget() {
     return displayedMessages.length <= 2;
   }, [showProductPicker, pendingProduct, isAdmin, hasExpressInquiry, displayedMessages.length]);
 
+  const approvedProofKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const m of displayedMessages) {
+      if (m.issuedVoucher?.missionType) {
+        keys.add(m.issuedVoucher.missionType);
+      }
+    }
+    return keys;
+  }, [displayedMessages]);
+
   // Auto-scroll to bottom when messages change or chat opens
   useEffect(() => {
     if (isOpen) {
@@ -358,16 +368,6 @@ export function ShopChatWidget() {
       return '';
     }
   };
-
-  const approvedProofKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const m of displayedMessages) {
-      if (m.issuedVoucher?.missionType) {
-        keys.add(m.issuedVoucher.missionType);
-      }
-    }
-    return keys;
-  }, [displayedMessages]);
 
   const handleApproveAndIssueVoucher = async (msg: ChatMessage) => {
     const proof = msg.voucherProof;
