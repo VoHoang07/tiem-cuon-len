@@ -1,6 +1,7 @@
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
+  SUPABASE_SERVICE_KEY,
   AUDIT_LOG_PARTITION,
   BLOCKLIST_PARTITION,
   HOLDER_USER_ID,
@@ -86,17 +87,17 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}&order=district.desc&limit=400`,
         {
           headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
           },
-        }
-      ),
-      fetch(
-        `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&order=district.desc&limit=100`,
-        {
+          }
+          ),
+          fetch(
+          `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&order=district.desc&limit=100`,
+          {
           headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
           },
         }
       ),
@@ -191,8 +192,8 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
         method: 'POST',
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
           'Content-Type': 'application/json',
           Prefer: 'resolution=merge-duplicates,return=minimal',
         },
@@ -210,23 +211,23 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         {
           method: 'DELETE',
           headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
           },
         }
-      );
-      syncBlockedIpInMemoryCache(targetIp, 'remove');
-      return res.status(200).json({ success: true, unblockedIp: targetIp });
-    }
+        );
+        syncBlockedIpInMemoryCache(targetIp, 'remove');
+        return res.status(200).json({ success: true, unblockedIp: targetIp });
+        }
 
-    if (action === 'clear_logs') {
-      await fetch(
+        if (action === 'clear_logs') {
+        await fetch(
         `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}`,
         {
           method: 'DELETE',
           headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
           },
         }
       );
@@ -314,7 +315,8 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       ]);
       const convId = sanitizeTextServer(cleanDel.conversationId || '', 120);
       const msgId = sanitizeTextServer(cleanDel.messageId || '', 120);
-      const authHeaderToken = adminUser.accessToken || SUPABASE_KEY;
+      const authHeaderToken = SUPABASE_SERVICE_KEY || adminUser.accessToken || SUPABASE_KEY;
+      const apiKeyToken = SUPABASE_SERVICE_KEY || SUPABASE_KEY;
 
       if (msgId) {
         await fetch(
@@ -324,7 +326,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           {
             method: 'DELETE',
             headers: {
-              apikey: SUPABASE_KEY,
+              apikey: apiKeyToken,
               Authorization: `Bearer ${authHeaderToken}`,
             },
           }
@@ -337,7 +339,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           {
             method: 'DELETE',
             headers: {
-              apikey: SUPABASE_KEY,
+              apikey: apiKeyToken,
               Authorization: `Bearer ${authHeaderToken}`,
             },
           }

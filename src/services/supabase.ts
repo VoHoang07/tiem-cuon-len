@@ -1,20 +1,11 @@
 // Supabase client
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const rawEnvUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const rawEnvKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const isLegacyRestrictedProject =
-  rawEnvUrl.includes('ljcweaeirwttqoygeoxd') ||
-  rawEnvKey.includes('bGpjd2VhZWlyd3R0cW95Z2VveGQ');
+const rawEnvUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim();
+const rawEnvKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
 
-export const supabaseUrl =
-  !rawEnvUrl || isLegacyRestrictedProject
-    ? 'https://ajxvqewsqvfdpovkqqqw.supabase.co'
-    : rawEnvUrl;
-export const supabaseAnonKey =
-  !rawEnvKey || isLegacyRestrictedProject
-    ? 'sb_publishable_g3xVNQbOj0PyTj9NrCpDyw_6hmDGWab'
-    : rawEnvKey;
+export const supabaseUrl = rawEnvUrl.replace(/\/+$/, '');
+export const supabaseAnonKey = rawEnvKey;
 
 function createSupabaseClient(): SupabaseClient {
   const url = supabaseUrl || 'https://placeholder.supabase.co';

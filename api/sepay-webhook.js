@@ -151,7 +151,7 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
     `${SUPABASE_URL}/rest/v1/orders?status=eq.pending_payment&select=id,userId,total,status,paymentMethod,shippingAddress,items,createdAt&order=createdAt.desc&limit=50`,
     {
       headers: {
-        apikey: SUPABASE_KEY,
+        apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
       },
     }
@@ -196,8 +196,8 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
         {
           method: 'PATCH',
           headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
+            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || SUPABASE_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

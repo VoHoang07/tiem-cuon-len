@@ -10,6 +10,7 @@ import { useOrders } from '@/store/OrderContext';
 import { useShop } from '@/store/ShopContext';
 import type { Order, OrderStatus } from '@/types/order';
 import {
+    uploadImageToCloudMedia,
     validateBase64ImageUpload,
     validateWebFileUpload,
 } from '@/utils/fileUploadGuard';
@@ -550,11 +551,12 @@ export default function OrderDetailScreen() {
     }
   };
 
-  const handleSubmitMissionProof = (
+  const handleSubmitMissionProof = async (
     missionType: 'video_unbox_25k' | 'fb_follow_share_15k'
   ) => {
     const isVideo = missionType === 'video_unbox_25k';
     const proofImg = isVideo ? videoProofImg : fbProofImg;
+    const setImg = isVideo ? setVideoProofImg : setFbProofImg;
     const rating = isVideo ? videoRating : fbRating;
     const selectedTags = isVideo ? videoSelectedTags : fbSelectedTags;
     const rawComment = isVideo ? videoComment : fbComment;
@@ -575,85 +577,104 @@ export default function OrderDetailScreen() {
     setErr(null);
     setBusy(true);
 
-    const combinedReview = [selectedTags.join(', '), rawComment.trim()]
-      .filter(Boolean)
-      .join(' — ') ||
-      'Sản phẩm đan móc tỉ mỉ, rất xinh và ưng ý ạ!';
+    try {
+      // Upload screenshot to Cloudflare R2 (`media.tiemcuonlen.shop`) so zero Base64 strings enter Supabase `addresses`
+      let finalProofUrl = proofImg;
+      if (proofImg.startsWith('data:image/')) {
+        const up = await uploadImageToCloudMedia(proofImg, 'voucher_proof', {
+          orderId: order.id,
+        });
+        if (!up.success || !up.url) {
+          setErr(
+            up.error ||
+              'Chưa tải được ảnh minh chứng lên hệ thống. Bạn vui lòng đăng nhập tài khoản và bấm gửi lại nhé!'
+          );
+          return;
+        }
+        finalProofUrl = up.url;
+        setImg(finalProofUrl);
+      }
 
-    const reviewerName =
-      order.shippingAddress?.fullName || user?.name || 'Khách đã mua';
-    const reviewerEmail =
-      order.shippingAddress?.email || user?.email || undefined;
+      const combinedReview =
+        [selectedTags.join(', '), rawComment.trim()].filter(Boolean).join(' — ') ||
+        'Sản phẩm đan móc tỉ mỉ, rất xinh và ưng ý ạ!';
 
-    // 1. Publish review to Shop & first product in order
-    addShopReview({
-      id: `shop_rev_${Date.now()}`,
-      userId: reviewerEmail || order.userId || 'customer',
-      userName: reviewerName,
-      rating,
-      comment: combinedReview,
-      date: new Date().toISOString(),
-    });
-    const firstItem = order.items[0];
-    if (firstItem) {
-      const firstBaseId = String(
-        firstItem.product.baseProductId || firstItem.product.id
-      ).split('__')[0];
-      addReview(firstBaseId, {
-        id: `rev_${Date.now()}`,
+      const reviewerName =
+        order.shippingAddress?.fullName || user?.name || 'Khách đã mua';
+      const reviewerEmail =
+        order.shippingAddress?.email || user?.email || undefined;
+
+      // 1. Publish review to Shop & first product in order
+      addShopReview({
+        id: `shop_rev_${Date.now()}`,
         userId: reviewerEmail || order.userId || 'customer',
         userName: reviewerName,
         rating,
         comment: combinedReview,
         date: new Date().toISOString(),
       });
-    }
-
-    // 2. Dispatch structured proof + screenshot directly into Live Chat so Admin approves & sends 1-to-1 voucher in Chat!
-    const chatSummary = isVideo
-      ? `🎬 [Mục 1 — Nhận Gói Quà 60.000₫ (Voucher -25k + Tặng 1 SP 35k)] Mình vừa đánh giá ${rating}★ ("${combinedReview.slice(
-          0,
-          120
-        )}") và gửi ảnh màn hình đăng Video/Story khui hàng (FB/IG/TikTok) kèm tên & link web cho đơn #${order.id.slice(
-          -8
-        )}${postUrl ? ` (${postUrl})` : ''}. Shop kiểm tra và gửi mã quà 60k giúp mình nhé!`
-      : `👍 [Mục 2 — Nhận Voucher -15.000₫] Mình vừa đánh giá ${rating}★ ("${combinedReview.slice(
-          0,
-          120
-        )}") và gửi ảnh màn hình Follow Fanpage FB + Share bài công khai cho đơn #${order.id.slice(
-          -8
-        )}${postUrl ? ` (${postUrl})` : ''}. Shop kiểm tra và gửi mã riêng giúp mình nhé!`;
-
-    sendMessage(chatSummary, null, undefined, {
-      voucherProof: {
-        missionType,
-        orderId: order.id,
-        userId: user?.id || order.userId,
-        customerEmail: reviewerEmail,
-        customerName: reviewerName,
-        rating,
-        reviewText: combinedReview.slice(0, 220),
-        postUrl: postUrl || undefined,
-        proofImage: proofImg,
-      },
-    });
-
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(
-          isVideo
-            ? `tcl_proof_video_${order.id}`
-            : `tcl_proof_fb_${order.id}`,
-          '1'
-        );
+      const firstItem = order.items[0];
+      if (firstItem) {
+        const firstBaseId = String(
+          firstItem.product.baseProductId || firstItem.product.id
+        ).split('__')[0];
+        addReview(firstBaseId, {
+          id: `rev_${Date.now()}`,
+          userId: reviewerEmail || order.userId || 'customer',
+          userName: reviewerName,
+          rating,
+          comment: combinedReview,
+          date: new Date().toISOString(),
+        });
       }
-    } catch {
-      // ignore
-    }
 
-    setBusy(false);
-    setDone(true);
-    openChat();
+      // 2. Dispatch structured proof + R2 CDN screenshot URL directly into Live Chat so Admin approves & sends 1-to-1 voucher in Chat!
+      const chatSummary = isVideo
+        ? `🎬 [Mục 1 — Nhận Gói Quà 60.000₫ (Voucher -25k + Tặng 1 SP 35k)] Mình vừa đánh giá ${rating}★ ("${combinedReview.slice(
+            0,
+            120
+          )}") và gửi ảnh màn hình đăng Video/Story khui hàng (FB/IG/TikTok) kèm tên & link web cho đơn #${order.id.slice(
+            -8
+          )}${postUrl ? ` (${postUrl})` : ''}. Shop kiểm tra và gửi mã quà 60k giúp mình nhé!`
+        : `👍 [Mục 2 — Nhận Voucher -15.000₫] Mình vừa đánh giá ${rating}★ ("${combinedReview.slice(
+            0,
+            120
+          )}") và gửi ảnh màn hình Follow Fanpage FB + Share bài công khai cho đơn #${order.id.slice(
+            -8
+          )}${postUrl ? ` (${postUrl})` : ''}. Shop kiểm tra và gửi mã riêng giúp mình nhé!`;
+
+      sendMessage(chatSummary, null, undefined, {
+        voucherProof: {
+          missionType,
+          orderId: order.id,
+          userId: user?.id || order.userId,
+          customerEmail: reviewerEmail,
+          customerName: reviewerName,
+          rating,
+          reviewText: combinedReview.slice(0, 220),
+          postUrl: postUrl || undefined,
+          proofImage: finalProofUrl,
+        },
+      });
+
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(
+            isVideo
+              ? `tcl_proof_video_${order.id}`
+              : `tcl_proof_fb_${order.id}`,
+            '1'
+          );
+        }
+      } catch {
+        // ignore
+      }
+
+      setDone(true);
+      openChat();
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

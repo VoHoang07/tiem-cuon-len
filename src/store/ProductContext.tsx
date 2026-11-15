@@ -2,6 +2,7 @@ import { MOCK_PRODUCTS } from '@/data/products';
 import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 import { Product, Review, ShopCategoryItem } from '@/types/product';
+import { uploadImageToCloudMedia } from '@/utils/fileUploadGuard';
 import {
     DEFAULT_SHOP_CATEGORIES,
     setDynamicCategoriesRegistry,
@@ -801,11 +802,21 @@ function saveCachedProducts(items: Product[]) {
   }, 900);
 }
 
+function isSupabaseSafeImageUrl(img: unknown): img is string {
+  return (
+    typeof img === 'string' &&
+    !img.startsWith('data:image/') &&
+    !img.trim().startsWith('{') &&
+    (img.startsWith('http://') ||
+      img.startsWith('https://') ||
+      img.startsWith('/catalog-media/') ||
+      img.startsWith('/assets/'))
+  );
+}
+
 function toDbProduct(product: Product) {
-  const validImage =
-    typeof product.image === 'string' && !product.image.trim().startsWith('{')
-      ? product.image
-      : null;
+  // ZERO-BASE64 EGRESS GUARD: Never send `data:image/...` strings to Supabase PostgreSQL!
+  const validImage = isSupabaseSafeImageUrl(product.image) ? product.image : null;
 
   const cleanTags = Array.isArray(product.tags)
     ? product.tags.filter(
@@ -824,13 +835,11 @@ function toDbProduct(product: Product) {
             : Number(product.price) > 0
             ? Number(product.price)
             : undefined,
-        image:
-          typeof c.image === 'string' &&
-          (c.image.startsWith('data:image/') || c.image.startsWith('http'))
-            ? validImage && c.image === validImage
-              ? COVER_IMG_REF
-              : c.image
-            : undefined,
+        image: isSupabaseSafeImageUrl(c.image)
+          ? validImage && c.image === validImage
+            ? COVER_IMG_REF
+            : c.image
+          : undefined,
       }))
     : undefined;
 
@@ -845,11 +854,7 @@ function toDbProduct(product: Product) {
 
   const serializableGallery = Array.isArray(product.gallery)
     ? product.gallery
-        .filter(
-          (g) =>
-            typeof g.image === 'string' &&
-            (g.image.startsWith('data:image/') || g.image.startsWith('http'))
-        )
+        .filter((g) => isSupabaseSafeImageUrl(g.image))
         .map((g) => ({
           id: g.id,
           label: g.label,
@@ -1168,11 +1173,83 @@ async function fetchRemoteShopCategories(): Promise<ShopCategoryItem[] | null> {
   }
 }
 
+async function migrateProductMediaToR2IfNeeded(product: Product): Promise<Product> {
+  let changed = false;
+  let nextImage = product.image;
+  if (typeof nextImage === 'string' && nextImage.startsWith('data:image/')) {
+    const up = await uploadImageToCloudMedia(nextImage, 'product', {
+      productId: product.id,
+    });
+    if (up.success && up.url) {
+      nextImage = up.url;
+      changed = true;
+    }
+  }
+
+  let nextColors = product.colorOptions;
+  if (Array.isArray(product.colorOptions)) {
+    const updatedList = [];
+    for (const c of product.colorOptions) {
+      if (typeof c.image === 'string' && c.image.startsWith('data:image/')) {
+        const up = await uploadImageToCloudMedia(c.image, 'product', {
+          productId: product.id,
+        });
+        if (up.success && up.url) {
+          updatedList.push({ ...c, image: up.url });
+          changed = true;
+          continue;
+        }
+      }
+      updatedList.push(c);
+    }
+    nextColors = updatedList;
+  }
+
+  let nextGallery = product.gallery;
+  if (Array.isArray(product.gallery)) {
+    const updatedGal = [];
+    for (const g of product.gallery) {
+      if (typeof g.image === 'string' && g.image.startsWith('data:image/')) {
+        const up = await uploadImageToCloudMedia(g.image, 'product', {
+          productId: product.id,
+        });
+        if (up.success && up.url) {
+          updatedGal.push({ ...g, image: up.url });
+          changed = true;
+          continue;
+        }
+      }
+      updatedGal.push(g);
+    }
+    nextGallery = updatedGal;
+  }
+
+  if (!changed) return product;
+  return {
+    ...product,
+    image: nextImage,
+    colorOptions: nextColors,
+    gallery: nextGallery,
+  };
+}
+
 const RESCUE_PRODUCT_PHONE_TAG = '__TCL_RESCUE_PROD_V1__';
 
 async function pushRescuedProductToSupabase(product: Product): Promise<void> {
   if (!supabaseUrl || !supabaseAnonKey || !product?.id) return;
+  // Never push raw Base64 strings from legacy browser caches into `public.addresses`
+  if (typeof product.image === 'string' && product.image.startsWith('data:image/')) {
+    return;
+  }
   const dbProd = toDbProduct(product);
+  const lightRescueProduct = {
+    ...dbProd,
+    tags: Array.isArray(dbProd.tags)
+      ? dbProd.tags.filter(
+          (t) => typeof t === 'string' && !t.startsWith(VARIANTS_META_PREFIX)
+        )
+      : [],
+  };
   const payload = {
     id: `tcl_rescue_${product.id}`,
     userId: SHOP_REVIEWS_HOLDER_USER,
@@ -1181,7 +1258,7 @@ async function pushRescuedProductToSupabase(product: Product): Promise<void> {
     city: 'HCM',
     district: 'Q8',
     ward: '1',
-    detailAddress: JSON.stringify(dbProd),
+    detailAddress: JSON.stringify(lightRescueProduct),
     isDefault: false,
   };
   try {
@@ -2005,7 +2082,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           const localCustoms = loadCustomAdminProductsSync();
 
           if (role === 'admin') {
-            // Upload missing custom products sequentially so multi-MB Base64 payloads never collide or drop
+            // Migrate any cached Base64 photos to Cloudflare R2 first, then sync clean URLs sequentially
             void (async () => {
               for (const lp of localCustoms) {
                 if (
@@ -2015,12 +2092,20 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                   !deleted.has(lp.id) &&
                   !RETIRED_PRODUCT_IDS.has(lp.id)
                 ) {
-                  await upsertProductToSupabase(toDbProduct(lp)).catch(() => false);
+                  const cloudMigrated = await migrateProductMediaToR2IfNeeded(lp).catch(
+                    () => lp
+                  );
+                  if (cloudMigrated !== lp) {
+                    persistCustomAdminProduct(cloudMigrated);
+                  }
+                  await upsertProductToSupabase(toDbProduct(cloudMigrated)).catch(
+                    () => false
+                  );
                 }
               }
             })();
           } else {
-            // If a customer device (e.g. phone with IndexedDB cache) has custom user_ products missing from the new DB, push them to the rescue bridge
+            // Only push non-Base64 CDN products from customer cache to the rescue bridge
             const rescuedIds = new Set(remoteRescuedList.map((r) => r.id));
             void (async () => {
               for (const lp of localCustoms) {
@@ -2033,8 +2118,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                   !rescuedIds.has(lp.id) &&
                   !deleted.has(lp.id) &&
                   !RETIRED_PRODUCT_IDS.has(lp.id) &&
-                  typeof lp.image === 'string' &&
-                  lp.image.length > 100
+                  isSupabaseSafeImageUrl(lp.image)
                 ) {
                   await pushRescuedProductToSupabase(lp);
                 }
@@ -2225,30 +2309,36 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const addProduct = useCallback(async (product: Product) => {
     if (role !== 'admin') return;
-    if (deletedIdsMemory.has(product.id)) {
-      deletedIdsMemory.delete(product.id);
+    const cleanProd = await migrateProductMediaToR2IfNeeded(product).catch(
+      () => product
+    );
+    if (deletedIdsMemory.has(cleanProd.id)) {
+      deletedIdsMemory.delete(cleanProd.id);
       saveDeletedIds(deletedIdsMemory);
       syncDeletedIdsToSupabase(deletedIdsMemory).catch(() => {});
     }
-    persistCustomAdminProduct(product);
+    persistCustomAdminProduct(cleanProd);
     setProducts((prev) => {
-      const next = [product, ...prev.filter((p) => p.id !== product.id)];
+      const next = [cleanProd, ...prev.filter((p) => p.id !== cleanProd.id)];
       saveCachedProducts(next);
       return next;
     });
-    const dbProduct = toDbProduct(product);
+    const dbProduct = toDbProduct(cleanProd);
     await upsertProductToSupabase(dbProduct);
   }, [role]);
 
   const updateProduct = useCallback(async (id: string, product: Product) => {
     if (role !== 'admin') return;
-    persistCustomAdminProduct(product);
+    const cleanProd = await migrateProductMediaToR2IfNeeded(product).catch(
+      () => product
+    );
+    persistCustomAdminProduct(cleanProd);
     setProducts((prev) => {
-      const next = prev.map((p) => (p.id === id ? product : p));
+      const next = prev.map((p) => (p.id === id ? cleanProd : p));
       saveCachedProducts(next);
       return next;
     });
-    const dbProduct = toDbProduct(product);
+    const dbProduct = toDbProduct(cleanProd);
     await upsertProductToSupabase(dbProduct);
   }, [role]);
 

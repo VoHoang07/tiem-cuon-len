@@ -188,12 +188,21 @@ function toAuthUser(session: Session | null, localAvatar?: string | null): AuthU
   };
 }
 
+export const LAST_OAUTH_TOKEN_SESSION_KEY = 'tcl_last_oauth_token_v1';
+
 const NETWORK_ERROR_MSG =
   'Không kết nối được Supabase. Vui lòng kiểm tra mạng hoặc cấu hình API.';
 
 function purgeLocalSupabaseSessionTokens() {
   try {
     if (typeof window !== 'undefined') {
+      if (window.sessionStorage) {
+        try {
+          window.sessionStorage.removeItem(LAST_OAUTH_TOKEN_SESSION_KEY);
+        } catch {
+          // ignore
+        }
+      }
       if (window.localStorage) {
         const keysToRemove: string[] = [];
         for (let i = 0; i < window.localStorage.length; i++) {
@@ -888,6 +897,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const oauthSecret = `TclOAuth#${provider}_${verifiedId.slice(0, 14)}_2026!`;
         const isAdminEmail = ADMIN_EMAILS.has(verifiedEmail);
+
+        try {
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            window.sessionStorage.setItem(
+              LAST_OAUTH_TOKEN_SESSION_KEY,
+              JSON.stringify({
+                provider,
+                token: accessToken.trim(),
+                savedAt: Date.now(),
+              })
+            );
+          }
+        } catch {
+          // ignore
+        }
 
         // 1. Immediately authenticate the cryptographically verified Google/Facebook user in 0ms
         // so the login popup never hangs waiting on Supabase GoTrue!

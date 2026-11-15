@@ -2,8 +2,8 @@
 
 > **Dự án:** Tiệm Cuộn Len Handmade (`VoHoang07/tiem-cuon-len`)
 > **Production Domain:** `https://www.tiemcuonlen.shop`
-> **Cập nhật lần cuối:** `commit a957b5b` (cùng bản cập nhật `HANDOFF.md` hiện tại trên nhánh `main`)
-> **Mục tiêu kế tiếp ngay khi mở phiên Chat mới:** Triển khai kiến trúc **Tách Kho Ảnh sang Cloudflare R2 (`media.tiemcuonlen.shop` — Băng thông Egress vô hạn 0₫) + Chuyển sang 1 Project Supabase Mới chỉ lưu Text/JSON siêu nhẹ (0% Base64 trong DB)** để chấm dứt vĩnh viễn lỗi `402 exceed_egress_quota`.
+> **Cập nhật lần cuối:** Đã hoàn tất chuyển đổi kiến trúc **Cloudflare R2 (`api/media-upload.js` + `https://media.tiemcuonlen.shop`) + Supabase Mới Zero-Base64 + Zero-Hardcoded-Secret** trên nhánh `main`.
+> **Trạng thái hiện tại:** Toàn bộ 8 biến môi trường (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL`) đã được cấu hình trực tiếp trên Vercel Dashboard và kết nối thành công.
 
 ---
 
@@ -36,25 +36,23 @@
 
 ---
 
-## 2. Chẩn Đoán Sự Cố Hiện Tại & Kế Hoạch Chuyển Đổi Kiến Trúc Ở Phiên Chat Mới
+## 2. Kiến Trúc Tách Kho Ảnh Cloudflare R2 + Supabase Zero-Base64 (ĐÃ TRIỂN KHAI HOÀN TẤT)
 
-### 2.1. Nguyên nhân gốc khiến Project Supabase cũ (`ajxvqewsqvfdpovkqqqw`) bị khóa `402`
-- Đã kiểm tra trực tiếp HTTP response từ Supabase: `"Service for this project is restricted due to the following violations: exceed_egress_quota"`.
-- Dung lượng lưu trữ DB thực tế rất nhỏ, nhưng các dòng `products.image`, `products.tags` (`__tcl_variants_v1__`), `addresses` (`tcl_rescue_*`) và ảnh chụp màn hình trong Chat đang lưu **chuỗi ảnh `data:image/...;base64` nặng nhiều MB** trực tiếp trong PostgreSQL -> làm cạn sạch `5GB Egress/tháng` của gói Free.
+### 2.1. Nguyên nhân sự cố cũ đã xử lý dứt điểm
+- Project Supabase cũ từng bị giới hạn `402 exceed_egress_quota` do lưu chuỗi ảnh `data:image/...;base64` nhiều MB trực tiếp vào PostgreSQL.
 
-### 2.2. Kiến trúc mục tiêu cần code ở phiên mới (TUYỆT ĐỐI KHÔNG CẦN GỬI KEY LÊN CHAT!)
-> **🛡️ QUY TẮC BẢO MẬT ZERO-SECRET:** Người dùng tự điền toàn bộ URL & Secret Key trực tiếp trên **Vercel Dashboard → Settings → Environment Variables** (không lưu vào `.env` trên máy nếu không cần, không dán lên khung Chat AI, và AI tuyệt đối KHÔNG đọc file `.env`/`.env.local` hay gán cứng key thật vào code!).
+### 2.2. Kiến trúc mới đang chạy Production (ZERO-SECRET & ZERO-BASE64)
+> **🛡️ QUY TẮC BẢO MẬT ZERO-SECRET:** Toàn bộ URL & Secret Key được quản lý trực tiếp trên **Vercel Dashboard → Settings → Environment Variables** (tuyệt đối không gán cứng vào mã nguồn hay dán lên khung Chat).
 
-1. **Kho Ảnh Riêng Biệt trên Cloudflare R2 (`https://media.tiemcuonlen.shop`):**
+1. **Kho Ảnh Đám Mây Cloudflare R2 (`https://media.tiemcuonlen.shop` — `api/media-upload.js`):**
    - Lưu trữ miễn phí `10GB`, **băng thông tải ảnh ra (Egress) = MIỄN PHÍ VÔ HẠN (`0₫`)**.
-   - Tạo API route mới `api/media-upload.js` đọc trực tiếp từ `process.env.R2_ACCOUNT_ID`, `process.env.R2_ACCESS_KEY_ID`, `process.env.R2_SECRET_ACCESS_KEY`, `process.env.R2_BUCKET_NAME`, `process.env.R2_PUBLIC_BASE_URL` (ký AWS Signature V4 S3-compatible bằng `crypto` chuẩn của Node.js):
-     - Khi Admin đăng/sửa ảnh sản phẩm trong `ProductStudioForm.tsx` -> Upload thẳng file WebP lên R2 -> Trả về URL ngắn `https://media.tiemcuonlen.shop/products/<uuid>.webp`.
-     - Khi Khách tải ảnh chụp màn hình nhận thưởng Voucher trong `/orders/[id].tsx` -> Upload lên R2 -> Trả về URL ngắn `https://media.tiemcuonlen.shop/proofs/<uuid>.jpg`.
-   - Cập nhật `Content-Security-Policy` (`img-src`, `connect-src`) trong `vercel.json` cho phép `https://media.tiemcuonlen.shop`.
-2. **Project Supabase Mới — 100% Đọc Từ `process.env` & Chỉ Lưu Chữ Siêu Nhẹ (Zero Base64 + Zero Hardcoded URL):**
-   - Gỡ bỏ hoàn toàn các chuỗi fallback URL/Key cứng cũ trong `src/services/supabase.ts` và `api/_securityCore.js` — chỉ đọc từ `process.env.EXPO_PUBLIC_SUPABASE_URL`, `process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY` và `process.env.SUPABASE_SERVICE_ROLE_KEY` trên Vercel.
-   - Chặn tuyệt đối việc ghi bất kỳ chuỗi `data:image/` Base64 nào vào `public.products`, `public.addresses` (`tcl_rescue_*`, `__TCL_CHAT_V2__`) hay `public.orders` — mọi trường ảnh trong Supabase chỉ lưu đường dẫn URL ngắn (`< 120 bytes`).
-   - File SQL khởi tạo trọn gói đã sẵn sàng 100% tại: `supabase/migrations/20261106_new_project_all_in_one.sql`.
+   - `api/media-upload.js` bọc đầy đủ `withGlobalErrorHandler`, `stripUnknownFieldsServer`, `sanitizeTextServer`, CSRF check, Rate Limit, kiểm tra Magic Bytes nhị phân và ký AWS Signature V4 S3-compatible bằng `crypto` chuẩn của Node.js:
+     - Ảnh sản phẩm Admin (`ProductStudioForm.tsx`, `ProductContext.tsx`) -> Upload WebP lên `products/<uuid>.webp` -> Trả về URL ngắn `https://media.tiemcuonlen.shop/products/<uuid>.webp`.
+     - Ảnh chụp màn hình nhận thưởng Voucher (`src/app/orders/[id].tsx`) -> Upload lên `proofs/<uuid>.jpg` -> Trả về URL ngắn `https://media.tiemcuonlen.shop/proofs/<uuid>.jpg`.
+   - `Content-Security-Policy` (`img-src`, `connect-src`) trong `vercel.json` đã mở cho `https://media.tiemcuonlen.shop` và `https://*.supabase.co`.
+2. **Project Supabase Mới — 100% Đọc Từ `process.env` & Chỉ Lưu Chữ Siêu Nhẹ (Zero Base64):**
+   - Đã gỡ bỏ hoàn toàn các chuỗi fallback URL/Key cứng cũ trong `src/services/supabase.ts` và `api/_securityCore.js`.
+   - Đã chặn tuyệt đối việc ghi bất kỳ chuỗi `data:image/` Base64 nào vào `public.products`, `public.addresses` (`tcl_rescue_*`, `__TCL_CHAT_V2__`) và `public.orders`.
 
 ### 2.3. Tên Đúng Của 8 Biến Môi Trường (Người Dùng Tự Nhập Trên Vercel Dashboard — KHÔNG GỬI LÊN CHAT)
 - `EXPO_PUBLIC_SUPABASE_URL`

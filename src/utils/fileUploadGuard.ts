@@ -1,3 +1,5 @@
+import { supabase } from '@/services/supabase';
+import { LAST_OAUTH_TOKEN_SESSION_KEY } from '@/store/AuthContext';
 import { recordSecurityAudit } from './securityGuard';
 
 /**
@@ -333,4 +335,146 @@ export function validateBase64ImageUpload(
     uuidFileName: generateUuidFilename(magic.ext),
     byteLength: estimatedBytes,
   };
-}
+  }
+
+  export type CloudMediaPurpose = 'product' | 'voucher_proof';
+
+  export interface CloudMediaUploadResult {
+  success: boolean;
+  url?: string;
+  error?: string;
+  }
+
+  const uploadedDataUriCache = new Map<string, string>();
+
+  function hashDataUriKey(dataUri: string): string {
+  const len = dataUri.length;
+  const head = dataUri.slice(0, 64);
+  const mid = dataUri.slice(Math.floor(len / 2), Math.floor(len / 2) + 64);
+  const tail = dataUri.slice(Math.max(0, len - 64));
+  return `${len}:${head}:${mid}:${tail}`;
+  }
+
+  /**
+  * Uploads any `data:image/...;base64,...` image to Cloudflare R2 (`https://media.tiemcuonlen.shop/...`)
+  * via `/api/media-upload` so raw Base64 strings NEVER enter Supabase PostgreSQL.
+  * Already-uploaded HTTP(S) or `/catalog-media/...` URLs pass through immediately in 0ms.
+  */
+  export async function uploadImageToCloudMedia(
+  uriOrDataUri: string,
+  purpose: CloudMediaPurpose,
+  meta?: { orderId?: string; productId?: string }
+  ): Promise<CloudMediaUploadResult> {
+  if (!uriOrDataUri || typeof uriOrDataUri !== 'string') {
+    return { success: false, error: 'Đường dẫn ảnh rỗng.' };
+  }
+
+  const trimmed = uriOrDataUri.trim();
+  if (
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('/catalog-media/') ||
+    trimmed.startsWith('/assets/')
+  ) {
+    return { success: true, url: trimmed };
+  }
+
+  if (!trimmed.startsWith('data:image/')) {
+    return { success: false, error: 'Định dạng nguồn ảnh không được hỗ trợ.' };
+  }
+
+  const cacheKey = `${purpose}:${hashDataUriKey(trimmed)}`;
+  const cachedUrl = uploadedDataUriCache.get(cacheKey);
+  if (cachedUrl) {
+    return { success: true, url: cachedUrl };
+  }
+
+  let accessToken = '';
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) {
+      accessToken = data.session.access_token;
+    }
+  } catch {
+    // ignore
+  }
+
+  let oauthToken: string | undefined;
+  let oauthProvider: string | undefined;
+  if (!accessToken && typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      const rawOAuth = window.sessionStorage.getItem(LAST_OAUTH_TOKEN_SESSION_KEY);
+      if (rawOAuth) {
+        const parsed = JSON.parse(rawOAuth);
+        if (parsed?.token && parsed?.provider) {
+          oauthToken = String(parsed.token);
+          oauthProvider = String(parsed.provider);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const endpoint =
+    typeof window !== 'undefined'
+      ? '/api/media-upload'
+      : 'https://www.tiemcuonlen.shop/api/media-upload';
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          purpose,
+          dataUri: trimmed,
+          orderId: meta?.orderId,
+          productId: meta?.productId,
+          ...(oauthToken ? { oauthToken, oauthProvider } : {}),
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.success && typeof json?.url === 'string' && json.url) {
+        if (uploadedDataUriCache.size > 200) {
+          const oldestKey = uploadedDataUriCache.keys().next().value;
+          if (oldestKey) uploadedDataUriCache.delete(oldestKey);
+        }
+        uploadedDataUriCache.set(cacheKey, json.url);
+        return { success: true, url: json.url };
+      }
+
+      if (res.status === 401 || res.status === 403 || res.status === 400 || res.status === 413) {
+        return {
+          success: false,
+          error:
+            json?.error ||
+            'Không thể tải ảnh lên đám mây (kiểm tra quyền đăng nhập hoặc định dạng ảnh).',
+        };
+      }
+
+      if (attempt === 2) {
+        return {
+          success: false,
+          error:
+            json?.error ||
+            'Máy chủ lưu trữ ảnh đám mây R2 đang bận. Vui lòng bấm lưu lại sau vài giây.',
+        };
+      }
+    } catch {
+      if (attempt === 2) {
+        return {
+          success: false,
+          error: 'Mất kết nối mạng khi tải ảnh lên đám mây. Vui lòng kiểm tra mạng và thử lại.',
+        };
+      }
+    }
+  }
+
+  return { success: false, error: 'Không thể tải ảnh lên đám mây.' };
+  }
+

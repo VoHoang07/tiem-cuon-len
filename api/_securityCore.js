@@ -1,24 +1,11 @@
 const crypto = require('crypto');
 
-const rawEnvUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const rawEnvKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const isLegacyRestrictedProject =
-  rawEnvUrl.includes('ljcweaeirwttqoygeoxd') ||
-  rawEnvKey.includes('bGpjd2VhZWlyd3R0cW95Z2VveGQ');
-
-const SUPABASE_URL =
-  !rawEnvUrl || isLegacyRestrictedProject
-    ? 'https://ajxvqewsqvfdpovkqqqw.supabase.co'
-    : rawEnvUrl;
-const SUPABASE_KEY =
-  !rawEnvKey || isLegacyRestrictedProject
-    ? 'sb_publishable_g3xVNQbOj0PyTj9NrCpDyw_6hmDGWab'
-    : rawEnvKey;
-const rawServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const SUPABASE_SERVICE_KEY =
-  !rawServiceKey || rawServiceKey.includes('bGpjd2VhZWlyd3R0cW95Z2VveGQ')
-    ? SUPABASE_KEY
-    : rawServiceKey;
+const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '')
+  .trim()
+  .replace(/\/+$/, '');
+const SUPABASE_KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+const rawServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+const SUPABASE_SERVICE_KEY = rawServiceKey || SUPABASE_KEY;
 
 const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
 const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
@@ -486,7 +473,7 @@ async function isIpBlockedOnServer(ip) {
       `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&select=phone,detailAddress&limit=100`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
         },
       }
@@ -996,7 +983,7 @@ function verifyPersonalVoucherRecord(record) {
 async function fetchUserPastValidOrders(userId, email, phone) {
   const matchedOrders = new Map();
   const headers = {
-    apikey: SUPABASE_KEY,
+    apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
     Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
   };
 
@@ -1122,8 +1109,8 @@ async function issuePersonalMissionVoucherServer({
   const res = await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
     method: 'POST',
     headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${adminAccessToken || SUPABASE_SERVICE_KEY}`,
+      apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY || adminAccessToken}`,
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates,return=minimal',
     },
@@ -1150,7 +1137,7 @@ async function markPersonalVoucherUsedServer(code, usedByOrderId, authToken) {
       )}&fullName=eq.${PERSONAL_VOUCHER_PARTITION}&select=id,detailAddress&limit=1`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
         },
       }
@@ -1177,8 +1164,8 @@ async function markPersonalVoucherUsedServer(code, usedByOrderId, authToken) {
       {
         method: 'PATCH',
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authToken || SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authToken}`,
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
         },

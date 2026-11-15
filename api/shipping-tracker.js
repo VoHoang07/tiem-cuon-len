@@ -367,8 +367,8 @@ async function getSavedSenderWarehouse(authToken) {
       `${SUPABASE_URL}/rest/v1/addresses?id=eq.${GOSHIP_CONFIG_ROW_ID}&select=detailAddress&limit=1`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authToken || SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authToken}`,
         },
       }
     );
@@ -479,7 +479,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     // Match order by `order_id` (`CUONLEN-...`) first, or by previously saved `goshipShipmentId` / `trackingCode`
     let matchedOrder = null;
     const dbHeaders = {
-      apikey: SUPABASE_KEY,
+      apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
     };
 
@@ -720,7 +720,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       `${SUPABASE_URL}/rest/v1/orders?select=id,userId,items,total,status,paymentMethod,shippingAddress,createdAt&order=createdAt.desc&limit=150`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
         },
       }
@@ -799,8 +799,8 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
       headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${authUser.accessToken || SUPABASE_SERVICE_KEY}`,
+        apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
@@ -837,8 +837,8 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
         },
       }
     );
@@ -864,8 +864,8 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       {
         method: 'PATCH',
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
         },
@@ -894,8 +894,8 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
         },
       }
     );
@@ -1021,8 +1021,8 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
         },
       }
     );
@@ -1171,8 +1171,8 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       {
         method: 'PATCH',
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_SERVICE_KEY}`,
+          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
         },

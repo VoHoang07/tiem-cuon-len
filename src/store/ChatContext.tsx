@@ -167,6 +167,20 @@ function rowToChatMessage(row: any): ChatMessage | null {
   }
 }
 
+function sanitizeVoucherProofForDb(
+  proof?: VoucherProofPayload | null
+): VoucherProofPayload | null {
+  if (!proof) return null;
+  const cleanImg =
+    typeof proof.proofImage === 'string' && !proof.proofImage.startsWith('data:image/')
+      ? proof.proofImage
+      : '';
+  return {
+    ...proof,
+    proofImage: cleanImg,
+  };
+}
+
 function chatMessageToRow(msg: ChatMessage) {
   return {
     id: msg.id,
@@ -182,7 +196,7 @@ function chatMessageToRow(msg: ChatMessage) {
       senderName: msg.senderName,
       text: msg.text,
       product: sanitizeProduct(msg.product),
-      voucherProof: msg.voucherProof || null,
+      voucherProof: sanitizeVoucherProofForDb(msg.voucherProof),
       issuedVoucher: msg.issuedVoucher || null,
     }),
     isDefault: false,

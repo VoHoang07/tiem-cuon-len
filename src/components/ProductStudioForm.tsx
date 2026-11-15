@@ -15,6 +15,7 @@ import {
 import {
     generateUuidFilename,
     MAX_PROCESSED_DATA_URI_BYTES,
+    uploadImageToCloudMedia,
     validateBase64ImageUpload,
     validateWebFileUpload,
 } from '@/utils/fileUploadGuard';
@@ -1136,94 +1137,165 @@ export function ProductStudioForm({
 
     setIsSubmitting(true);
     try {
+      const targetProductId = initialProduct?.id || `user_${Date.now()}`;
 
-    const firstAvailableImg =
-      coverImage ||
-      cleanColors.find((c) => Boolean(c.image))?.image ||
-      extraPhotos[0] ||
-      initialProduct?.image ||
-      null;
+      // Upload all `data:image/...` photos to Cloudflare R2 (`media.tiemcuonlen.shop`) first
+      // so zero raw Base64 strings ever touch Supabase PostgreSQL!
+      const resolveCloudUrl = async (
+        rawImg: Product['image'] | string | null | undefined,
+        slotLabel: string
+      ): Promise<string | null> => {
+        if (!rawImg || typeof rawImg !== 'string') return null;
+        const trimmed = rawImg.trim();
+        if (!trimmed) return null;
+        if (!trimmed.startsWith('data:image/')) {
+          return trimmed;
+        }
+        setDraftStatusMsg(`☁️ Đang tải ${slotLabel} lên đám mây R2...`);
+        const up = await uploadImageToCloudMedia(trimmed, 'product', {
+          productId: targetProductId,
+        });
+        if (!up.success || !up.url) {
+          throw new Error(
+            up.error || `Không thể tải ${slotLabel} lên kho ảnh đám mây R2.`
+          );
+        }
+        return up.url;
+      };
 
-    // Ensure every color option has a valid image (falls back to firstAvailableImg if admin didn't pick a separate image)
-    const normalizedColors = cleanColors.map((c) => ({
-      ...c,
-      image: c.image || firstAvailableImg || undefined,
-    }));
+      const uploadedCoverUrl = coverImage
+        ? await resolveCloudUrl(coverImage, 'Ảnh bìa sản phẩm')
+        : null;
 
-    const cleanAccessories: ProductAccessoryOption[] = [
-      {
-        id: 'no_box',
-        name: 'Tự dùng / Tiêu chuẩn',
-        emoji: '🛍️',
-        priceDelta: 0,
-      },
-      {
-        id: 'gift_box_letter',
-        name: 'Set Quà Tặng Đặc Biệt',
-        emoji: '🎁',
-        priceDelta: 25000,
-      },
-    ];
+      const uploadedColors: ProductColorOption[] = [];
+      for (let i = 0; i < cleanColors.length; i++) {
+        const c = cleanColors[i];
+        const variantUrl =
+          typeof c.image === 'string' && c.image
+            ? await resolveCloudUrl(c.image, `Ảnh mẫu #${i + 1} (${c.name})`)
+            : null;
+        uploadedColors.push({
+          ...c,
+          image: variantUrl || undefined,
+        });
+      }
 
-    const builtGallery: ProductGalleryItem[] = extraPhotos.map((uri, idx) => ({
-      id: `g_extra_${idx + 1}`,
-      label: `Góc chụp #${idx + 2}`,
-      angleTag: `Góc #${idx + 2}`,
-      image: uri,
-      zoomMode: 'normal',
-    }));
+      const uploadedExtras: string[] = [];
+      for (let i = 0; i < extraPhotos.length; i++) {
+        const extraUrl = await resolveCloudUrl(
+          extraPhotos[i],
+          `Ảnh góc chụp #${i + 2}`
+        );
+        if (extraUrl) uploadedExtras.push(extraUrl);
+      }
 
-    const finalMaterial = material.trim() || 'Len Nhung Gấu';
-    const finalMainColor = normalizedColors[0]?.name || 'Kem Sữa';
-    const finalQty = isMadeToOrder
-      ? 999
-      : quantity.trim() && !isNaN(Number(quantity)) && Number(quantity) >= 0
-      ? Number(quantity)
-      : 10;
+      const initialUrl =
+        typeof initialProduct?.image === 'string' &&
+        !initialProduct.image.startsWith('data:image/')
+          ? initialProduct.image
+          : null;
 
-    const finalDesc =
-      description.trim() ||
-      generateProductDescription({
+      const firstAvailableImg =
+        uploadedCoverUrl ||
+        uploadedColors.find((c) => Boolean(c.image))?.image ||
+        uploadedExtras[0] ||
+        initialUrl ||
+        null;
+
+      // Update local state with R2 CDN URLs so retries never re-upload the same photo
+      if (uploadedCoverUrl && uploadedCoverUrl !== coverImage) {
+        setCoverImage(uploadedCoverUrl);
+      }
+      setColorOptions(uploadedColors);
+      if (uploadedExtras.length > 0) {
+        setExtraPhotos(uploadedExtras);
+      }
+
+      // Ensure every color option has a valid CDN image
+      const normalizedColors = uploadedColors.map((c) => ({
+        ...c,
+        image: c.image || firstAvailableImg || undefined,
+      }));
+
+      const cleanAccessories: ProductAccessoryOption[] = [
+        {
+          id: 'no_box',
+          name: 'Tự dùng / Tiêu chuẩn',
+          emoji: '🛍️',
+          priceDelta: 0,
+        },
+        {
+          id: 'gift_box_letter',
+          name: 'Set Quà Tặng Đặc Biệt',
+          emoji: '🎁',
+          priceDelta: 25000,
+        },
+      ];
+
+      const builtGallery: ProductGalleryItem[] = uploadedExtras.map((uri, idx) => ({
+        id: `g_extra_${idx + 1}`,
+        label: `Góc chụp #${idx + 2}`,
+        angleTag: `Góc #${idx + 2}`,
+        image: uri,
+        zoomMode: 'normal',
+      }));
+
+      const finalMaterial = material.trim() || 'Len Nhung Gấu';
+      const finalMainColor = normalizedColors[0]?.name || 'Kem Sữa';
+      const finalQty = isMadeToOrder
+        ? 999
+        : quantity.trim() && !isNaN(Number(quantity)) && Number(quantity) >= 0
+        ? Number(quantity)
+        : 10;
+
+      const finalDesc =
+        description.trim() ||
+        generateProductDescription({
+          name: name.trim(),
+          category,
+          material: finalMaterial,
+          color: finalMainColor,
+          tags: tags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+        });
+
+      const productPayload: Product = {
+        ...(initialProduct || {}),
+        id: targetProductId,
         name: name.trim(),
+        description: finalDesc,
+        price: numPrice,
+        image: firstAvailableImg,
         category,
         material: finalMaterial,
         color: finalMainColor,
+        colorOptions: normalizedColors,
+        accessoryOptions: cleanAccessories,
+        gallery: builtGallery,
+        isMadeToOrder,
+        quantity: finalQty,
+        rating: initialProduct?.rating ?? 5,
+        reviews: initialProduct?.reviews ?? [],
+        isFavorite: initialProduct?.isFavorite ?? false,
         tags: tags
           .split(',')
           .map((t) => t.trim())
           .filter(Boolean),
-      });
-
-    const productPayload: Product = {
-      ...(initialProduct || {}),
-      id: initialProduct?.id || `user_${Date.now()}`,
-      name: name.trim(),
-      description: finalDesc,
-      price: numPrice,
-      image: firstAvailableImg,
-      category,
-      material: finalMaterial,
-      color: finalMainColor,
-      colorOptions: normalizedColors,
-      accessoryOptions: cleanAccessories,
-      gallery: builtGallery,
-      isMadeToOrder,
-      quantity: finalQty,
-      rating: initialProduct?.rating ?? 5,
-      reviews: initialProduct?.reviews ?? [],
-      isFavorite: initialProduct?.isFavorite ?? false,
-      tags: tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
-      createdAt: initialProduct?.createdAt || new Date().toISOString(),
-    };
+        createdAt: initialProduct?.createdAt || new Date().toISOString(),
+      };
 
       if (mode === 'add') {
         await deleteAdminDraft(currentDraftId);
         await clearWorkingDraft();
       }
       await onSubmitProduct(productPayload);
+    } catch (err: any) {
+      Alert.alert(
+        'Chưa tải xong ảnh đám mây',
+        err?.message || 'Vui lòng kiểm tra kết nối mạng và bấm lưu lại nhé!'
+      );
     } finally {
       setIsSubmitting(false);
     }
