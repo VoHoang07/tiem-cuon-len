@@ -2,6 +2,7 @@ const {
   SUPABASE_URL,
   SUPABASE_KEY,
   SUPABASE_SERVICE_KEY,
+  ADMIN_EMAILS,
   AUDIT_LOG_PARTITION,
   BLOCKLIST_PARTITION,
   HOLDER_USER_ID,
@@ -20,9 +21,24 @@ const {
 
   // Sliding-window rate limit memory bucket per serverless instance
   const ipRateWindows = new Map();
+  const authProvisionWindows = new Map();
   const chatNotifyCooldowns = new Map();
-const RATE_WINDOW_MS = 60 * 1000;
-const MAX_REQUESTS_PER_WINDOW = 60;
+  const RATE_WINDOW_MS = 60 * 1000;
+  const MAX_REQUESTS_PER_WINDOW = 60;
+
+  function checkAuthProvisionRateLimit(ip) {
+  const now = Date.now();
+  const key = ip || 'unknown';
+  const entry = authProvisionWindows.get(key) || { ts: [] };
+  entry.ts = entry.ts.filter((t) => now - t < 60 * 1000);
+  entry.ts.push(now);
+  authProvisionWindows.set(key, entry);
+  if (authProvisionWindows.size > 1000) {
+    const oldest = authProvisionWindows.keys().next().value;
+    if (oldest) authProvisionWindows.delete(oldest);
+  }
+  return entry.ts.length <= 10;
+  }
 
 function checkServerRateLimit(ip) {
   const now = Date.now();
@@ -346,9 +362,184 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         );
       }
       return res.status(200).json({ success: true });
-    }
+      }
 
-    // ─── DEFAULT ACTION: RECORD AUDIT EVENT ───────────────────────────────────
+      // ─── AUTO-CONFIRMED AUTH PROVISIONING FOR NEW SUPABASE PROJECT ────────────
+      // Works out-of-the-box even when GoTrue `mailer_autoconfirm` is OFF:
+      // - Creates a brand-new account ONCE with `email_confirm: true`
+      // - Or confirms an unverified account ONLY after verifying the user's real password via `/auth/v1/token`
+      // - NEVER overwrites an existing confirmed user's password!
+      if (action === 'provision_auth_user') {
+      if (!checkAuthProvisionRateLimit(telemetry.ip)) {
+        return res.status(429).json({
+          success: false,
+          error: 'Thao tác quá nhanh. Vui lòng thử lại sau 1 phút.',
+        });
+      }
+      if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || SUPABASE_SERVICE_KEY === SUPABASE_KEY) {
+        return res.status(503).json({
+          success: false,
+          error: 'Máy chủ chưa sẵn sàng đồng bộ xác thực.',
+        });
+      }
+
+      const cleanAuth = stripUnknownFieldsServer(rawBody, [
+        'email',
+        'password',
+        'name',
+        'avatarUrl',
+        'authProvider',
+      ]);
+
+      const email = sanitizeTextServer(cleanAuth.email || '', 120)
+        .toLowerCase()
+        .trim();
+      const password = typeof cleanAuth.password === 'string' ? cleanAuth.password : '';
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+        password.length < 6 ||
+        password.length > 128
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email hoặc mật khẩu không hợp lệ.',
+        });
+      }
+
+      const isAdminEmail = ADMIN_EMAILS.has(email);
+      const displayName = sanitizeTextServer(
+        cleanAuth.name || (isAdminEmail ? 'Quản trị viên' : email.split('@')[0]),
+        80
+      );
+      const avatarUrl = sanitizeTextServer(cleanAuth.avatarUrl || '', 400);
+      const authProvider = sanitizeTextServer(cleanAuth.authProvider || 'password', 24);
+
+      const adminHeaders = {
+        apikey: SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      };
+
+      // 1. Attempt to create the user once with `email_confirm: true`
+      const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            name: displayName,
+            full_name: displayName,
+            ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+            role: isAdminEmail ? 'admin' : 'customer',
+            avatar: 'capybara',
+            auth_provider: authProvider,
+          },
+        }),
+      });
+
+      if (createRes.ok) {
+        return res.status(200).json({ success: true, status: 'created' });
+      }
+
+      const createErrJson = await createRes.json().catch(() => ({}));
+      const createMsg = String(
+        createErrJson.msg || createErrJson.message || createErrJson.error_description || ''
+      ).toLowerCase();
+
+      const alreadyExists =
+        createRes.status === 422 ||
+        createMsg.includes('already') ||
+        createMsg.includes('exists') ||
+        createMsg.includes('registered');
+
+      if (!alreadyExists) {
+        return res.status(400).json({
+          success: false,
+          error: 'Không thể khởi tạo tài khoản.',
+        });
+      }
+
+      // 2. Account already exists: test password against GoTrue `/auth/v1/token`
+      // GoTrue checks the password BEFORE checking `email_confirmed_at`!
+      // - Wrong password -> returns "Invalid login credentials" -> strictly reject!
+      // - Right password + unconfirmed -> returns "Email not confirmed" -> safely confirm email!
+      const checkTokenRes = await fetch(
+        `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
+
+      if (checkTokenRes.ok) {
+        return res.status(200).json({ success: true, status: 'already_confirmed' });
+      }
+
+      const tokenErrJson = await checkTokenRes.json().catch(() => ({}));
+      const tokenErrMsg = String(
+        tokenErrJson.msg ||
+          tokenErrJson.error_description ||
+          tokenErrJson.message ||
+          ''
+      ).toLowerCase();
+
+      if (!tokenErrMsg.includes('email not confirmed')) {
+        return res.status(401).json({
+          success: false,
+          status: 'wrong_password',
+          error: 'Email hoặc mật khẩu không đúng.',
+        });
+      }
+
+      // 3. Password matched an unconfirmed user -> Confirm `email_confirm: true` via Admin API
+      const listRes = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=200`,
+        { method: 'GET', headers: adminHeaders }
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json().catch(() => ({}));
+        const usersArr = Array.isArray(listData && listData.users)
+          ? listData.users
+          : Array.isArray(listData)
+          ? listData
+          : [];
+        const targetUser = usersArr.find(
+          (u) => u && String(u.email || '').toLowerCase().trim() === email
+        );
+        if (targetUser && targetUser.id) {
+          const patchRes = await fetch(
+            `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(targetUser.id)}`,
+            {
+              method: 'PUT',
+              headers: adminHeaders,
+              body: JSON.stringify({
+                email_confirm: true,
+                user_metadata: {
+                  ...(targetUser.user_metadata || {}),
+                  role: isAdminEmail ? 'admin' : 'customer',
+                },
+              }),
+            }
+          );
+          if (patchRes.ok) {
+            return res.status(200).json({ success: true, status: 'confirmed' });
+          }
+        }
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: 'Không thể kích hoạt xác nhận email tự động.',
+      });
+      }
+
+      // ─── DEFAULT ACTION: RECORD AUDIT EVENT ───────────────────────────────────
   const body = stripUnknownFieldsServer(rawBody, [
     'eventType',
     'severity',

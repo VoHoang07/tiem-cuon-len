@@ -190,6 +190,40 @@ function toAuthUser(session: Session | null, localAvatar?: string | null): AuthU
 
 export const LAST_OAUTH_TOKEN_SESSION_KEY = 'tcl_last_oauth_token_v1';
 
+async function provisionConfirmedUserOnServer(params: {
+  email: string;
+  password: string;
+  name?: string;
+  avatarUrl?: string;
+  authProvider?: string;
+}): Promise<{ ok: boolean; status?: string; error?: string }> {
+  try {
+    const endpoint =
+      typeof window !== 'undefined'
+        ? '/api/security-audit'
+        : 'https://www.tiemcuonlen.shop/api/security-audit';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'provision_auth_user',
+        email: params.email,
+        password: params.password,
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        authProvider: params.authProvider || 'password',
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.ok && json?.success) {
+      return { ok: true, status: json.status };
+    }
+    return { ok: false, status: json?.status, error: json?.error };
+  } catch {
+    return { ok: false };
+  }
+}
+
 const NETWORK_ERROR_MSG =
   'Không kết nối được Supabase. Vui lòng kiểm tra mạng hoặc cấu hình API.';
 
@@ -519,41 +553,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: true };
         }
 
-        // If the account has not been created on the new Supabase project yet,
-        // `signUp` will succeed ONCE and register the user with their password.
-        // If the account ALREADY exists in `auth.users`, `signUp` returns "User already registered"
-        // and we strictly reject the wrong password.
-        if (errMsg.includes('invalid login credentials') && password.length >= 6) {
+        // Seamless migration & auto-confirmation for fresh Supabase projects
+        // (even when GoTrue `mailer_autoconfirm` is OFF by default):
+        // - If account doesn't exist yet -> Server creates it ONCE with `email_confirm: true`
+        // - If account exists but was unconfirmed -> Server verifies the exact password first and sets `email_confirm: true`
+        // - If account exists with a different password -> Server strictly rejects (`wrong_password`)!
+        if (
+          (errMsg.includes('invalid login credentials') ||
+            errMsg.includes('email not confirmed')) &&
+          password.length >= 6
+        ) {
           const isAdminEmail = ADMIN_EMAILS.has(cleanEmail);
           const defaultName = isAdminEmail
             ? 'Quản trị viên'
             : cleanEmail.split('@')[0] || 'Khách hàng';
 
-          const { data: migratedData, error: migrateErr } = await Promise.race([
-            supabase.auth.signUp({
-              email: cleanEmail,
-              password,
-              options: {
-                data: {
-                  name: defaultName,
-                  role: isAdminEmail ? 'admin' : 'customer',
-                  avatar: 'capybara',
+          const prov = await provisionConfirmedUserOnServer({
+            email: cleanEmail,
+            password,
+            name: defaultName,
+            authProvider: 'password',
+          });
+
+          if (prov.ok) {
+            const { data: retryData, error: retryErr } =
+              await supabase.auth.signInWithPassword({
+                email: cleanEmail,
+                password,
+              });
+            if (!retryErr && retryData?.session) {
+              setFailedAttempts(0);
+              const localAvatar = await AsyncStorage.getItem(
+                `${AVATAR_STORAGE_PREFIX}${retryData.session.user.id}`
+              ).catch(() => null);
+              const resolved = toAuthUser(retryData.session, localAvatar);
+              setUser(resolved);
+              saveCachedAuthUser(resolved);
+              return { success: true };
+            }
+          } else if (prov.status !== 'wrong_password') {
+            // Local dev fallback if serverless endpoint is unavailable
+            const { data: migratedData, error: migrateErr } = await Promise.race([
+              supabase.auth.signUp({
+                email: cleanEmail,
+                password,
+                options: {
+                  data: {
+                    name: defaultName,
+                    role: isAdminEmail ? 'admin' : 'customer',
+                    avatar: 'capybara',
+                  },
                 },
-              },
-            }),
-            new Promise<{ data: null; error: { message: string } }>((r) =>
-              setTimeout(() => r({ data: null, error: { message: 'timeout' } }), 5000)
-            ),
-          ]);
-          if (!migrateErr && migratedData?.session) {
-            setFailedAttempts(0);
-            const localAvatar = await AsyncStorage.getItem(
-              `${AVATAR_STORAGE_PREFIX}${migratedData.session.user.id}`
-            ).catch(() => null);
-            const resolved = toAuthUser(migratedData.session, localAvatar);
-            setUser(resolved);
-            saveCachedAuthUser(resolved);
-            return { success: true };
+              }),
+              new Promise<{ data: null; error: { message: string } }>((r) =>
+                setTimeout(() => r({ data: null, error: { message: 'timeout' } }), 5000)
+              ),
+            ]);
+            if (!migrateErr && migratedData?.session) {
+              setFailedAttempts(0);
+              const localAvatar = await AsyncStorage.getItem(
+                `${AVATAR_STORAGE_PREFIX}${migratedData.session.user.id}`
+              ).catch(() => null);
+              const resolved = toAuthUser(migratedData.session, localAvatar);
+              setUser(resolved);
+              saveCachedAuthUser(resolved);
+              return { success: true };
+            }
           }
         }
 
@@ -562,13 +627,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (nextFailed >= 5) {
           setLockoutUntil(Date.now() + 60000);
           setFailedAttempts(0);
-        }
-        if (errMsg.includes('email not confirmed')) {
-          return {
-            success: false,
-            error:
-              'Tài khoản này được tạo lúc chưa tắt Confirm Email. Hãy chạy lệnh UPDATE auth.users trong SQL Editor hoặc đặt lại mật khẩu.',
-          };
         }
         return { success: false, error: 'Email hoặc mật khẩu không đúng.' };
       }
@@ -601,6 +659,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const cleanEmail = email.toLowerCase().trim();
+      const prov = await provisionConfirmedUserOnServer({
+        email: cleanEmail,
+        password,
+        name: safeName,
+        authProvider: 'password',
+      });
+      if (prov.ok && prov.status === 'created') {
+        const { data: signInData } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+        if (signInData?.session) {
+          const resolved = toAuthUser(signInData.session);
+          setUser(resolved);
+          saveCachedAuthUser(resolved);
+          return { success: true };
+        }
+      }
+      if (!prov.ok && prov.status === 'wrong_password') {
+        return { success: false, error: 'Email này đã được sử dụng.' };
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
@@ -618,7 +698,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error.message.includes('already')) {
           return { success: false, error: 'Email này đã được sử dụng.' };
         }
-        const cleanEmail = email.toLowerCase().trim();
         const fallbackUser: AuthUser = {
           id: `local_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
           email: cleanEmail,
@@ -635,8 +714,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(resolved);
         saveCachedAuthUser(resolved);
       } else if (data.user) {
+        await provisionConfirmedUserOnServer({
+          email: cleanEmail,
+          password,
+          name: safeName,
+          authProvider: 'password',
+        });
         const { data: signInData } = await supabase.auth.signInWithPassword({
-          email: email.toLowerCase().trim(),
+          email: cleanEmail,
           password,
         });
         if (signInData.session) {
@@ -940,6 +1025,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!signInErr && signInData?.session) {
               const resolved: AuthUser = {
                 id: signInData.session.user.id,
+                email: verifiedEmail,
+                name: verifiedName,
+                role: isAdminEmail ? 'admin' : 'customer',
+                avatar: 'capybara',
+                avatarUrl: verifiedPicture,
+                authProvider: provider,
+                isVerifiedRealAccount: true,
+              };
+              setUser(resolved);
+              saveCachedAuthUser(resolved);
+              return;
+            }
+
+            await provisionConfirmedUserOnServer({
+              email: verifiedEmail,
+              password: oauthSecret,
+              name: verifiedName,
+              avatarUrl: verifiedPicture,
+              authProvider: provider,
+            });
+
+            const { data: retrySignIn, error: retrySignErr } =
+              await supabase.auth.signInWithPassword({
+                email: verifiedEmail,
+                password: oauthSecret,
+              });
+
+            if (!retrySignErr && retrySignIn?.session) {
+              const resolved: AuthUser = {
+                id: retrySignIn.session.user.id,
                 email: verifiedEmail,
                 name: verifiedName,
                 role: isAdminEmail ? 'admin' : 'customer',
