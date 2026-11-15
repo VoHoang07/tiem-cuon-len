@@ -42,25 +42,26 @@
 - Đã kiểm tra trực tiếp HTTP response từ Supabase: `"Service for this project is restricted due to the following violations: exceed_egress_quota"`.
 - Dung lượng lưu trữ DB thực tế rất nhỏ, nhưng các dòng `products.image`, `products.tags` (`__tcl_variants_v1__`), `addresses` (`tcl_rescue_*`) và ảnh chụp màn hình trong Chat đang lưu **chuỗi ảnh `data:image/...;base64` nặng nhiều MB** trực tiếp trong PostgreSQL -> làm cạn sạch `5GB Egress/tháng` của gói Free.
 
-### 2.2. Kiến trúc mục tiêu cần code ngay khi người dùng gửi Keys ở phiên mới
+### 2.2. Kiến trúc mục tiêu cần code ở phiên mới (TUYỆT ĐỐI KHÔNG CẦN GỬI KEY LÊN CHAT!)
+> **🛡️ QUY TẮC BẢO MẬT ZERO-SECRET:** Người dùng tự điền toàn bộ URL & Secret Key trực tiếp trên **Vercel Dashboard → Settings → Environment Variables** (không lưu vào `.env` trên máy nếu không cần, không dán lên khung Chat AI, và AI tuyệt đối KHÔNG đọc file `.env`/`.env.local` hay gán cứng key thật vào code!).
+
 1. **Kho Ảnh Riêng Biệt trên Cloudflare R2 (`https://media.tiemcuonlen.shop`):**
    - Lưu trữ miễn phí `10GB`, **băng thông tải ảnh ra (Egress) = MIỄN PHÍ VÔ HẠN (`0₫`)**.
-   - Tạo API route mới `api/media-upload.js` (bọc `withGlobalErrorHandler`, `stripUnknownFieldsServer`, `sanitizeTextServer`, ký AWS Signature V4 S3-compatible bằng `crypto` chuẩn của Node.js không cần cài thư viện nặng) để:
+   - Tạo API route mới `api/media-upload.js` đọc trực tiếp từ `process.env.R2_ACCOUNT_ID`, `process.env.R2_ACCESS_KEY_ID`, `process.env.R2_SECRET_ACCESS_KEY`, `process.env.R2_BUCKET_NAME`, `process.env.R2_PUBLIC_BASE_URL` (ký AWS Signature V4 S3-compatible bằng `crypto` chuẩn của Node.js):
      - Khi Admin đăng/sửa ảnh sản phẩm trong `ProductStudioForm.tsx` -> Upload thẳng file WebP lên R2 -> Trả về URL ngắn `https://media.tiemcuonlen.shop/products/<uuid>.webp`.
      - Khi Khách tải ảnh chụp màn hình nhận thưởng Voucher trong `/orders/[id].tsx` -> Upload lên R2 -> Trả về URL ngắn `https://media.tiemcuonlen.shop/proofs/<uuid>.jpg`.
-2. **Project Supabase Mới — 100% Chỉ Lưu Chữ Siêu Nhẹ (Zero Base64 Policy):**
-   - Cập nhật URL & Key mới tại `src/services/supabase.ts` và `api/_securityCore.js`.
+   - Cập nhật `Content-Security-Policy` (`img-src`, `connect-src`) trong `vercel.json` cho phép `https://media.tiemcuonlen.shop`.
+2. **Project Supabase Mới — 100% Đọc Từ `process.env` & Chỉ Lưu Chữ Siêu Nhẹ (Zero Base64 + Zero Hardcoded URL):**
+   - Gỡ bỏ hoàn toàn các chuỗi fallback URL/Key cứng cũ trong `src/services/supabase.ts` và `api/_securityCore.js` — chỉ đọc từ `process.env.EXPO_PUBLIC_SUPABASE_URL`, `process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY` và `process.env.SUPABASE_SERVICE_ROLE_KEY` trên Vercel.
    - Chặn tuyệt đối việc ghi bất kỳ chuỗi `data:image/` Base64 nào vào `public.products`, `public.addresses` (`tcl_rescue_*`, `__TCL_CHAT_V2__`) hay `public.orders` — mọi trường ảnh trong Supabase chỉ lưu đường dẫn URL ngắn (`< 120 bytes`).
-   - File SQL khởi tạo trọn gói đã sẵn sàng 100% tại: `supabase/migrations/20261106_new_project_all_in_one.sql` (đã bao gồm RLS cho cả `__TCL_PERSONAL_VOUCHER_V1__` và `__TCL_GOSHIP_CONFIG_V1__`).
+   - File SQL khởi tạo trọn gói đã sẵn sàng 100% tại: `supabase/migrations/20261106_new_project_all_in_one.sql`.
 
-### 2.3. Danh sách Biến Môi Trường Người Dùng Sẽ Cung Cấp Ở Đầu Phiên Mới
-- **Từ Supabase mới (3 giá trị):**
-  1. `EXPO_PUBLIC_SUPABASE_URL`
-  2. `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-  3. `SUPABASE_SERVICE_ROLE_KEY`
-- **Từ Cloudflare R2 (5 giá trị):**
-  1. `R2_ACCOUNT_ID`
-  2. `R2_ACCESS_KEY_ID`
-  3. `R2_SECRET_ACCESS_KEY`
-  4. `R2_BUCKET_NAME` (ví dụ: `tiemcuonlen-media`)
-  5. `R2_PUBLIC_BASE_URL` (ví dụ: `https://media.tiemcuonlen.shop`)
+### 2.3. Tên Đúng Của 8 Biến Môi Trường (Người Dùng Tự Nhập Trên Vercel Dashboard — KHÔNG GỬI LÊN CHAT)
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME` (điền: `tiemcuonlen-media`)
+- `R2_PUBLIC_BASE_URL` (điền: `https://media.tiemcuonlen.shop`)
