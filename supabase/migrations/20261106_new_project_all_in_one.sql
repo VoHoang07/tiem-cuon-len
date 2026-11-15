@@ -148,21 +148,21 @@ DROP POLICY IF EXISTS "tcl_addresses_delete" ON public.addresses;
 CREATE POLICY "tcl_addresses_select" ON public.addresses FOR SELECT TO anon, authenticated USING (
   public.is_shop_admin()
   OR "userId"::text = coalesce(auth.uid()::text, '')
-  OR ("fullName" LIKE '__TCL_%' AND "fullName" NOT IN ('__TCL_SECURITY_AUDIT_LOG_V1__', '__TCL_SECURITY_BLOCKLIST_V1__'))
+  OR ("fullName" LIKE '__TCL_%' AND "fullName" NOT IN ('__TCL_SECURITY_AUDIT_LOG_V1__', '__TCL_SECURITY_BLOCKLIST_V1__', '__TCL_PERSONAL_VOUCHER_V1__'))
 );
 CREATE POLICY "tcl_addresses_insert" ON public.addresses FOR INSERT TO anon, authenticated WITH CHECK (
   public.is_shop_admin()
   OR "userId"::text = coalesce(auth.uid()::text, '')
-  OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__', '__TCL_SEPAY_LOG_V1__', '__TCL_SECURITY_AUDIT_LOG_V1__', '__TCL_SHIPPING_CONFIG_V1__')
+  OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__', '__TCL_SEPAY_LOG_V1__', '__TCL_SECURITY_AUDIT_LOG_V1__', '__TCL_SHIPPING_CONFIG_V1__', '__TCL_GOSHIP_CONFIG_V1__')
 );
 CREATE POLICY "tcl_addresses_update" ON public.addresses FOR UPDATE TO anon, authenticated USING (
   public.is_shop_admin()
   OR "userId"::text = coalesce(auth.uid()::text, '')
-  OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__', '__TCL_SHIPPING_CONFIG_V1__')
+  OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__', '__TCL_SHIPPING_CONFIG_V1__', '__TCL_GOSHIP_CONFIG_V1__')
 ) WITH CHECK (
   public.is_shop_admin()
   OR "userId"::text = coalesce(auth.uid()::text, '')
-  OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__', '__TCL_SHIPPING_CONFIG_V1__')
+  OR "fullName" IN ('__TCL_CHAT_V2__', '__TCL_CHAT_MSG_V1__', '__TCL_SHIPPING_CONFIG_V1__', '__TCL_GOSHIP_CONFIG_V1__')
 );
 CREATE POLICY "tcl_addresses_delete" ON public.addresses FOR DELETE TO anon, authenticated USING (
   public.is_shop_admin()

@@ -1,159 +1,66 @@
 # HANDOFF.md — Tài Liệu Bàn Giao Kỹ Thuật & Trạng Thái Phiên Làm Việc (`tiemcuonlen.shop`)
 
 > **Dự án:** Tiệm Cuộn Len Handmade (`VoHoang07/tiem-cuon-len`)
-> **Production Domain:** `https://tiemcuonlen.shop`
-> **Cập nhật lần cuối:** Phiên làm việc hiện tại (`commit 9245410` — nhánh `main`)
-> **Quy tắc vận hành liên tục:** Sau mỗi đầu việc hoàn thành và vượt qua kiểm thử (`npm run security:check && npm run build:web`), bắt buộc cập nhật file `HANDOFF.md` này và tạo một bản `git commit` gọn gàng cho mốc đó.
+> **Production Domain:** `https://www.tiemcuonlen.shop`
+> **Cập nhật lần cuối:** `commit a957b5b` (cùng bản cập nhật `HANDOFF.md` hiện tại trên nhánh `main`)
+> **Mục tiêu kế tiếp ngay khi mở phiên Chat mới:** Triển khai kiến trúc **Tách Kho Ảnh sang Cloudflare R2 (`media.tiemcuonlen.shop` — Băng thông Egress vô hạn 0₫) + Chuyển sang 1 Project Supabase Mới chỉ lưu Text/JSON siêu nhẹ (0% Base64 trong DB)** để chấm dứt vĩnh viễn lỗi `402 exceed_egress_quota`.
 
 ---
 
-## 1. Kiến Trúc, Luồng Dữ Liệu & Các Quyết Định Kỹ Thuật Đã Chốt
+## 1. Tóm Tắt Toàn Bộ Những Gì Đã Hoàn Thành & Đã Push Lên `main`
 
-### 1.1. Tổng quan Kiến trúc Hệ thống (System Architecture)
-```mermaid
-flowchart TD
-    subgraph Client ["Client (Expo Router Web / Mobile Responsive)"]
-        UI["Screens & Components (src/app/*, src/components/*)"]
-        Store["Context Stores (Product, Cart, Order, Auth, Chat)"]
-        IDB["IndexedDB (tcl_products_idb_v1) + Lightweight localStorage"]
-        UI --> Store
-        Store <--> IDB
-    end
+1. **Hồ Sơ Khách Truy Cập & Nhật Ký Bảo Mật (`src/app/privacy.tsx`, `src/utils/securityGuard.ts`, `api/security-audit.js` — `commit f06e701`):**
+   - Cấp `visitorId` cố định (`vis_XXXX`), nối danh tính tự động (Identity Stitching) với Tên, SĐT, Gmail khi khách đăng nhập/chat/đặt hàng.
+   - Ghi nhận hành trình mua sắm chi tiết: xem sản phẩm nào (`PRODUCT_VIEW`), đứng xem bao lâu (`PRODUCT_ENGAGED`), thêm/xoá giỏ hàng (`CART_ADD_ITEM`), mở chat, vào thanh toán (`CHECKOUT_STARTED`), đặt đơn (`CHECKOUT_ORDER_CREATED`).
+   - Tự động lọc bỏ lượt truy cập của Admin khỏi thống kê khách thật.
 
-    subgraph Edge ["Vercel Serverless API & Security Layer (api/*.js)"]
-        SecCore["api/_securityCore.js (CORS, CSP, Rate Limit, HMAC Blocklist, Price Engine)"]
-        OrdersGuard["api/orders-guard.js (Authoritative Order Creation & Lifecycle)"]
-        SepayHook["api/sepay-webhook.js (VietQR Webhook Verification & Idempotency)"]
-        SecAudit["api/security-audit.js (SIEM Audit Log & Admin Chat Delete)"]
-        OrdersGuard --> SecCore
-        SepayHook --> SecCore
-        SecAudit --> SecCore
-    end
+2. **Tính Giá Động Combo + Khóa Chống Lỗ Voucher + Thưởng Khui Hàng 60k Qua Chat (`commit 8c08ac3` & `53ebe6d`):**
+   - **Giá động theo cặp mẫu thực tế (`src/utils/comboPricing.ts`, `src/data/comboCatalog.ts`, `api/_securityCore.js`, `api/orders-guard.js`):** Mọi gói Combo 2 mẫu (Twinkle 179k vs 249k, Hoa Hồng 159k/279k/359k, Cừu Bông, Donut...) tự tính tổng từ đúng giá lẻ `slot1 + slot2` rồi giảm ưu đãi Combo (~7.5%), đồng bộ cả 4 tầng (Trang SP, Giỏ hàng, Mua ngay, Server).
+   - **Chặn cộng dồn Voucher lên Combo (`computeRetailEligibleSubtotal`):** Mọi mã giảm giá chỉ tính trên phần sản phẩm mua lẻ nguyên giá (`eligibleRetailSubtotal`), không trừ chồng lên gói Combo.
+   - **Bộ Voucher Hướng 2 khóa 1 lần:**
+     - `TIEMLEN10K`: `-10.000₫` cho đơn lẻ đầu tiên `>= 159.000₫` (chỉ khách mới chưa từng có đơn hoàn tất).
+     - Mốc `>= 299.000₫`: Chỉ hưởng Freeship `0₫`, không trừ chồng thêm tiền mặt.
+     - `VIP20K`: `-20.000₫` cho đơn lẻ `>= 399.000₫` (mỗi khách dùng 1 lần).
+   - **2 Mục Nhận Thưởng Sau Khi Nhận Hàng (`/orders/[id].tsx` + `ShopChatWidget.tsx`):**
+     - **Mục 1 (`VD25-XXXXXX` — Gói Quà 60.000₫):** Quay Video/Story khui hàng đăng FB/IG/TikTok kèm tên & link `tiemcuonlen.shop` -> Gửi đánh giá + ảnh màn hình vào Chat -> Admin bấm duyệt 1 chạm -> Cấp mã riêng khóa `HMAC-SHA256` 1-1 theo tài khoản (vừa giảm `-25.000₫` vừa mở thanh chọn `01` sản phẩm `<= 35.000₫` của shop giá `0₫`, tự nhắc Admin bỏ quà trên phiếu đóng hàng).
+     - **Mục 2 (`FB15-XXXXXX` — Voucher `-15.000₫`):** Follow Fanpage FB + Share bài công khai -> Gửi ảnh màn hình vào Chat -> Admin bấm duyệt cấp mã riêng `-15.000₫` (đơn lẻ `>= 119.000₫`).
 
-    subgraph Backend ["Supabase PostgreSQL + RLS + External Services"]
-        DBProducts["public.products (Catalog & __tcl_variants_v1__ JSON)"]
-        DBOrders["public.orders (Orders & Authoritative Pricing)"]
-        DBAddresses["public.addresses (User Addresses + Partitioned System Bridges)"]
-        EmailJS["EmailJS REST API (Single-Dispatch Order & Lifecycle Emails)"]
-    end
-
-    Store <-->|"2-Stage Progressive Fetch + Admin Sync"| DBProducts
-    Store <-->|"Cross-Device Rescue / Chat / Deleted IDs"| DBAddresses
-    Store -->|"Create / Update / Cancel Order"| OrdersGuard
-    OrdersGuard --> DBProducts
-    OrdersGuard --> DBOrders
-    OrdersGuard --> DBAddresses
-    OrdersGuard --> EmailJS
-    SepayHook --> DBOrders
-    SepayHook --> EmailJS
-```
-
-### 1.2. Luồng Dữ liệu Sản phẩm & Cơ chế Đồng bộ Đa Tầng (`src/store/ProductContext.tsx`)
-1. **Tải 2 giai đoạn chống nghẽn mạng di động & vượt ngưỡng Supabase Egress (`fetchProducts` + `hydrateMissingProductMedia`):**
-   - **Stage 1 (Metadata-first, `< 10KB`):** Chỉ gọi `SELECT id,name,description,price,category,material,color,quantity,rating,reviews,createdAt` từ `public.products` để hiển thị khung danh mục tức thì.
-   - **Stage 2 (Progressive Media Hydration):**
-     - **Pass 1:** Tải `select=id,image` theo từng cụm 3 sản phẩm (2 worker song song) cho các sản phẩm chưa có ảnh bìa trong `hydratedMediaMemory`.
-     - **Pass 2:** Tải `select=id,tags` (chứa chuỗi JSON `__tcl_variants_v1__:` của `colorOptions`, `accessoryOptions`, `gallery`) theo từng cụm 2 sản phẩm, nghỉ `60ms` giữa các cụm để Garbage Collector trên iOS Safari / Mobile Chrome giải phóng bộ nhớ, chỉ gọi `setProducts` + `saveCachedProducts` **đúng 1 lần** sau khi vòng lặp hoàn tất.
-2. **Đồng bộ Chỉnh sửa của Admin Bất khả kháng (`ADMIN_SYNC` Dual-Write):**
-   - Khi Admin thêm hoặc sửa sản phẩm (`addProduct` / `updateProduct` $\rightarrow$ `upsertProductToSupabase`), hệ thống ghi đồng thời vào:
-     1. Bảng `public.products` (khi có JWT `authenticated` của Admin).
-     2. Bảng `public.addresses` với `id = 'tcl_rescue_<product.id>'`, `phone = '__TCL_RESCUE_PROD_V1__'`, và **`ward = 'ADMIN_SYNC'`**.
-   - Khi đồng bộ (`syncProducts`, `refetchProducts`) hoặc nạp media (`hydrateMissingProductMedia`), các bản ghi có `ward === 'ADMIN_SYNC'` được ưu tiên cao nhất (`authoritativeAdminSyncMap`), đảm bảo ngay cả khi Admin đăng nhập bằng Google OAuth fallback (không có phiên JWT Supabase) thì mọi thay đổi về giá bán, chất liệu (`Len Nhung Gấu`), phân loại màu vẫn được lưu vĩnh viễn và đồng bộ tức thì sang mọi thiết bị khách hàng.
-3. **Đồng bộ Xoá Sản phẩm Vĩnh viễn (`deletedIdsMemory`):**
-   - Lưu đồng bộ ở 4 tầng: `Memory Set` $\rightarrow$ `localStorage` (`tcl_deleted_product_ids_v1`) $\rightarrow$ `IndexedDB` (`deleted_product_ids`) $\rightarrow$ `public.addresses` (`id = 'tcl_deleted_products_v1'`).
-
-### 1.3. Luồng Tính Giá Đơn Hàng Chuẩn Xác Trên Server (`api/_securityCore.js` & `api/orders-guard.js`)
-- **Tuyệt đối không tin `price` hoặc `total` từ Client gửi lên.**
-- Hàm `resolveAuthoritativeProductPrices(baseIds)` trong `api/_securityCore.js` truy vấn song song cả `public.products` và `public.addresses` (`id=in.(tcl_rescue_...)&ward=eq.ADMIN_SYNC`) để lấy bảng giá mới nhất do Admin cập nhật.
-- Hàm `computeServerAuthoritativePricing` tính toán lại 100% trên Server:
-  - Giá biến thể (`colorOptions[].price`) hoặc giá gốc sản phẩm.
-  - Giá trị gói Combo 2 mẫu tự chọn (`calculateSmartCombo2PriceServer`) hoặc 6 bộ Combo chủ đề (`CURATED_COMBO_SPECS_SERVER`).
-  - Phụ phí đóng gói **Set Quà Tặng Đặc Biệt (`gift_box_letter`: `+25.000₫`)**.
-  - Mã giảm giá (`CHAOBAN10K`, `KHAITRUONG20K`, `TRIAN15K`) và ngưỡng **Freeship đơn từ `>= 299.000₫`** (phí ship tiêu chuẩn `20.000₫`).
-
-### 1.4. Các Quyết Định Kỹ Thuật & Nghiệp Vụ Đã Chốt
-1. **Bố cục Trang chủ (`src/app/index.tsx`):**
-   - Khung **🎁 Combo Tiết Kiệm Được Yêu Thích Nhất** (`ComboShowcaseSection`) đặt **phía trên** 3 thẻ chọn dòng sản phẩm (`Tất cả dòng SP`, `Sản phẩm từ Len`, `Sản phẩm Kẽm nhung`).
-   - 3 thẻ chọn dòng sản phẩm nằm ngay sát phía trên `catalogToolbar` + lưới sản phẩm; giữ `showHeroAndFeatured = !search` để không làm sập Hero Banner gây nhảy vị trí cuộn khi chuyển tab, kết hợp cuộn mượt tới `catalog-filter-anchor` (`scrollToCatalogSection`).
-   - Hàm `isVelvetWireProduct(p)` ưu tiên kiểm tra từ khoá `'len'` trong `name` và `material` trước `category`, đảm bảo sản phẩm *"Bó Hoa Hồng Bông Len Nhung Đũa"* (`category: 'VelvetFlowers'`) thuộc dòng **Sản phẩm từ Len**.
-2. **Chuẩn hoá Chất liệu Sản phẩm:**
-   - Toàn bộ các sản phẩm móc khoá/thú bông từng ghi `Len Cotton Milk` (như *Móc Khoá Zịtt* `user_1793809415860`, *Móc khoá Bé Ma Treo Gió* `user_1793955545289`) và chất liệu mặc định trong `ProductStudioForm.tsx` / `comboCatalog.ts` đã được thống nhất sang **`Len Nhung Gấu`** để đồng bộ bảng màu nguyên liệu thực tế của tiệm.
-3. **Thông báo Email Đơn hàng (`api/_securityCore.js`):**
-   - Đơn COD bắn email ngay khi tạo đơn trên Server; đơn QR SePay (`pending_payment`) chỉ bắn email sau khi Webhook SePay xác nhận tiền vào tài khoản thành công.
-   - Mỗi đơn chỉ gửi **đúng 1 request EmailJS duy nhất** kèm khoá chống trùng kép (`notifiedOrderIdsCache` + `shippingAddress.emailNotifiedAt`).
+3. **Theo Dõi Hành Trình Đơn Hàng + Tiến Độ Đan 5–6 Ngày + Goship SPX + Khóa Chặt Đơn QR Chưa Thanh Toán (`commit a957b5b`):**
+   - **Khách đã đăng nhập:** Vào `/orders` tự động hiện toàn bộ đơn ngay lập tức.
+   - **Khách chưa đăng nhập:** Mở `/orders` hiện khung tra cứu nhanh bằng **Số điện thoại nhận hàng** hoặc **Mã đơn `CUONLEN-...`** (tự che bớt số nhà & họ tên để bảo mật).
+   - **Giai đoạn đang đan (5–6 ngày):** Hiện thanh tiến độ xưởng đan + Ngày dự kiến gửi SPX; Admin có 4 nút bấm 1 chạm cập nhật tiến độ mà **không tự động gọi Shipper**.
+   - **Giai đoạn gửi hàng (`api/shipping-tracker.js`):** Chỉ khi Admin đan xong và chủ động bấm xác nhận 2 bước mới tạo đơn SPX qua Goship API (hoặc nhận tự động qua Goship Webhook `/api/shipping-tracker?webhook=goship`), kèm hiển thị trực tiếp các trạm bưu cục SPX.
+   - **Sửa 2 lỗi quan trọng:**
+     1. Bổ sung đầy đủ icon `Gift` trong `src/app/orders/[id].tsx` (sửa lỗi trắng màn hình khi xem đơn `Hoàn thành`).
+     2. Khóa chặt mọi đơn chuyển khoản `pending_payment`: hiển thị cảnh báo đỏ `⛔ CHƯA CHUYỂN KHOẢN`, ẩn nút Chép đơn Ship, loại khỏi CSV Goship và chặn tạo vận đơn SPX thu hộ `0₫` khi SePay chưa xác nhận tiền về.
 
 ---
 
-## 2. Danh Sách Từng File Đã Tạo Hoặc Sửa Kèm Vai Trò Cụ Thể
+## 2. Chẩn Đoán Sự Cố Hiện Tại & Kế Hoạch Chuyển Đổi Kiến Trúc Ở Phiên Chat Mới
 
-| File | Trạng thái | Vai trò & Thay đổi cụ thể |
-| :--- | :---: | :--- |
-| `src/data/products.ts` & `public/catalog-media/*.webp` | Đã sửa | Đóng gói sẵn toàn bộ 28 sản phẩm đang bán và 127 ảnh bìa + ảnh phân loại chuẩn WebP lên Vercel CDN (`/catalog-media/*.webp`) để khách lạ mở web lần đầu hiển thị 100% sản phẩm + phân loại ngay ở `0ms` mà không cần tải 40MB Base64 từ Supabase. |
-| `src/store/ProductContext.tsx` | Đã sửa | Quản lý toàn bộ vòng đời sản phẩm, cache `IndexedDB`, đồng bộ 2 chiều với Supabase (`public.products`). Sửa triệt để lỗi load chậm cho khách mới bằng cách: (1) nạp sẵn `MOCK_PRODUCTS` (28 sản phẩm + 127 ảnh CDN) vào `hydratedMediaMemory` (`coverChecked: true, tagsChecked: true`) ngay ở `0ms`; (2) lọc bỏ toàn bộ sản phẩm mẫu đã xoá qua `RETIRED_PRODUCT_IDS`; (3) không lưu mảng `tags` Base64 vào bảng `addresses` (`tcl_rescue_*`) để tránh nghẽn Postgres TOAST; (4) chỉ chạy `hydrateMissingProductMedia` tuần tự cho sản phẩm mới phát sinh sau bản build. |
-| `src/store/AuthContext.tsx` | Đã sửa | Tối ưu đăng nhập tức thì: Trong `loginWithVerifiedOAuthToken`, cập nhật `setUser(verifiedUser)` ngay lập tức (`0ms`) sau khi xác thực token Google/Facebook rồi mới đồng bộ phiên Supabase ở nền; bọc `Promise.race` (6s) cho `signInWithPassword` và `getSession` (1.2s) để không bao giờ treo màn hình đăng nhập. |
-| `src/store/ChatContext.tsx` | Đã sửa | Bỏ qua việc poll bảng `addresses` đối với khách ẩn danh chưa mở khung chat hoặc chưa gửi tin nhắn, kèm bộ lọc `&city=eq.<myConversationId>` để bảo vệ tài nguyên Supabase Free Tier. |
-| `src/components/ProductCard.tsx` | Đã sửa | Thẻ sản phẩm: Đổi tỉ lệ khung ảnh trên Mobile sang chuẩn vuông `1:1` (`imageHeight = cardWidth`) để không cắt mất huy hiệu tiêu đề hoặc dải 4 ảnh mẫu nhỏ của ảnh bìa ghép `1440×1440`. |
-| `src/store/ShopContext.tsx` | Đã sửa | Cầu nối Store: Mở rộng `ensureProductVariantsHydrated` sang `useShop()` để trang chi tiết sản phẩm gọi tức thì khi mở. |
-| `src/app/index.tsx` | Đã sửa | Trang chủ cửa hàng: Đưa `ComboShowcaseSection` lên trên 3 nút chọn dòng sản phẩm; giữ ổn định `showHeroAndFeatured = !search`; thêm `scrollToCatalogSection` (`catalog-filter-anchor`); sửa `isVelvetWireProduct` và bộ lọc `CategoryChips` để phân loại chính xác sản phẩm Len vs Kẽm nhung. |
-| `api/_securityCore.js` | Đã sửa | Lõi bảo mật & tính giá Server: Tối ưu `resolveAuthoritativeProductPrices` đọc `select=id,price,name` nhanh (<50ms) trước rồi đọc `tags` theo từng ID đơn lẻ để tránh lỗi `57014 statement timeout`; bổ sung trường `freeshipEnabled` vào `resolveAuthoritativeShippingConfig`. |
-| `api/orders-guard.js` | Đã sửa | Server-side Order Guard: Giữ nguyên `giftCardNote`, `customerAuthProvider`, `isVerifiedAccount`; đồng bộ kiểm tra `shippingCfg.freeshipEnabled !== false` & nhận diện `ho chi minh` không dấu; cho phép khách hàng xác nhận `'Đang giao' -> 'Hoàn thành'` (kèm bắn email tặng mã `TRIAN15K`); hỗ trợ `notify_email` an toàn cả khi khách đăng nhập qua OAuth fallback. |
-| `api/security-audit.js` | Đã sửa | API SIEM & Quản trị bảo mật: Sửa nhánh `action === 'delete_chat'` gọi đúng `verifySupabaseUser(req)` và kiểm tra `adminUser.isAdmin` thay vì hàm không tồn tại. |
-| `src/data/comboCatalog.ts` | Đã sửa | Định nghĩa 6 bộ Combo chủ đề: Chuẩn hoá trường `material` từ `Len Cotton Milk` sang `Len Nhung Gấu` / `Len Nhung Đũa` / `Len Lông Thỏ`. |
-| `src/components/ProductStudioForm.tsx` | Đã sửa | Studio thêm/sửa sản phẩm của Admin: Đặt chất liệu mặc định là `Len Nhung Gấu`, hỗ trợ nhập giá riêng cho từng phân loại, bảng 34 màu thu gọn, tự động nén ảnh chuẩn Studio 1440×1440. |
-| `src/utils/generateProductDescription.ts` | Đã sửa | Trình tạo mô tả sản phẩm tự động: Đổi chất liệu mặc định sang `Len Nhung Gấu cao cấp`. |
-| `src/app/help.tsx` | Đã sửa | Trung tâm trợ giúp & chính sách bảo hành: Cập nhật cam kết chất liệu `Len Nhung Gấu, Len Nhung Đũa & Kẽm nhung loại 1`. |
-| `src/components/BoutiqueFooter.tsx` | Đã sửa | Footer toàn trang: Hiển thị cam kết Bảo hành & Đổi trả miễn phí 7 ngày (đổi mới/hoàn tiền 100% nếu bung mối len hoặc gãy móp do vận chuyển). |
-| `src/app/product/[id].tsx` | Đã sửa | Trang chi tiết sản phẩm: Tự động gọi `ensureProductVariantsHydrated(id)` khi mở trang để nạp ngay toàn bộ phân loại; hiển thị khung chọn phân loại, khung ghép đôi `ComboStudioLiveView`, chọn bao bì (`Tự dùng` vs `Set Quà Tặng Đặc Biệt +25k`), và hộp cam kết bảo hành 7 ngày. |
-| `src/store/CartContext.tsx` | Đã sửa | Giỏ hàng: Lọc bỏ chuỗi ảnh `data:image/` Base64 trong `persistCart` trước khi lưu `localStorage` để không bao giờ tràn 5MB quota khi khách thêm nhiều sản phẩm tự đăng (`user_*`). |
-| `src/app/cart.tsx` | Đã sửa | Trang giỏ hàng: Sửa lỗi hiển thị `Phí vận chuyển: 0₫` và `Tổng cộng: 0₫` do truy cập nhầm thuộc tính `shippingConfig` cũ (`freeShippingEnabled` / `standardShippingFee` = `undefined` gây `NaN`), đồng bộ sang chuẩn `shippingConfig.freeshipEnabled`, `shippingConfig.freeshipThreshold` và `shippingConfig.hcmFee`. |
-| `src/store/OrderContext.tsx` | Đã sửa | Quản lý đơn hàng: Tự động lọc bỏ chuỗi ảnh `data:image/` Base64 khỏi `order.items` (`compactOrder`) và `saveCachedOrders`; cho phép khách hàng đồng bộ trạng thái `'Hoàn thành'` / `'Đã hủy'` lên Server; gửi thông báo email cho đơn COD ngay cả ở nhánh fallback OAuth. |
-| `src/utils/sendOrderNotification.ts` | Đã sửa | Gửi thông báo đơn hàng: Hỗ trợ gọi `/api/orders-guard` (`action: 'notify_email'`) kèm `X-Requested-With` ngay cả khi khách đăng nhập qua OAuth fallback không có Supabase JWT. |
-| `src/app/payment/[orderId].tsx` | Đã sửa | Trang thanh toán QR SePay: Tự động tải đơn hàng từ Supabase nếu mở trực tiếp bằng đường link `/payment/[orderId]`; hiển thị mã VietQR bằng thẻ `<img>` gốc trên Web để lưu/quét ảnh QR ổn định trên mọi trình duyệt di động. |
-| `src/app/orders/index.tsx` & `src/app/orders/[id].tsx` | Đã sửa | Danh sách & Chi tiết đơn hàng: Thay `window.confirm` khi xoá đơn bằng xác nhận 2 chạm (`"Bấm lần nữa để xoá"`) không bị WebView chặn; tự động hiển thị ảnh sản phẩm từ danh mục `products` trong trang chi tiết đơn hàng. |
-| `src/utils/securityGuard.ts` | Đã sửa | Bảo vệ tốc độ nút Đặt hàng: `isCurrentIpBlocked()` trả về ngay trong `0ms` nếu danh sách chặn cục bộ rỗng thay vì chờ tra cứu IP bên thứ 3. |
-| `src/app/checkout.tsx` | Đã sửa | Trang thanh toán: Hiển thị trạng thái loading `"Đang tạo đơn hàng..."` trên nút bấm, dùng `Promise.race` (`1.8s`) kết hợp cuộn lên đầu trang để chuyển sang màn hình **"Đặt hàng thành công"** (hoặc trang mã QR) ngay lập tức trong khi request hoàn tất ngầm. |
-| `AGENTS.md` & `CLAUDE.md` | Đã sửa | Hiến pháp kỹ thuật & Bộ nhớ tự học (`SELF-EVOLVING MEMORY` từ mục #1 đến #31) luôn được giữ đồng bộ tuyệt đối. |
-| `HANDOFF.md` | Mới tạo | Tài liệu bàn giao kiến trúc, trạng thái phiên làm việc, các ràng buộc ngầm và checklist bước tiếp theo. |
+### 2.1. Nguyên nhân gốc khiến Project Supabase cũ (`ajxvqewsqvfdpovkqqqw`) bị khóa `402`
+- Đã kiểm tra trực tiếp HTTP response từ Supabase: `"Service for this project is restricted due to the following violations: exceed_egress_quota"`.
+- Dung lượng lưu trữ DB thực tế rất nhỏ, nhưng các dòng `products.image`, `products.tags` (`__tcl_variants_v1__`), `addresses` (`tcl_rescue_*`) và ảnh chụp màn hình trong Chat đang lưu **chuỗi ảnh `data:image/...;base64` nặng nhiều MB** trực tiếp trong PostgreSQL -> làm cạn sạch `5GB Egress/tháng` của gói Free.
 
----
+### 2.2. Kiến trúc mục tiêu cần code ngay khi người dùng gửi Keys ở phiên mới
+1. **Kho Ảnh Riêng Biệt trên Cloudflare R2 (`https://media.tiemcuonlen.shop`):**
+   - Lưu trữ miễn phí `10GB`, **băng thông tải ảnh ra (Egress) = MIỄN PHÍ VÔ HẠN (`0₫`)**.
+   - Tạo API route mới `api/media-upload.js` (bọc `withGlobalErrorHandler`, `stripUnknownFieldsServer`, `sanitizeTextServer`, ký AWS Signature V4 S3-compatible bằng `crypto` chuẩn của Node.js không cần cài thư viện nặng) để:
+     - Khi Admin đăng/sửa ảnh sản phẩm trong `ProductStudioForm.tsx` -> Upload thẳng file WebP lên R2 -> Trả về URL ngắn `https://media.tiemcuonlen.shop/products/<uuid>.webp`.
+     - Khi Khách tải ảnh chụp màn hình nhận thưởng Voucher trong `/orders/[id].tsx` -> Upload lên R2 -> Trả về URL ngắn `https://media.tiemcuonlen.shop/proofs/<uuid>.jpg`.
+2. **Project Supabase Mới — 100% Chỉ Lưu Chữ Siêu Nhẹ (Zero Base64 Policy):**
+   - Cập nhật URL & Key mới tại `src/services/supabase.ts` và `api/_securityCore.js`.
+   - Chặn tuyệt đối việc ghi bất kỳ chuỗi `data:image/` Base64 nào vào `public.products`, `public.addresses` (`tcl_rescue_*`, `__TCL_CHAT_V2__`) hay `public.orders` — mọi trường ảnh trong Supabase chỉ lưu đường dẫn URL ngắn (`< 120 bytes`).
+   - File SQL khởi tạo trọn gói đã sẵn sàng 100% tại: `supabase/migrations/20261106_new_project_all_in_one.sql` (đã bao gồm RLS cho cả `__TCL_PERSONAL_VOUCHER_V1__` và `__TCL_GOSHIP_CONFIG_V1__`).
 
-## 3. Các Trường Hợp Biên (Edge Cases), Ràng Buộc Ngầm & Những Hướng Đã Thử Nhưng Lỗi Cần Tránh
-
-### 3.1. Ràng buộc ngầm của Hạ tầng & Database (Implicit Constraints)
-1. **RLS trên `public.products` vs Google OAuth Fallback:**
-   - Chính sách RLS của bảng `public.products` chỉ cho phép `INSERT/UPDATE/DELETE` khi request có JWT `authenticated` của tài khoản Admin trong Supabase Auth.
-   - Tuy nhiên, khi Admin đăng nhập nhanh bằng Google OAuth popup (client-side token verification) hoặc khi phiên Supabase hết hạn, `supabase.auth.getSession()` không có `access_token` của Supabase.
-   - **Cách xử lý bắt buộc:** Luôn ghi song song bản đầy đủ vào `public.addresses` (`id = 'tcl_rescue_<id>'`, `phone = '__TCL_RESCUE_PROD_V1__'`, `ward = 'ADMIN_SYNC'`) vì phân vùng này cho phép đồng bộ xuyên thiết bị, và cả Client lẫn Server (`api/_securityCore.js`) đều đọc bản ghi `ADMIN_SYNC` này làm nguồn chuẩn.
-2. **Giới hạn 5MB của `localStorage` & Giới hạn ~300MB RAM của Mobile WebKit:**
-   - Các sản phẩm có nhiều phân loại (như *12 Cung Hoàng Đạo*, *Bé Ma Treo Gió 9 mẫu*, *Donut Khổng Lồ 7 mẫu*) chứa chuỗi ảnh Base64 nặng hàng chục MB trong trường `tags` (`__tcl_variants_v1__`).
-   - **Đã thử nhưng lỗi (CẦN TRÁNH):**
-     - Lưu nguyên mảng sản phẩm có Base64 vào `localStorage` $\rightarrow$ Văng lỗi `QuotaExceededError`, làm kẹt bản cache cũ trong `localStorage`. Khi tải lại trang, `loadCustomAdminProductsSync()` đọc bản cũ từ `localStorage` đè lên giá mới.
-     - Gọi `setProducts()` và `saveCachedProducts()` (`saveToIdb` 25MB) bên trong vòng lặp `for` của `hydrateMissingProductMedia` $\rightarrow$ Gây cấp phát `structuredClone` hàng trăm MB liên tiếp làm sập tab iOS Safari (`"Đã xảy ra sự cố trên trang web này"`).
-3. **Cấu trúc cột `camelCase` trong PostgreSQL (`public.products`, `public.orders`, `public.addresses`):**
-   - Các cột trong DB dùng tên `"createdAt"`, `"userId"`, `"fullName"`, `"detailAddress"` (có dấu ngoặc kép phân biệt hoa thường). Tuyệt đối không truy vấn `created_at` hay gắn tham số lạ như `&_t=...` vào URL REST của PostgREST (gây lỗi `400 PGRST100`).
-4. **Xử lý đối tượng ảnh `require(...)` trên Expo Web:**
-   - Các ảnh tĩnh đóng gói qua `require('@/assets/images/...')` trả về object `{ uri: '/assets/...', width, height }`. Khi truyền vào thẻ `React.createElement('img', { src })` trên Web bắt buộc phải đi qua hàm `resolveImageUri(src)` nếu không sẽ bị lỗi `src="[object Object]"`.
-5. **Tránh ẩn đột ngột Hero Banner khi lọc trên Trang chủ:**
-   - Trước đây đặt `showHeroAndFeatured = !search && selectedCategory === 'All' && selectedMainLine === 'all'` khiến toàn bộ phần đầu trang biến mất ngay khi bấm vào thẻ `"Sản phẩm từ Len"` hoặc `"Sản phẩm Kẽm nhung"`, làm vị trí cuộn của người dùng bị giật tung. Phải giữ `showHeroAndFeatured = !search`.
-6. **Chuẩn tên trường `ShippingConfig` (`PaymentMethodsContext.tsx`):**
-   - Đối tượng `shippingConfig` chỉ có 4 trường: `freeshipEnabled`, `freeshipThreshold`, `hcmFee`, `provincialFee`. Tuyệt đối không dùng tên cũ (`freeShippingEnabled`, `freeShippingThreshold`, `standardShippingFee`) vì sẽ trả về `undefined`, khiến phép cộng `cartTotal + shippingFee` thành `NaN` và `formatVND(NaN)` hiển thị `0₫`.
-
----
-
-## 4. Checklist Chi Tiết Các Việc Tiếp Theo Theo Thứ Tự Ưu Tiên
-
-> **Quy trình bắt buộc cho mỗi mục dưới đây:**
-> Thực hiện code $\rightarrow$ Chạy `npm run security:check && npm run build:web` Pass 100% $\rightarrow$ Cập nhật trạng thái vào `HANDOFF.md` $\rightarrow$ `git commit` & `git push`.
-
-- [ ] **Ưu tiên 1 — Kiểm tra & Đồng bộ Bộ lọc Chất liệu / Tìm kiếm Nhanh theo dòng Len (`src/app/index.tsx` & `src/components/ProductCard.tsx`):**
-  - **File & Hàm cần xử lý:**
-    - `src/app/index.tsx` (`filteredProducts`, `isVelvetWireProduct`): Đảm bảo khi khách gõ tìm kiếm theo tên chất liệu (`"nhung gấu"`, `"nhung đũa"`, `"lông thỏ"`, `"kẽm nhung"`) hoặc lọc theo danh mục con đều trả về đúng 100% sản phẩm đã chuẩn hoá chất liệu.
-- [ ] **Ưu tiên 2 — Công cụ Thống kê Nguyên liệu & Tồn kho theo Đơn hàng cho Admin (`src/app/manage-products.tsx` hoặc `src/app/orders/index.tsx`):**
-  - **File & Hàm cần xử lý:**
-    - `src/app/orders/index.tsx` (`AdminOrdersView`): Bổ sung bảng tóm tắt nhanh số lượng từng mẫu/màu đang cần làm trong các đơn `pending` / `processing` để chủ shop nhìn ngay cần móc bao nhiêu bé bằng *Len Nhung Gấu*, *Len Nhung Đũa*, *Len Lông Thỏ* mà không phải đếm thủ công từng đơn.
-- [ ] **Ưu tiên 3 — Tối ưu Hoá Ảnh Base64 Sang Lưu Trữ Nhẹ & Dọn Dẹp Bản Ghi `tcl_rescue_*` Cũ (`src/store/ProductContext.tsx`):**
-  - **File & Hàm cần xử lý:**
-    - `src/store/ProductContext.tsx` (`upsertProductToSupabase`, `fetchRemoteRescuedProducts`, `deleteProductFromSupabase`): Khi Admin xoá hoặc gộp sản phẩm, tự động dọn sạch các bản ghi `tcl_rescue_<id>` mồ côi nằm trong danh sách `deletedIdsMemory` để giữ bảng `public.addresses` nhẹ và nhanh.
-- [ ] **Ưu tiên 4 — Kiểm toán toàn diện Luồng Thanh toán QR SePay & Voucher Khai Trương (`api/orders-guard.js`, `api/sepay-webhook.js`, `src/app/checkout.tsx`):**
-  - **File & Hàm cần xử lý:**
-    - `api/orders-guard.js` (`computeServerAuthoritativePricing`) và `src/app/checkout.tsx`: Đảm bảo mọi đơn hàng áp mã giảm giá (`CHAOBAN10K`, `KHAITRUONG20K`, `TRIAN15K`) hoặc chọn `Set Quà Tặng Đặc Biệt (+25.000₫)` đều khớp từng đồng giữa màn hình Checkout, mã VietQR và SePay Webhook.
+### 2.3. Danh sách Biến Môi Trường Người Dùng Sẽ Cung Cấp Ở Đầu Phiên Mới
+- **Từ Supabase mới (3 giá trị):**
+  1. `EXPO_PUBLIC_SUPABASE_URL`
+  2. `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+  3. `SUPABASE_SERVICE_ROLE_KEY`
+- **Từ Cloudflare R2 (5 giá trị):**
+  1. `R2_ACCOUNT_ID`
+  2. `R2_ACCESS_KEY_ID`
+  3. `R2_SECRET_ACCESS_KEY`
+  4. `R2_BUCKET_NAME` (ví dụ: `tiemcuonlen-media`)
+  5. `R2_PUBLIC_BASE_URL` (ví dụ: `https://media.tiemcuonlen.shop`)
