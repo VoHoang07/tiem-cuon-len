@@ -2,6 +2,7 @@ const {
   SUPABASE_URL,
   SUPABASE_KEY,
   SUPABASE_SERVICE_KEY,
+  buildSupabaseServiceHeaders,
   ADMIN_EMAILS,
   AUDIT_LOG_PARTITION,
   BLOCKLIST_PARTITION,
@@ -102,19 +103,13 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       fetch(
         `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}&order=district.desc&limit=400`,
         {
-          headers: {
-            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
-          },
-          }
-          ),
-          fetch(
-          `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&order=district.desc&limit=100`,
-          {
-          headers: {
-            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
-          },
+          headers: buildSupabaseServiceHeaders(authUser.accessToken),
+        }
+      ),
+      fetch(
+        `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&order=district.desc&limit=100`,
+        {
+          headers: buildSupabaseServiceHeaders(authUser.accessToken),
         }
       ),
     ]);
@@ -207,12 +202,10 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       };
       await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
         method: 'POST',
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
+        headers: buildSupabaseServiceHeaders(authUser.accessToken, {
           'Content-Type': 'application/json',
           Prefer: 'resolution=merge-duplicates,return=minimal',
-        },
+        }),
         body: JSON.stringify(row),
       });
       syncBlockedIpInMemoryCache(targetIp, 'add');
@@ -226,29 +219,23 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&or=(id.eq.${encodeURIComponent(blockId)},phone.eq.${encodeURIComponent(targetIp)})`,
         {
           method: 'DELETE',
-          headers: {
-            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
-          },
+          headers: buildSupabaseServiceHeaders(authUser.accessToken),
         }
-        );
-        syncBlockedIpInMemoryCache(targetIp, 'remove');
-        return res.status(200).json({ success: true, unblockedIp: targetIp });
-        }
+      );
+      syncBlockedIpInMemoryCache(targetIp, 'remove');
+      return res.status(200).json({ success: true, unblockedIp: targetIp });
+      }
 
-        if (action === 'clear_logs') {
-        await fetch(
+      if (action === 'clear_logs') {
+      await fetch(
         `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${AUDIT_LOG_PARTITION}`,
         {
           method: 'DELETE',
-          headers: {
-            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken || SUPABASE_KEY}`,
-          },
+          headers: buildSupabaseServiceHeaders(authUser.accessToken),
         }
       );
       return res.status(200).json({ success: true });
-    }
+      }
     }
 
     // ─── LIVE CHAT OWNER NOTIFICATION (WORKS EVEN WHEN ADMIN HAS WEB CLOSED) ──
@@ -331,8 +318,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       ]);
       const convId = sanitizeTextServer(cleanDel.conversationId || '', 120);
       const msgId = sanitizeTextServer(cleanDel.messageId || '', 120);
-      const authHeaderToken = SUPABASE_SERVICE_KEY || adminUser.accessToken || SUPABASE_KEY;
-      const apiKeyToken = SUPABASE_SERVICE_KEY || SUPABASE_KEY;
+      const delHeaders = buildSupabaseServiceHeaders(adminUser.accessToken);
 
       if (msgId) {
         await fetch(
@@ -341,10 +327,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           )}`,
           {
             method: 'DELETE',
-            headers: {
-              apikey: apiKeyToken,
-              Authorization: `Bearer ${authHeaderToken}`,
-            },
+            headers: delHeaders,
           }
         );
       } else if (convId) {
@@ -354,10 +337,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           )}`,
           {
             method: 'DELETE',
-            headers: {
-              apikey: apiKeyToken,
-              Authorization: `Bearer ${authHeaderToken}`,
-            },
+            headers: delHeaders,
           }
         );
       }
@@ -414,11 +394,9 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       const avatarUrl = sanitizeTextServer(cleanAuth.avatarUrl || '', 400);
       const authProvider = sanitizeTextServer(cleanAuth.authProvider || 'password', 24);
 
-      const adminHeaders = {
-        apikey: SUPABASE_SERVICE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      const adminHeaders = buildSupabaseServiceHeaders('', {
         'Content-Type': 'application/json',
-      };
+      });
 
       // 1. Attempt to create the user once with `email_confirm: true`
       const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -455,10 +433,40 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
         createMsg.includes('registered');
 
       if (!alreadyExists) {
-        return res.status(400).json({
-          success: false,
-          error: 'Không thể khởi tạo tài khoản.',
+        // Fallback when GoTrue Admin API rejects key format or returns transient error:
+        // Use standard public `/auth/v1/signup` (when `mailer_autoconfirm: true`, this creates & confirms immediately;
+        // if the user already exists, GoTrue returns `user_already_exists` or obfuscated empty identities without overwriting password).
+        const signupFallbackRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            data: {
+              name: displayName,
+              full_name: displayName,
+              ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+              role: isAdminEmail ? 'admin' : 'customer',
+              avatar: 'capybara',
+              auth_provider: authProvider,
+            },
+          }),
         });
+
+        if (signupFallbackRes.ok) {
+          const signupJson = await signupFallbackRes.json().catch(() => ({}));
+          const createdUser = signupJson.user || signupJson;
+          const identities = Array.isArray(createdUser && createdUser.identities)
+            ? createdUser.identities
+            : null;
+          // Non-empty identities or access_token means a brand-new account was just created
+          if (signupJson.access_token || (identities && identities.length > 0)) {
+            return res.status(200).json({ success: true, status: 'created' });
+          }
+        }
       }
 
       // 2. Account already exists: test password against GoTrue `/auth/v1/token`
@@ -641,12 +649,10 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
 
   await fetch(`${SUPABASE_URL}/rest/v1/addresses`, {
     method: 'POST',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+    headers: buildSupabaseServiceHeaders('', {
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
-    },
+    }),
     body: JSON.stringify(logRow),
   });
 

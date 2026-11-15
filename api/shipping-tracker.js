@@ -3,6 +3,7 @@ const {
   SUPABASE_URL,
   SUPABASE_KEY,
   SUPABASE_SERVICE_KEY,
+  buildSupabaseServiceHeaders,
   HOLDER_USER_ID,
   extractClientTelemetry,
   sanitizeTextServer,
@@ -366,10 +367,7 @@ async function getSavedSenderWarehouse(authToken) {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/addresses?id=eq.${GOSHIP_CONFIG_ROW_ID}&select=detailAddress&limit=1`,
       {
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authToken}`,
-        },
+        headers: buildSupabaseServiceHeaders(authToken),
       }
     );
     if (res.ok) {
@@ -478,10 +476,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
 
     // Match order by `order_id` (`CUONLEN-...`) first, or by previously saved `goshipShipmentId` / `trackingCode`
     let matchedOrder = null;
-    const dbHeaders = {
-      apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-    };
+    const dbHeaders = buildSupabaseServiceHeaders();
 
     if (partnerOrderId) {
       const r = await fetch(
@@ -719,10 +714,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     const dbRes = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?select=id,userId,items,total,status,paymentMethod,shippingAddress,createdAt&order=createdAt.desc&limit=150`,
       {
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(),
       }
     );
     const allRecent = dbRes.ok ? await dbRes.json() : [];
@@ -798,12 +790,10 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     };
     await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
+      headers: buildSupabaseServiceHeaders(authUser.accessToken, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal',
-      },
+      }),
       body: JSON.stringify({
         id: GOSHIP_CONFIG_ROW_ID,
         userId: HOLDER_USER_ID,
@@ -836,10 +826,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`,
       {
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
-        },
+        headers: buildSupabaseServiceHeaders(authUser.accessToken),
       }
     );
     const rows = r.ok ? await r.json() : [];
@@ -863,12 +850,10 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`,
       {
         method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
+        headers: buildSupabaseServiceHeaders(authUser.accessToken, {
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
-        },
+        }),
         body: JSON.stringify({
           status: nextStatus,
           shippingAddress: updatedAddr,
@@ -893,10 +878,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`,
       {
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
-        },
+        headers: buildSupabaseServiceHeaders(authUser.accessToken),
       }
     );
     const rows = r.ok ? await r.json() : [];
@@ -1020,10 +1002,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`,
       {
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
-        },
+        headers: buildSupabaseServiceHeaders(authUser.accessToken),
       }
     );
     const rows = r.ok ? await r.json() : [];
@@ -1170,12 +1149,10 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}`,
       {
         method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authUser.accessToken}`,
+        headers: buildSupabaseServiceHeaders(authUser.accessToken, {
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
-        },
+        }),
         body: JSON.stringify({
           status: 'Đang giao',
           shippingAddress: updatedAddr,

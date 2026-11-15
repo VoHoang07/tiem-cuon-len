@@ -7,6 +7,26 @@ const SUPABASE_KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
 const rawServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 const SUPABASE_SERVICE_KEY = rawServiceKey || SUPABASE_KEY;
 
+/**
+ * Builds Supabase server-side headers compatible with BOTH:
+ * 1. Modern `sb_secret_...` / `sb_publishable_...` keys (Supabase API Gateway rejects non-JWT strings inside `Authorization: Bearer ...` on GoTrue `/auth/v1/*`, so `apikey` is used without a malformed Bearer header unless a real 3-part JWT is available).
+ * 2. Classic 3-part `eyJ...` `service_role` JWTs (passed in both `apikey` and `Authorization: Bearer`).
+ */
+function buildSupabaseServiceHeaders(fallbackJwtToken = '', extraHeaders = {}) {
+  const apiKey = SUPABASE_SERVICE_KEY || SUPABASE_KEY;
+  const headers = {
+    apikey: apiKey,
+    ...extraHeaders,
+  };
+  const isServiceKeyJwt = apiKey.split('.').length === 3;
+  if (isServiceKeyJwt) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  } else if (fallbackJwtToken && String(fallbackJwtToken).split('.').length === 3) {
+    headers.Authorization = `Bearer ${fallbackJwtToken}`;
+  }
+  return headers;
+}
+
 const AUDIT_LOG_PARTITION = '__TCL_SECURITY_AUDIT_LOG_V1__';
 const BLOCKLIST_PARTITION = '__TCL_SECURITY_BLOCKLIST_V1__';
 const SHOP_CONFIG_PARTITION = '__TCL_SHOP_CONFIG_V1__';
@@ -472,10 +492,7 @@ async function isIpBlockedOnServer(ip) {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${HOLDER_USER_ID}&fullName=eq.${BLOCKLIST_PARTITION}&select=phone,detailAddress&limit=100`,
       {
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(),
       }
     );
     if (res.ok) {
@@ -900,12 +917,10 @@ async function logServerAuditEvent(req, payload = {}) {
 
     await fetch(`${SUPABASE_URL}/rest/v1/addresses`, {
       method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
+      headers: buildSupabaseServiceHeaders('', {
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
-      },
+      }),
       body: JSON.stringify(logRow),
     });
   } catch {
@@ -982,10 +997,7 @@ function verifyPersonalVoucherRecord(record) {
 
 async function fetchUserPastValidOrders(userId, email, phone) {
   const matchedOrders = new Map();
-  const headers = {
-    apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-  };
+  const headers = buildSupabaseServiceHeaders();
 
   try {
     if (userId) {
@@ -1108,12 +1120,10 @@ async function issuePersonalMissionVoucherServer({
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
     method: 'POST',
-    headers: {
-      apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_KEY || adminAccessToken}`,
+    headers: buildSupabaseServiceHeaders(adminAccessToken, {
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates,return=minimal',
-    },
+    }),
     body: JSON.stringify(row),
   });
 
@@ -1136,10 +1146,7 @@ async function markPersonalVoucherUsedServer(code, usedByOrderId, authToken) {
         `pv_${cleanCode}`
       )}&fullName=eq.${PERSONAL_VOUCHER_PARTITION}&select=id,detailAddress&limit=1`,
       {
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(),
       }
     );
     const rows = getRes.ok ? await getRes.json() : [];
@@ -1163,12 +1170,10 @@ async function markPersonalVoucherUsedServer(code, usedByOrderId, authToken) {
       )}`,
       {
         method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY || authToken}`,
+        headers: buildSupabaseServiceHeaders(authToken, {
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
-        },
+        }),
         body: JSON.stringify({
           ward: 'USED',
           detailAddress: JSON.stringify(updatedRecord),
@@ -1215,10 +1220,7 @@ async function resolveAuthoritativePromoDiscount(
           `pv_${code}`
         )}&fullName=eq.${PERSONAL_VOUCHER_PARTITION}&select=id,ward,detailAddress&limit=1`,
         {
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-          },
+          headers: buildSupabaseServiceHeaders(),
         }
       );
       const pvRows = pvRes.ok ? await pvRes.json() : [];
@@ -1856,6 +1858,7 @@ async function sendOrderNotificationServer(order) {
     SUPABASE_URL,
     SUPABASE_KEY,
     SUPABASE_SERVICE_KEY,
+    buildSupabaseServiceHeaders,
     AUDIT_LOG_PARTITION,
     BLOCKLIST_PARTITION,
     HOLDER_USER_ID,

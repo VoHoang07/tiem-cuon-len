@@ -619,6 +619,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               saveCachedAuthUser(resolved);
               return { success: true };
             }
+            // If account already existed in auth.users with unconfirmed email, retry provision + signIn
+            if (
+              !migrateErr &&
+              migratedData?.user &&
+              !migratedData?.session &&
+              Array.isArray(migratedData.user.identities) &&
+              migratedData.user.identities.length > 0
+            ) {
+              const confirmProv = await provisionConfirmedUserOnServer({
+                email: cleanEmail,
+                password,
+                name: defaultName,
+                authProvider: 'password',
+              });
+              if (confirmProv.ok) {
+                const { data: confirmedSignIn } =
+                  await supabase.auth.signInWithPassword({
+                    email: cleanEmail,
+                    password,
+                  });
+                if (confirmedSignIn?.session) {
+                  setFailedAttempts(0);
+                  const localAvatar = await AsyncStorage.getItem(
+                    `${AVATAR_STORAGE_PREFIX}${confirmedSignIn.session.user.id}`
+                  ).catch(() => null);
+                  const resolved = toAuthUser(confirmedSignIn.session, localAvatar);
+                  setUser(resolved);
+                  saveCachedAuthUser(resolved);
+                  return { success: true };
+                }
+              }
+            }
           }
         }
 

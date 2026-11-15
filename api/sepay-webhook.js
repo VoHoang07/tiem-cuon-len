@@ -2,6 +2,7 @@ const {
   SUPABASE_URL,
   SUPABASE_KEY,
   SUPABASE_SERVICE_KEY,
+  buildSupabaseServiceHeaders,
   HOLDER_USER_ID,
   sanitizeTextServer,
   stripUnknownFieldsServer,
@@ -150,10 +151,7 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
   const pendingOrdersRes = await fetch(
     `${SUPABASE_URL}/rest/v1/orders?status=eq.pending_payment&select=id,userId,total,status,paymentMethod,shippingAddress,items,createdAt&order=createdAt.desc&limit=50`,
     {
-      headers: {
-        apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-      },
+      headers: buildSupabaseServiceHeaders(),
     }
   );
 
@@ -165,10 +163,7 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
     const recentOrdersRes = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?select=id,userId,total,status,createdAt&order=createdAt.desc&limit=40`,
       {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(),
       }
     );
     const recentOrders = recentOrdersRes.ok ? await recentOrdersRes.json() : [];
@@ -195,11 +190,9 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
         `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(matchedOrder.id)}`,
         {
           method: 'PATCH',
-          headers: {
-            apikey: SUPABASE_SERVICE_KEY || SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_KEY || SUPABASE_KEY}`,
+          headers: buildSupabaseServiceHeaders('', {
             'Content-Type': 'application/json',
-          },
+          }),
           body: JSON.stringify({
             status: newStatus,
             shippingAddress: updatedAddr,
@@ -248,11 +241,9 @@ module.exports = withGlobalErrorHandler('/api/sepay-webhook', async function han
 
   await fetch(`${SUPABASE_URL}/rest/v1/addresses`, {
     method: 'POST',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+    headers: buildSupabaseServiceHeaders('', {
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify(logRow),
   });
 
