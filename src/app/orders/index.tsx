@@ -375,9 +375,9 @@ export default function OrdersScreen() {
                   style={{
                     marginTop: 5,
                     alignSelf: 'flex-start',
-                    backgroundColor: '#FDF2F8',
+                    backgroundColor: '#FFF1EE',
                     borderWidth: 1,
-                    borderColor: '#F472B6',
+                    borderColor: '#FFCCC2',
                     borderRadius: 8,
                     paddingHorizontal: 8,
                     paddingVertical: 3,
@@ -386,11 +386,11 @@ export default function OrdersScreen() {
                     style={{
                       fontSize: 11.5,
                       fontWeight: '800',
-                      color: '#9D174D',
+                      color: '#EE4D2D',
                     }}>
                     {isAdmin
-                      ? `🎀 NHỚ BỎ KÈM QUÀ TẶNG (0₫): ${item.shippingAddress.bonusGiftProductName}`
-                      : `🎀 Quà tặng kèm (0₫): ${item.shippingAddress.bonusGiftProductName}`}
+                      ? `🎁 NHỚ BỎ KÈM QUÀ TẶNG (0₫): ${item.shippingAddress.bonusGiftProductName}`
+                      : `🎁 Quà tặng kèm (0₫): ${item.shippingAddress.bonusGiftProductName}`}
                   </Text>
                 </View>
               )}
