@@ -73,6 +73,22 @@
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
+    {
+      "source": "/product/:id",
+      "has": [{ "type": "query", "key": "s" }],
+      "destination": "/api/media-upload?action=og_product&id=:id"
+    },
+    {
+      "source": "/product/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|meta-externalagent|Meta-ExternalFetcher|Twitterbot|Zalo|TelegramBot|WhatsApp|Discordbot|Slackbot|LinkedInBot|Pinterest|Threads|Instagram|TikTok|Bytespider|Googlebot|bingbot|Applebot|Embedly|vkShare).*"
+        }
+      ],
+      "destination": "/api/media-upload?action=og_product&id=:id"
+    },
     { "source": "/((?!api/).*)", "destination": "/" }
   ]
 }

@@ -9,7 +9,16 @@ const {
   verifySupabaseUser,
   logServerAuditEvent,
   withGlobalErrorHandler,
+  resolveProductOpenGraphMetaServer,
 } = require('./_securityCore');
+
+function escapeHtmlAttr(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 // Sliding-window rate limit per IP for media uploads
 const uploadRateWindows = new Map();
@@ -320,6 +329,63 @@ async function putObjectToCloudflareR2({
 module.exports = withGlobalErrorHandler(
   '/api/media-upload',
   async function handler(req, res) {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      const q = req.query || {};
+      const rawId = sanitizeTextServer(q.id || '', 120);
+      const rawS = sanitizeTextServer(q.s || q.c || '', 120);
+      const meta = await resolveProductOpenGraphMetaServer(rawId, rawS);
+
+      const canonicalShareUrl = meta.productId
+        ? `https://www.tiemcuonlen.shop/product/${encodeURIComponent(meta.productId)}${
+            rawS ? `?s=${encodeURIComponent(rawS)}` : ''
+          }`
+        : 'https://www.tiemcuonlen.shop/';
+      const targetSpaPath = meta.productId
+        ? `/product/${encodeURIComponent(meta.productId)}${
+            rawS && rawS !== 'cover' && rawS !== '1'
+              ? `?initialColorId=${encodeURIComponent(rawS)}`
+              : ''
+          }`
+        : '/';
+
+      const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtmlAttr(meta.ogTitle)}</title>
+  <meta name="description" content="${escapeHtmlAttr(meta.ogDescription)}" />
+  <meta property="og:type" content="product" />
+  <meta property="og:site_name" content="Tiệm Cuộn Len" />
+  <meta property="og:title" content="${escapeHtmlAttr(meta.ogTitle)}" />
+  <meta property="og:description" content="${escapeHtmlAttr(meta.ogDescription)}" />
+  <meta property="og:url" content="${escapeHtmlAttr(canonicalShareUrl)}" />
+  <meta property="og:image" content="${escapeHtmlAttr(meta.ogImage)}" />
+  <meta property="og:image:secure_url" content="${escapeHtmlAttr(meta.ogImage)}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="1200" />
+  <meta property="og:image:alt" content="${escapeHtmlAttr(meta.fullTitle)}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtmlAttr(meta.ogTitle)}" />
+  <meta name="twitter:description" content="${escapeHtmlAttr(meta.ogDescription)}" />
+  <meta name="twitter:image" content="${escapeHtmlAttr(meta.ogImage)}" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+</head>
+<body style="background:#FAF7F2;color:#3D2B1F;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center;">
+  <script>window.location.replace(${JSON.stringify(targetSpaPath)});</script>
+  <div>
+    <h1 style="font-size:18px;margin-bottom:8px;">${escapeHtmlAttr(meta.ogTitle)}</h1>
+    <p style="font-size:14px;color:#6E5643;">${escapeHtmlAttr(meta.ogDescription)}</p>
+    <a href="${escapeHtmlAttr(targetSpaPath)}" style="color:#EE4D2D;font-weight:700;">Xem sản phẩm tại Tiệm Cuộn Len &rarr;</a>
+  </div>
+</body>
+</html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+      return res.status(200).send(html);
+    }
+
     if (req.method !== 'POST') {
       return res.status(405).json({
         success: false,

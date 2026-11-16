@@ -1844,6 +1844,139 @@ async function sendOrderNotificationServer(order) {
     }
     }
 
+const STATIC_OG_CATALOG = {"user_1794237712564":{"n":"Charm Thỏ Tang Tang ( Mix màu tuỳ ý )","p":189000,"i":"/catalog-media/user_1794237712564_cover.webp","d":"Charm Thỏ Tang Tang ( Mix màu tuỳ ý ) — Mẫu móc khoá đan móc thủ công nhỏ gọn, form đứng chắc chắn và giữ dáng tốt khi sử dụng lâu dài.","v":{"c_1794237614898_1":{"n":"Thỏ tang tang hồng phấn","p":189000,"i":"/catalog-media/user_1794237712564_c_1794237614898_1.webp"},"c_1794237614898_2":{"n":"Thỏ tang tang xanh dương baby","p":189000,"i":"/catalog-media/user_1794237712564_c_1794237614898_2.webp"},"c_1794237614898_3":{"n":"Thỏ tang tang xanh ngọc","p":189000,"i":"/catalog-media/user_1794237712564_c_1794237614898_3.webp"},"c_1794237614898_4":{"n":"Thỏ tang tang nâu","p":189000,"i":"/catalog-media/user_1794237712564_c_1794237614898_4.webp"}}},"user_1794233156945":{"n":"Charm Treo Túi Thỏ Múa Lân","p":89000,"i":"/catalog-media/user_1794233156945_cover.webp","d":"Mẫu Dây Treo Thỏ Đội Mũ Lân đan thủ công từ chất liệu len nhung gấu và len xù xiaoke — món phụ kiện và quà tặng may mắn, dễ thương.","v":{"c_1794231762946_1":{"n":"Thỏ Lân Đỏ","p":89000,"i":"/catalog-media/user_1794233156945_c_1794231762946_1.webp"},"c_1794232857632_2":{"n":"Thỏ Lân Vàng","p":89000,"i":"/catalog-media/user_1794233156945_c_1794232857632_2.webp"},"c_1794232857632_4":{"n":"Thỏ Lân Hồng","p":89000,"i":"/catalog-media/user_1794233156945_c_1794232857632_4.webp"},"c_1794232857632_5":{"n":"Thỏ Lân xanh dương","p":89000,"i":"/catalog-media/user_1794233156945_c_1794232857632_5.webp"},"c_1794232857632_6":{"n":"Thỏ Lân Xanh Lá","p":89000,"i":"/catalog-media/user_1794233156945_c_1794232857632_6.webp"}}},"user_1794212097527":{"n":"Bó Hoa Hồng Bông Len Nhung Đũa","p":159000,"i":"/catalog-media/user_1794212097527_cover.webp","d":"Bó hoa len nhung đũa thủ công có đủ Size và bảng màu xinh xắn, tặng kèm hộp quà và thiệp viết tay.","v":{"c_1794211667754_1":{"n":"Size 7-9 bông","p":159000,"i":"/catalog-media/user_1794212097527_c_1794211667754_1.webp"},"c_1794211708211_2":{"n":"Size 7-9 bông","p":159000,"i":"/catalog-media/user_1794212097527_c_1794211708211_2.webp"},"c_1794211717825_3":{"n":"Size 18-20 bông","p":279000,"i":"/catalog-media/user_1794212097527_c_1794211717825_3.webp"},"c_1794211721657_4":{"n":"Size 18-20 bông","p":279000,"i":"/catalog-media/user_1794212097527_c_1794211721657_4.webp"},"c_1794211726067_5":{"n":"size 25 Bông","p":359000,"i":"/catalog-media/user_1794212097527_c_1794211726067_5.webp"},"c_1794211729899_6":{"n":"Size 25 bông","p":359000,"i":"/catalog-media/user_1794212097527_c_1794211729899_6.webp"}}},"user_1794156959442":{"n":"Móc Khoá Thú Bông","p":95000,"i":"/catalog-media/user_1794156959442_cover.webp","d":"Bộ sưu tập móc khóa thú bông đan móc thủ công 100% từ chất liệu len nhung gấu dày dặn, mềm mịn và êm tay.","v":{"c_1794156656125_1":{"n":"Gấuuu Dâuu","p":95000,"i":"/catalog-media/user_1794156959442_c_1794156656125_1.webp"},"c_1794156665809_2":{"n":"Gấuuu Nâuu","p":95000,"i":"/catalog-media/user_1794156959442_c_1794156665809_2.webp"},"c_1794156669391_3":{"n":"Heoo Hồngg","p":95000,"i":"/catalog-media/user_1794156959442_c_1794156669391_3.webp"},"c_1794156672485_4":{"n":"Hổ Vàngg","p":95000,"i":"/catalog-media/user_1794156959442_c_1794156672485_4.webp"},"c_1794156675613_5":{"n":"Mèoo Camm","p":95000,"i":"/catalog-media/user_1794156959442_c_1794156675613_5.webp"}}},"user_1794155402893":{"n":"Móc Khoá Twinkle Chủ để Noel","p":179000,"i":"/catalog-media/user_1794155402893_cover.webp","d":"Móc Khoá Twinkle Chủ đề Noel — Mẫu móc khoá đan móc thủ công từ len nhung gấu và xù xiaoke cao cấp.","v":{"c_1794154326039_2":{"n":"Twinkle Cây Thông (1)","p":179000,"i":"/catalog-media/user_1794155402893_c_1794154326039_2.webp"},"c_1794154331551_3":{"n":"Twinkle Cây Thông (2)","p":249000,"i":"/catalog-media/user_1794155402893_c_1794154331551_3.webp"},"c_1794154336495_4":{"n":"Twinkle Cánh cụt","p":249000,"i":"/catalog-media/user_1794155402893_c_1794154336495_4.webp"},"c_1794154341457_5":{"n":"Twinkle Người Tuyết","p":179000,"i":"/catalog-media/user_1794155402893_c_1794154341457_5.webp"},"c_1794154346182_6":{"n":"Twinkle ông già noel","p":249000,"i":"/catalog-media/user_1794155402893_c_1794154346182_6.webp"},"c_1794154750715_6":{"n":"Twinkle Quả Châu Đỏ","p":179000,"i":"/catalog-media/user_1794155402893_c_1794154750715_6.webp"}}},"user_1794152247063":{"n":"Móc Khoá Twinkle Twinkle","p":249000,"i":"/catalog-media/user_1794152247063_cover.webp","d":"Móc Khoá Twinkle Twinkle — Mẫu móc khoá đan móc thủ công nhỏ gọn, form đứng chắc chắn từ len nhung gấu & xù Xiaoke.","v":{"c_1794151762917_1":{"n":"Twinkle Buồn Ngủ","p":249000,"i":"/catalog-media/user_1794152247063_c_1794151762917_1.webp"},"c_1794151769355_2":{"n":"Twinkle Nở Hoa","p":249000,"i":"/catalog-media/user_1794152247063_c_1794151769355_2.webp"},"c_1794151772555_3":{"n":"Twinkle Khủng Long","p":249000,"i":"/catalog-media/user_1794152247063_c_1794151772555_3.webp"},"c_1794151776664_4":{"n":"Twinkle Shinig","p":249000,"i":"/catalog-media/user_1794152247063_c_1794151776664_4.webp"},"c_1794151779569_5":{"n":"Twinkle Táo bón","p":249000,"i":"/catalog-media/user_1794152247063_c_1794151779569_5.webp"},"c_1794152017278_6":{"n":"Twinkle Bé Zoiii","p":249000,"i":"/catalog-media/user_1794152247063_c_1794152017278_6.webp"}}},"user_1793987529864":{"n":"Móc Khoá Donutt Mini","p":65000,"i":"/catalog-media/user_1793987529864_cover.webp","d":"Bộ sưu tập móc khóa len hình bánh Donut mini kết hợp tạo hình các nhân vật hoạt hình Sanrio và thú cưng đáng yêu.","v":{"c_1793987161557_1":{"n":"Donut Pudding","p":65000,"i":"/catalog-media/user_1793987529864_c_1793987161557_1.webp"},"c_1793987165201_2":{"n":"Donut melody","p":65000,"i":"/catalog-media/user_1793987529864_c_1793987165201_2.webp"},"c_1793987182174_3":{"n":"Donut pochaco","p":65000,"i":"/catalog-media/user_1793987529864_c_1793987182174_3.webp"},"c_1793987199983_4":{"n":"Donut ếch ộp","p":65000,"i":"/catalog-media/user_1793987529864_c_1793987199983_4.webp"},"c_1793987209371_5":{"n":"Donutkitty","p":65000,"i":"/catalog-media/user_1793987529864_c_1793987209371_5.webp"},"c_1793987392353_6":{"n":"Donut bò sữa","p":65000,"i":"/catalog-media/user_1793987529864_c_1793987392353_6.webp"}}},"user_1793985079054":{"n":"Bánh Donut Khổng Lồ","p":365000,"i":"/catalog-media/user_1793985079054_cover.webp","d":"Chiếc bánh Donut size khổng lồ phiên bản handmade 100%, chất liệu len nhung đũa siêu mềm mịn kết hợp bông gòn bi đàn hồi cao.","v":{"c_1793984225582_1":{"n":"Donut vị dưa hấu","p":365000,"i":"/catalog-media/user_1793985079054_c_1793984225582_1.webp"},"c_1793984239521_2":{"n":"Donut vị việt quất","p":350000,"i":"/catalog-media/user_1793985079054_c_1793984239521_2.webp"},"c_1793984243388_3":{"n":"Donut vị Bơ","p":350000,"i":"/catalog-media/user_1793985079054_c_1793984243388_3.webp"},"c_1793984246706_4":{"n":"Donut vị chanh vàng","p":350000,"i":"/catalog-media/user_1793985079054_c_1793984246706_4.webp"},"c_1793984252897_5":{"n":"Donut vị khoai môn","p":350000,"i":"/catalog-media/user_1793985079054_c_1793984252897_5.webp"},"c_1793984258973_6":{"n":"Donut vị Socola","p":350000,"i":"/catalog-media/user_1793985079054_c_1793984258973_6.webp"},"c_1793984263755_7":{"n":"Donut vị Đàoo","p":350000,"i":"/catalog-media/user_1793985079054_c_1793984263755_7.webp"}}},"user_1793981290544":{"n":"Donutt size Zừaaa","p":249000,"i":"/catalog-media/user_1793981290544_cover.webp","d":"Chiếc bánh Donut phiên bản thú bông thủ công 100% từ chất liệu len nhung đũa dày dặn, êm ái.","v":{"c_1793980521212_1":{"n":"Donut Chó Snoopy","p":249000,"i":"/catalog-media/user_1793981290544_c_1793980521212_1.webp"},"c_1793980820399_2":{"n":"Donut Gấu Nâu","p":249000,"i":"/catalog-media/user_1793981290544_c_1793980820399_2.webp"},"c_1793980825202_3":{"n":"Donut Cinamorol","p":249000,"i":"/catalog-media/user_1793981290544_c_1793980825202_3.webp"}}},"user_1793976261276":{"n":"Ong Vàng 25cm","p":139000,"i":"/catalog-media/user_1793976261276_cover.webp","d":"Bé Ong Béo phiên bản size lớn 25cm siêu mũm mĩm từ chất liệu len nhung đũa sợi to mềm xốp như mây.","v":{"c_1793976215781_1":{"n":"Ong 25cm","p":139000,"i":"/catalog-media/user_1793976261276_c_1793976215781_1.webp"}}},"user_1793958733621":{"n":"Móc Khoá Gà Béoo","p":49000,"i":"/catalog-media/user_1793958733621_cover.webp","d":"Bé Gà Mập với chất liệu len nhung gấu bông xốp, mềm mịn như nhung vừa ra lò tại tiệm.","v":{"c_1793958591942_1":{"n":"Gà Béoo","p":49000,"i":"/catalog-media/user_1793958733621_c_1793958591942_1.webp"}}},"user_1793958181855":{"n":"Móc Khoá Vịtt BANANA","p":49000,"i":"/catalog-media/user_1793958181855_cover.webp","d":"Vịt Chuối lai giữa bé vịt con mũm mĩm và quả chuối chín vàng ươm đan móc thủ công tỉ mỉ.","v":{"c_1793958000336_1":{"n":"Gà Chuối","p":49000,"i":"/catalog-media/user_1793958181855_c_1793958000336_1.webp"}}},"user_1793956553782":{"n":"Móc Khoá bó hoa mini","p":69000,"i":"/catalog-media/user_1793956553782_cover.webp","d":"Bó hoa len mini có đủ bảng màu xinh xắn, đan móc thủ công từ len nhung gấu.","v":{"c_1793956417108_1":{"n":"bó hoa hồng mini (7bông hồng)","p":69000,"i":"/catalog-media/user_1793956553782_cover.webp"},"c_1793956421634_2":{"n":"bó hướng dương mini ( 5 bông )","p":69000,"i":"/catalog-media/user_1793956553782_c_1793956421634_2.webp"}}},"user_1793955545289":{"n":"Móc khoá Bé Ma Treo Gió","p":49000,"i":"/catalog-media/user_1793955545289_cover.webp","d":"Móc khoá Bé Ma Treo Gió — Mẫu móc khoá đan móc thủ công nhỏ gọn, form đứng chắc chắn.","v":{"c_1793954257159_1":{"n":"Ma 3 mắt","p":49000,"i":"/catalog-media/user_1793955545289_c_1793954257159_1.webp"},"c_1793955268124_2":{"n":"Ma bí ngô","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955268124_2.webp"},"c_1793955283824_3":{"n":"Ma dâu","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955283824_3.webp"},"c_1793955318111_4":{"n":"Ma ếch","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955318111_4.webp"},"c_1793955355143_5":{"n":"Ma heo hồng","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955355143_5.webp"},"c_1793955383931_6":{"n":"Ma phù thuỷ","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955383931_6.webp"},"c_1793955422149_7":{"n":"Ma buồn ngủ","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955422149_7.webp"},"c_1793955452644_8":{"n":"Ma thỏ","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955452644_8.webp"},"c_1793955471835_9":{"n":"Vô Diện","p":49000,"i":"/catalog-media/user_1793955545289_c_1793955471835_9.webp"}}},"user_1793906593712":{"n":"Cừu bông mặt ngố","p":249000,"i":"/catalog-media/user_1793906593712_cover.webp","d":"Cừu bông mặt ngố — Mẫu móc khoá và thú bông đan móc thủ công từ len nhung gấu mềm mịn.","v":{"c_1793906202767_1":{"n":"Cừu bông hồng phấn","p":249000,"i":"/catalog-media/user_1793906593712_c_1793906202767_1.webp"},"c_1793906202767_2":{"n":"Cừu bông hồng sen","p":249000,"i":"/catalog-media/user_1793906593712_c_1793906202767_2.webp"},"c_1793906202767_3":{"n":"Cừu bông mini mặt ngố","p":189000,"i":"/catalog-media/user_1793906593712_c_1793906202767_3.webp"}}},"user_1793905231278":{"n":"Earmuffs Tai Gấu","p":159000,"i":"/catalog-media/user_1793905231278_cover.webp","d":"Earmuffs Tai Gấu — Phụ kiện thủ công từ Len Lông Thỏ êm nhẹ, ấm áp và dễ phối đồ.","v":{"c_1793904987933_2":{"n":"Earmuffs tai gấu nâu","p":159000,"i":"/catalog-media/user_1793905231278_c_1793904987933_2.webp"},"c_1793904987933_3":{"n":"Earmuffs tai gấu trắng","p":159000,"i":"/catalog-media/user_1793905231278_c_1793904987933_3.webp"}}},"user_1793885702524":{"n":"Nón tai gấu","p":189000,"i":"/catalog-media/user_1793885702524_cover.webp","d":"Nón tai gấu — Phụ kiện thủ công từ Len Lông Thỏ mềm mịn, giữ ấm tốt và cực kỳ ăn ảnh.","v":{"c_1793885604415_2":{"n":"Nón tai gấu kem","p":189000,"i":"/catalog-media/user_1793885702524_c_1793885604415_2.webp"},"c_1793885604415_3":{"n":"Nón tai gấu nâu","p":189000,"i":"/catalog-media/user_1793885702524_c_1793885604415_3.webp"},"c_1793885604415_4":{"n":"Nón tai gấu xanh","p":189000,"i":"/catalog-media/user_1793885702524_c_1793885604415_4.webp"}}},"user_1793884910153":{"n":"EarMuffs ( Băng chùm tai )","p":149000,"i":"/catalog-media/user_1793884910153_cover.webp","d":"EarMuffs ( Băng chùm tai ) — Phụ kiện thủ công từ Len Lông Thỏ êm nhẹ, ấm áp.","v":{"c_1793884790378_1":{"n":"Earmuffs đỏ","p":149000,"i":"/catalog-media/user_1793884910153_c_1793884790378_1.webp"},"c_1793884790378_2":{"n":"Earmuffs nâu","p":149000,"i":"/catalog-media/user_1793884910153_c_1793884790378_2.webp"},"c_1793884790378_3":{"n":"Earmuffs xanh rêu","p":149000,"i":"/catalog-media/user_1793884910153_c_1793884790378_3.webp"}}},"user_1793817035699":{"n":"Heo Con Cosplay size 35cm","p":345000,"i":"/catalog-media/user_1793817035699_cover.webp","d":"Bộ sưu tập Gấu Bông Heo Con Cosplay Len Nhung Đũa Handmade siêu cưng và ngộ nghĩnh.","v":{"c_1793816582953_1":{"n":"Heo Cá Hề","p":345000,"i":"/catalog-media/user_1793817035699_c_1793816582953_1.webp"},"c_1793816621139_2":{"n":"Heo Khủng Longg","p":345000,"i":"/catalog-media/user_1793817035699_c_1793816621139_2.webp"},"c_1793816675157_3":{"n":"Heo Cá Mập","p":345000,"i":"/catalog-media/user_1793817035699_c_1793816675157_3.webp"},"c_1793816698913_4":{"n":"Heo Đội Khăn Tắm","p":345000,"i":"/catalog-media/user_1793817035699_c_1793816698913_4.webp"},"c_1793816844678_5":{"n":"heo cosplay Hổ","p":345000,"i":"/catalog-media/user_1793817035699_c_1793816844678_5.webp"},"c_1793816927315_6":{"n":"Heo Cosplay Cừu","p":345000,"i":"/catalog-media/user_1793817035699_c_1793816927315_6.webp"}}},"user_1793815539213":{"n":"Mũ Len Lông Xù Bonnet Hình Trái Cây","p":279000,"i":"/catalog-media/user_1793815539213_cover.webp","d":"Mũ len lông xù dáng Bonnet thủ công với điểm nhấn chóp lá trái cây xinh xắn, chất len bông mềm mịn như lông thỏ.","v":{"c_1793815153681_1":{"n":"Mũ Quả Đàoo","p":279000,"i":"/catalog-media/user_1793815539213_c_1793815153681_1.webp"},"c_1793815178234_2":{"n":"Mũ Quả Chanh","p":279000,"i":"/catalog-media/user_1793815539213_c_1793815178234_2.webp"},"c_1793815203209_3":{"n":"Mũ Quả Cam","p":279000,"i":"/catalog-media/user_1793815539213_c_1793815203209_3.webp"},"c_1793815265543_4":{"n":"Mũ Quả Táo","p":279000,"i":"/catalog-media/user_1793815539213_c_1793815265543_4.webp"}}},"user_1793811032427":{"n":"Móc Khoá  Đầu Heo","p":39000,"i":"/catalog-media/user_1793811032427_cover.webp","d":"Tạo hình chiếc đầu heo tròn đầy với hai chiếc tai nhỏ xinh vểnh nhẹ, đôi mắt đen láy và chiếc mũi hồng đáng yêu.","v":{"c_1":{"n":"Heo Đenn","p":39000,"i":"/catalog-media/user_1793811032427_c_1.webp"},"c_2":{"n":"Heo Hằmm","p":39000,"i":"/catalog-media/user_1793811032427_c_2.webp"}}},"user_1793809415860":{"n":"Móc Khoá Zịtt","p":45000,"i":"/catalog-media/user_1793809415860_cover.webp","d":"Thiết kế form dáng tròn đầy như một viên bánh bao nhỏ, nổi bật với đôi cánh cụp xinh xắn và hai má hồng phớt dễ thương.","v":{"c_1":{"n":"Zịtt Vàng","p":45000,"i":"/catalog-media/user_1793809415860_c_1.webp"},"c_1793810239811_2":{"n":"Zịt Trắngg","p":45000,"i":"/catalog-media/user_1793809415860_c_1793810239811_2.webp"}}},"user_1793806143788":{"n":"Ốc Quế Kem CHảy","p":49000,"i":"/catalog-media/user_1793806143788_cover.webp","d":"Móc khóa len hình kem ốc quế mũm mĩm với viên kem tròn đầy, phần viền bèo nhún mềm mại cùng lớp sốt chảy sinh động.","v":{"c_2":{"n":"Ốc Quế Khoai Mônn Tímm","p":49000,"i":"/catalog-media/user_1793806143788_c_2.webp"},"c_1793811081128_3":{"n":"Ốc Quế Kem Sữa","p":49000,"i":"/catalog-media/user_1793806143788_c_1793811081128_3.webp"}}},"user_1793804889048":{"n":"Đùi Gà Heo","p":49000,"i":"/catalog-media/user_1793804889048_cover.webp","d":"Sự kết hợp độc đáo giữa hình dáng chiếc đùi tròn trịa cùng gương mặt gà con và heo hồng siêu đáng yêu.","v":{"c_1":{"n":"Hồng Phấn","p":49000,"i":"/catalog-media/user_1793804889048_c_1.webp"},"c_2":{"n":"Vàng Bơ","p":49000,"i":"/catalog-media/user_1793804889048_c_2.webp"}}},"user_1793721241087":{"n":"Móc Khoá 12 Cung Hoàng Đạo","p":69000,"i":"/catalog-media/user_1793721241087_cover.webp","d":"Móc Khoá 12 Cung Hoàng Đạo — Mẫu móc khoá đan móc thủ công nhỏ gọn, form đứng chắc chắn từ Len Nhung Gấu.","v":{"c_1793721040375_1":{"n":"Bạch Dương ♈","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_1.webp"},"c_1793721040375_2":{"n":"Kim Ngưu ♉","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_2.webp"},"c_1793721040375_3":{"n":"Song Tử ♊","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_3.webp"},"c_1793721040375_4":{"n":"Cự Giải ♋","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_4.webp"},"c_1793721040375_5":{"n":"Sư Tử ♌","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_5.webp"},"c_1793721040375_6":{"n":"Xử Nữ ♍","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_6.webp"},"c_1793721040375_7":{"n":"Thiên Bình ♎","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_7.webp"},"c_1793721040375_8":{"n":"Thiên Yết ♏","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_8.webp"},"c_1793721040375_9":{"n":"Nhân Mã ♐","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_9.webp"},"c_1793721040375_10":{"n":"Ma Kết ♑","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_10.webp"},"c_1793721040375_11":{"n":"Bảo Bình ♒","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_11.webp"},"c_1793721040375_12":{"n":"Song Ngư ♓","p":69000,"i":"/catalog-media/user_1793721241087_c_1793721040375_12.webp"}}},"vw_pot_rose_01":{"n":"Chậu Hoa Hồng Nhung Cổ Điển Để Bàn Kẽm Nhung","p":125000,"i":"/catalog-media/kem-nhung-pot-rose-red.png","d":"Chậu sứ trắng thắt nơ lụa kem nâng niu 3 đoá hoa hồng nhung được uốn tỉ mỉ từng lớp cánh từ kẽm nhung lông mịn cao cấp.","v":{"c1":{"n":"Đỏ Nhung Ruby","p":125000,"i":"/catalog-media/kem-nhung-pot-rose-red.png"},"c2":{"n":"Hồng Phấn Pastel","p":125000,"i":"/catalog-media/kem-nhung-pot-rose-pink.png"}}},"vw_pot_succulent_02":{"n":"Chậu Cây Sen Đá & Xương Rồng Mini Kẽm Nhung","p":89000,"i":"/catalog-media/kem-nhung-pot-succulent-green.png","d":"Chậu đất nung nhỏ xinh trồng cụm sen đá echeveria và xương rồng mini uốn từ kẽm nhung dày mượt.","v":{"c1":{"n":"Xanh Ngọc Bích","p":89000,"i":"/catalog-media/kem-nhung-pot-succulent-green.png"},"c2":{"n":"Tím Hồng Sương Mai","p":89000,"i":"/catalog-media/kem-nhung-pot-succulent-purple.png"}}},"vw_flower_hydrangea_03":{"n":"Bó Hoa Cẩm Tú Cầu & Lưu Ly Kẽm Nhung Hàn Quốc","p":135000,"i":"/catalog-media/kem-nhung-flower-hydrangea-blue.png","d":"Bó hoa kết hợp hàng chục cánh cẩm tú cầu và hoa lưu ly nhỏ xinh uốn thủ công từ kẽm nhung pastel.","v":{"c1":{"n":"Xanh Dương Sương Sớm","p":135000,"i":"/catalog-media/kem-nhung-flower-hydrangea-blue.png"},"c2":{"n":"Tím Lilac Mộng Mơ","p":135000,"i":"/catalog-media/kem-nhung-flower-hydrangea-purple.png"}}},"combo_couple_zodiac_01":{"n":"Combo \"Couple Định Mệnh\" (Cung Hoàng Đạo & Hoa)","p":139000,"i":"/catalog-media/user_1793721241087_cover.webp","d":"Set đôi hoàn hảo cho các cặp đôi hoặc bạn thân: tự chọn 2 Móc Khoá 12 Cung Hoàng Đạo hoặc phối 1 Cung Hoàng Đạo + 1 Bó Hoa Mini."},"combo_bestie_cute_02":{"n":"Combo \"Đôi Bạn Tri Kỷ — Siêu Lầy & Dễ Thương\"","p":85000,"i":"/catalog-media/user_1793958733621_cover.webp","d":"Mua lẻ 1 bé đã cưng, rủ bạn thân đeo cặp 2 bé còn tiết kiệm hơn! Tự do chọn 2 mẫu bất kỳ trong bộ sưu tập móc khoá lầy lội."},"combo_sweet_bakery_03":{"n":"Combo \"Tiệm Bánh Ngọt Ngào\" (Donut & Kem)","p":99000,"i":"/catalog-media/user_1793987529864_cover.webp","d":"Dành riêng cho những tâm hồn hảo ngọt: kết hợp Móc Khoá Donut Mini cùng Ốc Quế Kem Chảy hoặc Bánh Donut Size Vừa."},"combo_muse_flower_plush_04":{"n":"Combo \"Nàng Thơ — Hoa Không Tàn & Thú Bông\"","p":145000,"i":"/catalog-media/user_1793956553782_cover.webp","d":"Giải pháp quà tặng tinh tế điểm 10 cho dịp Sinh nhật, Kỷ niệm: vừa có Hoa thủ công vĩnh cửu, vừa có Móc Khoá Thú Bông đáng yêu."},"combo_twinkle_universe_05":{"n":"Combo \"Vũ Trụ Twinkle Twinkle\" (Freeship 0₫)","p":379000,"i":"/catalog-media/user_1794152247063_cover.webp","d":"Bộ đôi Charm treo túi xách làm mưa làm gió: kết hợp 1 bé Charm Bông Twinkle Twinkle cùng 1 bé Twinkle Noel & Tự động Freeship toàn quốc!"},"combo_winter_dalat_06":{"n":"Combo \"Đà Lạt Mùa Đông\" (Chùm Tai/Nón & Thú Bông)","p":219000,"i":"/catalog-media/user_1793884910153_cover.webp","d":"Set phụ kiện đồng điệu cho những chuyến vi vu Đà Lạt, Sapa: gồm 1 Băng Chùm Tai EarMuffs hoặc Nón Tai Gấu phối cùng 1 Móc Khoá Thú Bông."}};
+
+function normalizeAbsoluteMediaUrl(rawImg) {
+  if (!rawImg || typeof rawImg !== 'string') {
+    return 'https://www.tiemcuonlen.shop/logo-512x512.png';
+  }
+  const trimmed = rawImg.trim();
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/')) {
+    return `https://www.tiemcuonlen.shop${trimmed}`;
+  }
+  return 'https://www.tiemcuonlen.shop/logo-512x512.png';
+}
+
+async function resolveProductOpenGraphMetaServer(rawProductId, rawVariantKey) {
+  const baseId = sanitizeTextServer(String(rawProductId || '').split('__')[0], 100);
+  const variantKey = sanitizeTextServer(rawVariantKey || '', 100);
+  const staticItem = STATIC_OG_CATALOG[baseId] || null;
+
+  let name = staticItem ? staticItem.n : 'Tiệm Cuộn Len — Quà Tặng Đan Móc Thủ Công';
+  let price = staticItem ? Number(staticItem.p) || 0 : 0;
+  let description = staticItem
+    ? staticItem.d
+    : 'Chuyên bán sẵn & nhận đặt đan móc thủ công móc khóa len, thú bông len, bó hoa len, chậu hoa kẽm nhung quà tặng cao cấp.';
+  let image = staticItem ? staticItem.i : '/logo-512x512.png';
+  let variantName = '';
+
+  if (
+    staticItem &&
+    staticItem.v &&
+    variantKey &&
+    variantKey !== 'cover' &&
+    variantKey !== '1' &&
+    staticItem.v[variantKey]
+  ) {
+    const matchedVar = staticItem.v[variantKey];
+    variantName = matchedVar.n || '';
+    if (Number(matchedVar.p) > 0) price = Number(matchedVar.p);
+    if (matchedVar.i) image = matchedVar.i;
+  }
+
+  // Also query Supabase `public.products` with a fast timeout so newly created/edited Admin products have live OG previews
+  if (baseId && SUPABASE_URL && (SUPABASE_SERVICE_KEY || SUPABASE_KEY)) {
+    const controller =
+      typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 1600) : null;
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/products?id=eq.${encodeURIComponent(
+          baseId
+        )}&select=id,name,description,price,image,tags&limit=1`,
+        {
+          headers: buildSupabaseServiceHeaders(),
+          signal: controller ? controller.signal : undefined,
+        }
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        const dbRow = Array.isArray(rows) ? rows[0] : null;
+        if (dbRow && dbRow.id) {
+          if (dbRow.name) name = String(dbRow.name);
+          if (Number(dbRow.price) > 0 && !variantName) {
+            price = Number(dbRow.price);
+          }
+          if (dbRow.description) {
+            description = String(dbRow.description)
+              .replace(/\s+/g, ' ')
+              .slice(0, 180);
+          }
+          if (
+            typeof dbRow.image === 'string' &&
+            (dbRow.image.startsWith('http') || dbRow.image.startsWith('/')) &&
+            (!variantKey || variantKey === 'cover' || variantKey === '1' || !variantName)
+          ) {
+            image = dbRow.image;
+          }
+          if (variantKey && variantKey !== 'cover' && Array.isArray(dbRow.tags)) {
+            const varTag = dbRow.tags.find(
+              (t) => typeof t === 'string' && t.startsWith('__TCL_VARIANTS_V1__:')
+            );
+            if (varTag) {
+              try {
+                const parsed = JSON.parse(varTag.slice('__TCL_VARIANTS_V1__:'.length));
+                const colors = Array.isArray(parsed) ? parsed : parsed && parsed.colors;
+                if (Array.isArray(colors)) {
+                  const foundC = colors.find((c) => c && String(c.id) === variantKey);
+                  if (foundC) {
+                    if (foundC.name) variantName = String(foundC.name);
+                    if (Number(foundC.price) > 0) price = Number(foundC.price);
+                    if (
+                      typeof foundC.image === 'string' &&
+                      (foundC.image.startsWith('http') || foundC.image.startsWith('/'))
+                    ) {
+                      image = foundC.image;
+                    }
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // fall back to static item
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  const fullTitle = variantName ? `${name} (${variantName})` : name;
+  const priceLabel = price > 0 ? `${price.toLocaleString('vi-VN')}₫` : '';
+  const ogTitle = priceLabel
+    ? `${fullTitle} — ${priceLabel} | Tiệm Cuộn Len`
+    : `${fullTitle} | Tiệm Cuộn Len`;
+  const ogDescription = `🧶 ${description} • Đặt đan thủ công tỉ mỉ tại Tiệm Cuộn Len (tiemcuonlen.shop), tặng kèm hộp quà & thiệp viết tay.`;
+  const ogImage = normalizeAbsoluteMediaUrl(image);
+
+  return {
+    productId: baseId,
+    variantKey,
+    fullTitle,
+    price,
+    priceLabel,
+    ogTitle,
+    ogDescription,
+    ogImage,
+  };
+}
+
     module.exports = {
     SUPABASE_URL,
     SUPABASE_KEY,
@@ -1878,4 +2011,5 @@ async function sendOrderNotificationServer(order) {
     sendChatReplyToCustomerServer,
     signBlockedIpRecord,
     verifyBlockedIpRecord,
+    resolveProductOpenGraphMetaServer,
     };

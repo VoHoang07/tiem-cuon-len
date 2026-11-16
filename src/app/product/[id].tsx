@@ -1673,7 +1673,9 @@ export default function ProductDetailScreen() {
           }
           subtitle={`🧶 ${getCategoryLabel(product.category)} • Đặt đan thủ công theo mẫu (5–6 ngày)`}
           priceText={formatVND(effectivePrice)}
-          url={`${PUBLIC_SHOP_URL}/product/${product.id}`}
+          url={`${PUBLIC_SHOP_URL}/product/${product.id}?s=${encodeURIComponent(
+            selectedColorId && activeGalleryIndex > 0 ? selectedColorId : 'cover'
+          )}`}
           image={activeDisplayImage || product.image}
           shareText={`🧶 ${product.name}${
             activeColor ? ` - Màu: ${activeColor.name}` : ''
