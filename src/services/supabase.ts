@@ -4,7 +4,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const rawEnvUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim();
 const rawEnvKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
 
-export const supabaseUrl = rawEnvUrl.replace(/\/+$/, '');
+function normalizeSupabaseBaseUrl(rawUrl: string): string {
+  return rawUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/(?:rest|auth|storage|functions|realtime)\/v1$/i, '')
+    .replace(/\/+$/, '');
+}
+
+export const supabaseUrl = normalizeSupabaseBaseUrl(rawEnvUrl);
 export const supabaseAnonKey = rawEnvKey;
 
 /**

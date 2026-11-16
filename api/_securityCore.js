@@ -2,6 +2,8 @@ const crypto = require('crypto');
 
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '')
   .trim()
+  .replace(/\/+$/, '')
+  .replace(/\/(?:rest|auth|storage|functions|realtime)\/v1$/i, '')
   .replace(/\/+$/, '');
 const SUPABASE_KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
 const rawServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
