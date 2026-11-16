@@ -1,3 +1,4 @@
+import { ShopeeDeliveryRouteMap } from '@/components/ShopeeDeliveryRouteMap';
 import {
     getOrderStatusColor,
     getOrderStatusLabel,
@@ -1186,6 +1187,12 @@ export default function OrderDetailScreen() {
 
                 {isShippingStage ? (
                   <View style={styles.liveTrackingCard}>
+                    {/* Interactive Shopee-Style Live Delivery Route Map (Mobile-First) */}
+                    <ShopeeDeliveryRouteMap
+                      order={order}
+                      checkpoints={combinedJourneyEvents}
+                    />
+
                     <View
                       style={{
                         backgroundColor: '#DCFCE7',
@@ -1634,23 +1641,29 @@ export default function OrderDetailScreen() {
 
                 {/* Step A0: Admin 1-Tap Handmade Crafting Progress Updater (Only shown BEFORE shipping!) */}
                 {isShippingStage ? (
-                  <View
-                    style={{
-                      backgroundColor: '#ECFDF5',
-                      borderWidth: 1,
-                      borderColor: '#6EE7B7',
-                      borderRadius: 11,
-                      paddingHorizontal: 12,
-                      paddingVertical: 9,
-                    }}>
-                    <Text
+                  <View style={{ gap: 8 }}>
+                    <ShopeeDeliveryRouteMap
+                      order={order}
+                      checkpoints={combinedJourneyEvents}
+                    />
+                    <View
                       style={{
-                        fontSize: 12,
-                        fontWeight: '800',
-                        color: '#065F46',
+                        backgroundColor: '#ECFDF5',
+                        borderWidth: 1,
+                        borderColor: '#6EE7B7',
+                        borderRadius: 11,
+                        paddingHorizontal: 12,
+                        paddingVertical: 9,
                       }}>
-                      ✅ Giai đoạn 1 (Xưởng đan thủ công): Đã hoàn tất 100% — Đơn hàng đang ở Giai đoạn 2 (Giao hàng SPX Express).
-                    </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '800',
+                          color: '#065F46',
+                        }}>
+                        ✅ Giai đoạn 1 (Xưởng đan thủ công): Đã hoàn tất 100% — Đơn hàng đang ở Giai đoạn 2 (Giao hàng SPX Express).
+                      </Text>
+                    </View>
                   </View>
                 ) : (
                   <View

@@ -427,9 +427,75 @@ export default function OrdersScreen() {
                           fontWeight: '800',
                           color: '#16A34A',
                         }}>
-                        Xem chi tiết trạm →
+                        Xem bản đồ & trạm →
                       </Text>
                     </View>
+
+                    {/* Compact Mobile Shopee Route Track Strip on Order Card */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingVertical: 3,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: '800',
+                          color: '#78350F',
+                        }}>
+                        📍 Thủ Đức
+                      </Text>
+                      <View
+                        style={{
+                          flex: 1,
+                          height: 5,
+                          backgroundColor: '#D1FAE5',
+                          borderRadius: 999,
+                          position: 'relative',
+                          justifyContent: 'center',
+                        }}>
+                        <View
+                          style={{
+                            width:
+                              item.status === 'Hoàn thành' ? '100%' : '58%',
+                            height: '100%',
+                            backgroundColor: '#16A34A',
+                            borderRadius: 999,
+                          }}
+                        />
+                        <View
+                          style={{
+                            position: 'absolute',
+                            left: item.status === 'Hoàn thành' ? '92%' : '54%',
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            backgroundColor: '#15803D',
+                            borderWidth: 1.5,
+                            borderColor: '#FFFFFF',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                          <Truck size={10} color="#FFFFFF" />
+                        </View>
+                      </View>
+                      <Text
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: '800',
+                          color: '#14532D',
+                          maxWidth: 120,
+                        }}
+                        numberOfLines={1}>
+                        🏠{' '}
+                        {item.shippingAddress?.district ||
+                          item.shippingAddress?.city ||
+                          'Điểm nhận'}
+                      </Text>
+                    </View>
+
                     <Text
                       style={{
                         fontSize: 11.5,
