@@ -53,12 +53,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const STATUS_FILTERS: { key: 'ALL' | OrderStatus; label: string }[] = [
+type OrderFilterKey = 'ALL' | OrderStatus | 'REVIEW';
+
+const STATUS_FILTERS: { key: OrderFilterKey; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
   { key: 'pending_payment', label: 'Chờ thanh toán' },
   { key: 'Đang xử lý', label: 'Đang xử lý' },
   { key: 'Đang giao', label: 'Đang giao' },
   { key: 'Hoàn thành', label: 'Hoàn thành' },
+  { key: 'REVIEW', label: 'Đánh giá' },
   { key: 'Đã hủy', label: 'Đã hủy' },
 ];
 
@@ -74,7 +77,7 @@ export default function OrdersScreen() {
   } = useOrders();
   const { user, role, isAuthenticated } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
+  const [statusFilter, setStatusFilter] = useState<OrderFilterKey>('ALL');
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [rescuingOrders, setRescuingOrders] = useState(false);
   const [rescueStatusMsg, setRescueStatusMsg] = useState<string | null>(null);
@@ -251,6 +254,9 @@ export default function OrdersScreen() {
 
   const displayOrders = useMemo(() => {
     if (statusFilter === 'ALL') return baseOrders;
+    if (statusFilter === 'REVIEW') {
+      return baseOrders.filter((o) => o.status === 'Hoàn thành');
+    }
     return baseOrders.filter((o) => o.status === statusFilter);
   }, [baseOrders, statusFilter]);
 
@@ -290,14 +296,50 @@ export default function OrdersScreen() {
         <View style={[styles.orderCard, isMobile && styles.orderCardMobile]}>
           <TouchableOpacity
             style={[styles.orderCardBody, isMobile && styles.orderCardBodyMobile]}
-            onPress={() => router.push(`/orders/${item.id}`)}
+            onPress={() =>
+              router.push(
+                statusFilter === 'REVIEW'
+                  ? `/orders/${item.id}?tab=review`
+                  : `/orders/${item.id}`
+              )
+            }
             activeOpacity={0.75}>
             <View style={styles.orderHeader}>
               <Text style={styles.orderId}>#{item.id.slice(-8)}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: getOrderStatusColor(item.status) + '20' }]}>
-                <View style={[styles.statusDot, { backgroundColor: getOrderStatusColor(item.status) }]} />
-                <Text style={[styles.statusText, { color: getOrderStatusColor(item.status) }]}>
-                  {getOrderStatusLabel(item.status)}
+              <View
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor:
+                      statusFilter === 'REVIEW'
+                        ? '#FFF1EE'
+                        : getOrderStatusColor(item.status) + '20',
+                  },
+                ]}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor:
+                        statusFilter === 'REVIEW'
+                          ? '#EE4D2D'
+                          : getOrderStatusColor(item.status),
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.statusText,
+                    {
+                      color:
+                        statusFilter === 'REVIEW'
+                          ? '#EE4D2D'
+                          : getOrderStatusColor(item.status),
+                    },
+                  ]}>
+                  {statusFilter === 'REVIEW'
+                    ? 'Đánh giá & Nhận quà'
+                    : getOrderStatusLabel(item.status)}
                 </Text>
               </View>
             </View>
@@ -655,14 +697,53 @@ export default function OrdersScreen() {
             <View style={styles.orderFooter}>
               <Text style={styles.orderTotal}>{formatVND(item.total)}</Text>
               <View style={styles.detailHint}>
-                <Text style={styles.detailHintText}>Chi tiết & Vận đơn</Text>
-                <ChevronRight size={17} color={COLORS.lightText} />
+                <Text
+                  style={[
+                    styles.detailHintText,
+                    statusFilter === 'REVIEW' && {
+                      color: '#EE4D2D',
+                      fontWeight: '800',
+                    },
+                  ]}>
+                  {statusFilter === 'REVIEW'
+                    ? 'Mở mục Đánh giá & Nhận quà 60k'
+                    : 'Chi tiết & Vận đơn'}
+                </Text>
+                <ChevronRight
+                  size={17}
+                  color={statusFilter === 'REVIEW' ? '#EE4D2D' : COLORS.lightText}
+                />
               </View>
             </View>
           </TouchableOpacity>
 
           <View style={[styles.actionRow, isMobile && styles.actionRowMobile]}>
             <View style={styles.actionLeft}>
+              {item.status === 'Hoàn thành' && !item.isMaskedGuestView && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                    backgroundColor: '#FFF1EE',
+                    borderWidth: 1,
+                    borderColor: '#FFCCC2',
+                    paddingHorizontal: 11,
+                    paddingVertical: 6,
+                    borderRadius: 9,
+                  }}
+                  onPress={() => router.push(`/orders/${item.id}?tab=review`)}
+                  activeOpacity={0.85}>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color: '#EE4D2D',
+                    }}>
+                    🎁 Đánh giá & Nhận quà 60.000₫
+                  </Text>
+                </TouchableOpacity>
+              )}
               {item.status === 'pending_payment' && !isAdmin && (
                 <TouchableOpacity
                   style={styles.payNowBtn}

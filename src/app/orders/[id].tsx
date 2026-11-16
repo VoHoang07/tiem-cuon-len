@@ -110,8 +110,13 @@ const TIMELINE_STEPS = [
   },
   {
     key: 'completed',
-    title: 'Giao thành công',
+    title: 'Hoàn thành',
     desc: 'Khách đã nhận hàng',
+  },
+  {
+    key: 'review',
+    title: 'Đánh giá',
+    desc: 'Nhận Gói Quà 60.000₫ & Mã ưu đãi',
   },
 ];
 
@@ -166,7 +171,7 @@ async function compressProofScreenshotWeb(file: File): Promise<string> {
 }
 
 export default function OrderDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab } = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
   const { orders, refetchOrders, updateOrderStatus, updateOrderShipping } = useOrders();
   const { user, role } = useAuth();
@@ -176,6 +181,14 @@ export default function OrderDetailScreen() {
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
 
   const isAdmin = role === 'admin';
+  const [activeCompletedTab, setActiveCompletedTab] = useState<'detail' | 'review'>(
+    tab === 'review' ? 'review' : 'detail'
+  );
+  useEffect(() => {
+    if (tab === 'review') {
+      setActiveCompletedTab('review');
+    }
+  }, [tab]);
   const [guestFetchedOrder, setGuestFetchedOrder] = useState<Order | null>(null);
   const [guestLoadingOrder, setGuestLoadingOrder] = useState(false);
 
@@ -908,23 +921,56 @@ export default function OrderDetailScreen() {
               </View>
               )}
 
-              {/* 4-Step Visual Order & Handmade Delivery Timeline */}
+              {/* 5-Step Visual Order, Delivery & Review Timeline */}
               {order.status !== 'Đã hủy' && order.status !== 'pending_payment' && (
               <View style={styles.timelineBox}>
                 {TIMELINE_STEPS.map((st, idx) => {
-                  const isDone = idx <= stepIndex;
-                  const isCurrent = idx === stepIndex;
+                  const effectiveStepIdx =
+                    order.status === 'Hoàn thành' &&
+                    (activeCompletedTab === 'review' || videoSubmitted || fbSubmitted)
+                      ? 4
+                      : stepIndex;
+                  const isDone = idx <= effectiveStepIdx;
+                  const isCurrent = idx === effectiveStepIdx;
+                  const isInteractiveStep =
+                    order.status === 'Hoàn thành' &&
+                    !order.isMaskedGuestView &&
+                    (idx === 3 || idx === 4);
+
                   return (
-                    <View key={st.key} style={styles.timelineStepRow}>
+                    <TouchableOpacity
+                      key={st.key}
+                      disabled={!isInteractiveStep}
+                      activeOpacity={0.75}
+                      onPress={() => {
+                        if (idx === 3) setActiveCompletedTab('detail');
+                        if (idx === 4) setActiveCompletedTab('review');
+                      }}
+                      style={styles.timelineStepRow}>
                       <View style={styles.timelineIndicatorCol}>
                         <View
                           style={[
                             styles.timelineDot,
                             isDone && styles.timelineDotDone,
                             isCurrent && styles.timelineDotCurrent,
+                            idx === 4 &&
+                              order.status === 'Hoàn thành' &&
+                              !isDone && {
+                                borderColor: '#EE4D2D',
+                                backgroundColor: '#FFF1EE',
+                              },
                           ]}>
                           {isDone ? (
                             <Check size={11} color="#FFFDF9" strokeWidth={3} />
+                          ) : idx === 4 ? (
+                            <Gift
+                              size={11}
+                              color={
+                                order.status === 'Hoàn thành'
+                                  ? '#EE4D2D'
+                                  : '#A08679'
+                              }
+                            />
                           ) : (
                             <Clock size={11} color="#A08679" />
                           )}
@@ -933,34 +979,160 @@ export default function OrderDetailScreen() {
                           <View
                             style={[
                               styles.timelineConnector,
-                              idx < stepIndex && styles.timelineConnectorDone,
+                              idx < effectiveStepIdx &&
+                                styles.timelineConnectorDone,
                             ]}
                           />
                         )}
                       </View>
                       <View style={styles.timelineTextCol}>
-                        <Text
-                          style={[
-                            styles.timelineTitle,
-                            isDone && styles.timelineTitleDone,
-                            isCurrent && styles.timelineTitleCurrent,
-                          ]}>
-                          {st.title}
-                        </Text>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
+                            flexWrap: 'wrap',
+                          }}>
+                          <Text
+                            style={[
+                              styles.timelineTitle,
+                              isDone && styles.timelineTitleDone,
+                              isCurrent && styles.timelineTitleCurrent,
+                              idx === 4 &&
+                                order.status === 'Hoàn thành' &&
+                                !isDone && {
+                                  color: '#EE4D2D',
+                                  fontWeight: '800',
+                                },
+                            ]}>
+                            {st.title}
+                          </Text>
+                          {idx === 4 &&
+                            order.status === 'Hoàn thành' &&
+                            !order.isMaskedGuestView && (
+                              <View
+                                style={{
+                                  backgroundColor:
+                                    activeCompletedTab === 'review'
+                                      ? '#EE4D2D'
+                                      : '#FFF1EE',
+                                  borderWidth: 1,
+                                  borderColor: '#FFCCC2',
+                                  paddingHorizontal: 7,
+                                  paddingVertical: 1.5,
+                                  borderRadius: 6,
+                                }}>
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: '800',
+                                    color:
+                                      activeCompletedTab === 'review'
+                                        ? '#FFFFFF'
+                                        : '#EE4D2D',
+                                  }}>
+                                  {activeCompletedTab === 'review'
+                                    ? 'Đang mở'
+                                    : 'Chạm để mở ›'}
+                                </Text>
+                              </View>
+                            )}
+                        </View>
                         <Text style={styles.timelineDesc}>
                           {idx === 2 && savedTracking
                             ? `${savedCarrier || 'Đơn vị ship'} • Mã vận đơn: ${savedTracking}`
                             : st.desc}
                         </Text>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
             )}
+
+            {/* Dedicated Switcher between "Hoàn thành" and "Đánh giá" when order is completed */}
+            {order.status === 'Hoàn thành' && !order.isMaskedGuestView && (
+              <View
+                style={{
+                  marginTop: 12,
+                  flexDirection: 'row',
+                  backgroundColor: '#F1F5F9',
+                  borderRadius: 11,
+                  padding: 3,
+                  gap: 4,
+                }}>
+                <TouchableOpacity
+                  onPress={() => setActiveCompletedTab('detail')}
+                  activeOpacity={0.85}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: 9,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor:
+                      activeCompletedTab === 'detail'
+                        ? '#FFFFFF'
+                        : 'transparent',
+                  }}>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color:
+                        activeCompletedTab === 'detail'
+                          ? '#0F172A'
+                          : '#64748B',
+                    }}
+                    numberOfLines={1}>
+                    Hoàn thành
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setActiveCompletedTab('review')}
+                  activeOpacity={0.85}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    gap: 5,
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: 9,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor:
+                      activeCompletedTab === 'review'
+                        ? '#EE4D2D'
+                        : 'transparent',
+                  }}>
+                  <Gift
+                    size={13}
+                    color={
+                      activeCompletedTab === 'review' ? '#FFFFFF' : '#EE4D2D'
+                    }
+                  />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color:
+                        activeCompletedTab === 'review'
+                          ? '#FFFFFF'
+                          : '#EE4D2D',
+                    }}
+                    numberOfLines={1}>
+                    Đánh giá
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
-          {/* 2. Role-Adaptive Shipping & Waybill Section (Sync Client & Admin) */}
+          {/* 2. Role-Adaptive Shipping & Waybill Section (Hidden when viewing the dedicated "Đánh giá" tab) */}
+          {(order.status !== 'Hoàn thành' ||
+            order.isMaskedGuestView ||
+            activeCompletedTab === 'detail') && (
           <View style={[styles.section, isMobile && styles.sectionMobile]}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionHeaderLeft}>
@@ -2333,8 +2505,9 @@ export default function OrderDetailScreen() {
               </View>
             )}
           </View>
+          )}
 
-          {/* 3. Ordered Items + Inline Product Review when Completed */}
+          {/* 3. Ordered Items */}
           <View style={[styles.section, isMobile && styles.sectionMobile]}>
             <Text style={styles.sectionTitle}>
               Sản phẩm trong đơn ({order.items.reduce((s, i) => s + i.quantity, 0)} món)
@@ -2346,8 +2519,6 @@ export default function OrderDetailScreen() {
               const liveCatalogProd = products.find((p) => p.id === baseId);
               const resolvedThumb =
                 item.product.image || liveCatalogProd?.image || null;
-              const isReviewOpen = activeReviewItemId === item.product.id;
-              const isItemReviewed = Boolean(reviewedItemIds[item.product.id]);
 
               return (
                 <View key={item.product.id} style={styles.itemBlockWrap}>
@@ -2409,8 +2580,81 @@ export default function OrderDetailScreen() {
             })}
           </View>
 
-          {/* 3B. TWO SEPARATE POST-DELIVERY VOUCHER REWARD SECTIONS (MODERN E-COMMERCE PALETTE, ZERO STAR/KEYWORD CLUTTER) */}
-          {order.status === 'Hoàn thành' && !order.isMaskedGuestView && (
+          {/* Compact CTA when viewing "Hoàn thành" -> switch to "Đánh giá" */}
+          {order.status === 'Hoàn thành' &&
+            !order.isMaskedGuestView &&
+            activeCompletedTab === 'detail' && (
+              <TouchableOpacity
+                onPress={() => setActiveCompletedTab('review')}
+                activeOpacity={0.85}
+                style={[
+                  styles.section,
+                  isMobile && styles.sectionMobile,
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    backgroundColor: '#FFF1EE',
+                    borderWidth: 1,
+                    borderColor: '#FFCCC2',
+                  },
+                ]}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    flex: 1,
+                    minWidth: 0,
+                  }}>
+                  <View
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
+                      backgroundColor: '#EE4D2D',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Gift size={17} color="#FFFFFF" />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: '800',
+                        color: '#0F172A',
+                      }}
+                      numberOfLines={1}>
+                      Mục Đánh giá & Nhận quà 60.000₫
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        color: '#475569',
+                        marginTop: 1,
+                      }}
+                      numberOfLines={1}>
+                      Gửi ảnh minh chứng nhận Gói Quà 60k & Mã -15.000₫ qua Chat
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: '#EE4D2D',
+                  }}>
+                  Mở ngay ›
+                </Text>
+              </TouchableOpacity>
+            )}
+
+          {/* 3B. DEDICATED "ĐÁNH GIÁ" TAB SECTION (SHOWN AFTER "HOÀN THÀNH") */}
+          {order.status === 'Hoàn thành' &&
+            !order.isMaskedGuestView &&
+            activeCompletedTab === 'review' && (
             <View
               style={[
                 styles.section,
