@@ -37,6 +37,14 @@ const SPX_CACHE_TTL_MS = 90 * 1000;
 let cachedGoshipCities = null;
 const cachedGoshipDistricts = new Map();
 const cachedGoshipWards = new Map();
+let cachedGoshipShipments = { at: 0, list: [] };
+const GOSHIP_SHIPMENTS_CACHE_TTL_MS = 25 * 1000;
+
+function normalizeVnPhone(rawPhone) {
+  return String(rawPhone || '')
+    .replace(/[^0-9]/g, '')
+    .replace(/^84/, '0');
+}
 
 function checkLookupRateLimit(ip) {
   const now = Date.now();
@@ -401,6 +409,279 @@ function mapGoshipStatusToOrderStatus(statusCode, currentStatus) {
   return currentStatus;
 }
 
+/**
+ * Fetches recent shipments from Goship (`/api/v2/shipments`) so orders created either via API
+ * or directly on the `shop.goship.io` web dashboard are automatically matched by Order ID OR Customer Phone!
+ */
+async function fetchRecentGoshipShipmentsServer() {
+  if (!GOSHIP_ACCESS_TOKEN) return [];
+  const now = Date.now();
+  if (
+    cachedGoshipShipments.list.length > 0 &&
+    now - cachedGoshipShipments.at < GOSHIP_SHIPMENTS_CACHE_TTL_MS
+  ) {
+    return cachedGoshipShipments.list;
+  }
+  const res = await callGoshipApi('/api/v2/shipments', 'GET');
+  if (res.ok && Array.isArray(res.data)) {
+    cachedGoshipShipments = { at: now, list: res.data };
+    return res.data;
+  }
+  return [];
+}
+
+/**
+ * Automatically matches an order with Goship shipments (by `order_id` or recipient `phone`),
+ * saves the SPX tracking code + status to Supabase `public.orders`, and enriches with live SPX checkpoints.
+ */
+async function syncOrderWithGoshipAndSpxServer(order) {
+  if (!order || !order.id) return order;
+  if (order.status === 'pending_payment' || order.status === 'Đã hủy') {
+    return order;
+  }
+
+  let addr = { ...(order.shippingAddress || {}) };
+  let nextStatus = order.status;
+  let shouldPersistToDb = false;
+
+  // 1. Auto-pull SPX tracking code & status from Goship if Goship token is configured
+  if (GOSHIP_ACCESS_TOKEN) {
+    try {
+      const shipments = await fetchRecentGoshipShipmentsServer();
+      const orderIdUpper = String(order.id).trim().toUpperCase();
+      const orderIdShort = orderIdUpper.replace(/^CUONLEN[-_]?/, '');
+      const custPhone = normalizeVnPhone(addr.phone);
+      const orderCreatedMs = new Date(order.createdAt || 0).getTime() || 0;
+
+      const matchedShipment = shipments.find((sh) => {
+        if (!sh || typeof sh !== 'object') return false;
+        const shOrderId = String(sh.order_id || '').trim().toUpperCase();
+        if (shOrderId && (shOrderId === orderIdUpper || shOrderId === orderIdShort)) {
+          return true;
+        }
+        if (addr.goshipShipmentId && String(sh.id || '') === String(addr.goshipShipmentId)) {
+          return true;
+        }
+        if (addr.trackingCode) {
+          const shCode = String(sh.carrier_code || sh.tracking_number || sh.code || '').trim();
+          if (shCode && shCode.toUpperCase() === String(addr.trackingCode).trim().toUpperCase()) {
+            return true;
+          }
+        }
+        // Fallback match by recipient phone number when Admin created shipment directly on shop.goship.io
+        const toPhone = normalizeVnPhone(
+          (sh.address_to && sh.address_to.phone) ||
+            (sh.receiver && sh.receiver.phone) ||
+            sh.to_phone ||
+            ''
+        );
+        if (custPhone && custPhone.length >= 9 && toPhone === custPhone) {
+          const shCreatedSec = Number(sh.created_at || sh.created_time || 0);
+          const shCreatedMs = shCreatedSec > 1000000000 ? shCreatedSec * 1000 : 0;
+          // Match if shipment was created after (or within 48h before) order creation
+          if (!shCreatedMs || !orderCreatedMs || shCreatedMs >= orderCreatedMs - 48 * 3600 * 1000) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (matchedShipment) {
+        const goshipId = String(matchedShipment.id || '').trim();
+        const trackingNumber = String(
+          matchedShipment.carrier_code ||
+            matchedShipment.tracking_number ||
+            matchedShipment.code ||
+            addr.trackingCode ||
+            goshipId
+        ).trim();
+        const carrierRaw = String(
+          matchedShipment.carrier_short_name ||
+            matchedShipment.carrier_name ||
+            matchedShipment.carrier ||
+            addr.shippingCarrier ||
+            'SPX'
+        ).toLowerCase();
+        const carrierDisplay =
+          carrierRaw.includes('shopee') || carrierRaw.includes('spx')
+            ? 'SPX'
+            : sanitizeTextServer(
+                matchedShipment.carrier_name || matchedShipment.carrier || 'SPX',
+                40
+              );
+        const statusText = sanitizeTextServer(
+          matchedShipment.status_text ||
+            matchedShipment.status_desc ||
+            addr.goshipStatusText ||
+            'Đang vận chuyển',
+          80
+        );
+
+        const mappedStatus = mapGoshipStatusToOrderStatus(
+          matchedShipment.status,
+          nextStatus
+        );
+        const promotedStatus =
+          mappedStatus !== nextStatus
+            ? mappedStatus
+            : trackingNumber &&
+                (nextStatus === 'Đang xử lý' || nextStatus === 'Đang chuẩn bị hàng')
+              ? 'Đang giao'
+              : nextStatus;
+
+        const rawHist = Array.isArray(matchedShipment.history)
+          ? matchedShipment.history
+          : [];
+        const mappedHist = rawHist.map((h) => ({
+          status: Number(h.status) || 900,
+          statusText: sanitizeTextServer(h.status_text || statusText, 80),
+          description: sanitizeTextServer(
+            h.status_desc || h.message || h.status_text || statusText,
+            200
+          ),
+          timestamp: h.updated_time
+            ? new Date(Number(h.updated_time) * 1000).toISOString()
+            : new Date().toISOString(),
+        }));
+
+        if (
+          (trackingNumber && trackingNumber !== (addr.trackingCode || '')) ||
+          (goshipId && goshipId !== (addr.goshipShipmentId || '')) ||
+          (statusText && statusText !== (addr.goshipStatusText || '')) ||
+          promotedStatus !== order.status
+        ) {
+          shouldPersistToDb = true;
+          nextStatus = promotedStatus;
+          const nowIso = new Date().toISOString();
+          addr = {
+            ...addr,
+            shippingCarrier: carrierDisplay,
+            trackingCode: trackingNumber || addr.trackingCode,
+            goshipShipmentId: goshipId || addr.goshipShipmentId,
+            goshipStatusText: statusText || addr.goshipStatusText,
+            shippedAt: addr.shippedAt || nowIso,
+            craftingStage: 'handed_to_spx',
+            goshipHistory:
+              mappedHist.length > 0
+                ? mappedHist
+                : Array.isArray(addr.goshipHistory) && addr.goshipHistory.length > 0
+                  ? addr.goshipHistory
+                  : [
+                      {
+                        status: Number(matchedShipment.status) || 902,
+                        statusText: statusText || 'Đã bàn giao SPX Express',
+                        description: `Đơn hàng đã tự động đồng bộ mã vận đơn ${carrierDisplay} (${trackingNumber}) từ Goship`,
+                        timestamp: nowIso,
+                      },
+                    ],
+          };
+        }
+      }
+    } catch {
+      // ignore Goship poll error
+    }
+  }
+
+  // 2. If order now has an SPX tracking code, fetch live SPX station checkpoints (`spx.vn`)
+  if (addr.trackingCode) {
+    const carrierLower = String(addr.shippingCarrier || 'SPX').toLowerCase();
+    if (
+      carrierLower.includes('spx') ||
+      carrierLower.includes('shopee') ||
+      String(addr.trackingCode).toUpperCase().startsWith('SPX')
+    ) {
+      const spxLive = await fetchLiveSpxCheckpoints(addr.trackingCode);
+      if (spxLive.checkpoints && spxLive.checkpoints.length > 0) {
+        const newestCp = spxLive.checkpoints[0];
+        if (newestCp && newestCp.title && newestCp.title !== addr.goshipStatusText) {
+          addr.goshipStatusText = newestCp.title.slice(0, 90);
+        }
+        addr.goshipHistory = spxLive.checkpoints.map((cp, idx) => ({
+          status: 900 + idx,
+          statusText: cp.milestone || 'Cập nhật bưu cục SPX',
+          description: cp.location ? `${cp.title} (${cp.location})` : cp.title,
+          location: cp.location || '',
+          timestamp: cp.timestamp,
+        }));
+      }
+    }
+  }
+
+  // 3. If order is already in `'Đang giao'` or `'Hoàn thành'` and still has no history events,
+  // attach clear shipping stage milestones so the customer ALWAYS sees shipping status instead of "Đang làm len"
+  if (
+    (nextStatus === 'Đang giao' || nextStatus === 'Hoàn thành') &&
+    (!Array.isArray(addr.goshipHistory) || addr.goshipHistory.length === 0)
+  ) {
+    const shippedIso = addr.shippedAt || addr.craftingUpdatedAt || order.createdAt || new Date().toISOString();
+    const destText = [addr.district, addr.city].filter(Boolean).join(', ');
+    addr.craftingStage = 'handed_to_spx';
+    addr.goshipStatusText =
+      addr.goshipStatusText ||
+      (nextStatus === 'Hoàn thành'
+        ? 'Giao hàng thành công'
+        : `Đang vận chuyển tới ${destText || 'địa chỉ nhận hàng'}`);
+    addr.goshipHistory =
+      nextStatus === 'Hoàn thành'
+        ? [
+            {
+              status: 905,
+              statusText: 'Giao hàng thành công',
+              description: `Đơn hàng đã được giao thành công tới ${destText || 'người nhận'}`,
+              location: destText,
+              timestamp: new Date().toISOString(),
+            },
+            {
+              status: 902,
+              statusText: 'Đang vận chuyển',
+              description: `Kiện hàng đã hoàn tất công đoạn đan & bàn giao cho đơn vị vận chuyển ${
+                addr.shippingCarrier || 'SPX Express'
+              }`,
+              location: 'TP. Hồ Chí Minh',
+              timestamp: shippedIso,
+            },
+          ]
+        : [
+            {
+              status: 902,
+              statusText: 'Đang vận chuyển',
+              description: `Kiện hàng đã hoàn thiện đan 100%, đóng hộp quà và bàn giao cho ${
+                addr.shippingCarrier || 'SPX Express'
+              }${destText ? ` để giao tới ${destText}` : ''}`,
+              location: destText || 'Bưu cục SPX Express',
+              timestamp: shippedIso,
+            },
+          ];
+  }
+
+  if (shouldPersistToDb) {
+    try {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}`,
+        {
+          method: 'PATCH',
+          headers: buildSupabaseServiceHeaders('', {
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          }),
+          body: JSON.stringify({
+            status: nextStatus,
+            shippingAddress: addr,
+          }),
+        }
+      );
+    } catch {
+      // ignore persist error
+    }
+  }
+
+  return {
+    ...order,
+    status: nextStatus,
+    shippingAddress: addr,
+  };
+}
+
 module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function handler(req, res) {
   const telemetry = extractClientTelemetry(req);
 
@@ -685,7 +966,66 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       });
     }
 
-    // 2C. Public Guest Lookup by Phone Number or Order ID (Privacy-Masked!)
+    // 2B-2. Auto-Sync Logged-in Customer / Admin Active Orders with Goship & SPX Live
+    if (action === 'sync_orders') {
+      if (!checkLookupRateLimit(telemetry.ip)) {
+        return res.status(429).json({
+          success: false,
+          error: 'Bạn thao tác quá nhanh, vui lòng đợi ít giây.',
+        });
+      }
+      const rawIds = sanitizeTextServer(query.orderIds || '', 600);
+      const idList = rawIds
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length >= 6)
+        .slice(0, 10);
+
+      if (idList.length === 0) {
+        return res.status(200).json({
+          success: true,
+          hasGoshipToken: Boolean(GOSHIP_ACCESS_TOKEN),
+          syncedOrders: [],
+        });
+      }
+
+      const idFilter = idList.map((id) => encodeURIComponent(id)).join(',');
+      const dbRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/orders?id=in.(${idFilter})&select=id,userId,items,total,status,paymentMethod,shippingAddress,createdAt&limit=10`,
+        {
+          headers: buildSupabaseServiceHeaders(),
+        }
+      );
+      const rows = dbRes.ok ? await dbRes.json() : [];
+      const syncedOrders = [];
+      if (Array.isArray(rows)) {
+        for (const ord of rows) {
+          const synced = await syncOrderWithGoshipAndSpxServer(ord);
+          syncedOrders.push({
+            id: synced.id,
+            status: synced.status,
+            shippingAddress: {
+              shippingCarrier: synced.shippingAddress && synced.shippingAddress.shippingCarrier,
+              trackingCode: synced.shippingAddress && synced.shippingAddress.trackingCode,
+              shippedAt: synced.shippingAddress && synced.shippingAddress.shippedAt,
+              craftingStage: synced.shippingAddress && synced.shippingAddress.craftingStage,
+              goshipShipmentId: synced.shippingAddress && synced.shippingAddress.goshipShipmentId,
+              goshipStatusText: synced.shippingAddress && synced.shippingAddress.goshipStatusText,
+              goshipHistory:
+                (synced.shippingAddress && synced.shippingAddress.goshipHistory) || [],
+            },
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        hasGoshipToken: Boolean(GOSHIP_ACCESS_TOKEN),
+        syncedOrders,
+      });
+    }
+
+    // 2C. Public Guest Lookup by Phone Number or Order ID (Privacy-Masked & Auto-Synced with Goship/SPX!)
     if (!checkLookupRateLimit(telemetry.ip)) {
       await logServerAuditEvent(req, {
         eventType: 'RATE_LIMIT_TRIGGERED',
@@ -718,7 +1058,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       }
     );
     const allRecent = dbRes.ok ? await dbRes.json() : [];
-    const matched = [];
+    const rawMatched = [];
 
     if (Array.isArray(allRecent)) {
       for (const ord of allRecent) {
@@ -734,7 +1074,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
         ).toUpperCase();
 
         if (isPhoneQuery && addrPhone === digitsOnly) {
-          matched.push(buildMaskedPublicOrder(ord));
+          rawMatched.push(ord);
         } else if (
           !isPhoneQuery &&
           upperQ.length >= 6 &&
@@ -742,14 +1082,20 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
             ordIdUpper.endsWith(upperQ) ||
             (trackUpper && trackUpper === upperQ))
         ) {
-          matched.push(buildMaskedPublicOrder(ord));
+          rawMatched.push(ord);
         }
       }
     }
 
+    const matched = [];
+    for (const ord of rawMatched.slice(0, 15)) {
+      const syncedOrd = await syncOrderWithGoshipAndSpxServer(ord);
+      matched.push(buildMaskedPublicOrder(syncedOrd));
+    }
+
     return res.status(200).json({
       success: true,
-      orders: matched.slice(0, 15),
+      orders: matched,
     });
   }
 

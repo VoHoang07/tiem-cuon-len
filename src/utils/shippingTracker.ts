@@ -156,6 +156,27 @@ export function computeHandmadeCraftingSchedule(
     deliverStart
   )} – ${formatDayMonth(deliverEnd)}`;
 
+  if (
+    order.status === 'Đang giao' ||
+    order.status === 'Hoàn thành' ||
+    order.shippingAddress?.craftingStage === 'handed_to_spx' ||
+    Boolean(order.shippingAddress?.trackingCode)
+  ) {
+    return {
+      expectedShipWindowText,
+      expectedDeliveryWindowText,
+      activeStageTitle:
+        'Đã hoàn thiện đan mẫu 100% & Bàn giao cho đơn vị vận chuyển',
+      activeStageDesc:
+        'Sản phẩm thủ công của bạn đã hoàn tất công đoạn đan móc, đóng gói hộp quà và bàn giao cho bưu cục SPX Express.',
+      progressPct: 100,
+      customNote: order.shippingAddress?.craftingNote,
+      updatedAt:
+        order.shippingAddress?.shippedAt ||
+        order.shippingAddress?.craftingUpdatedAt,
+    };
+  }
+
   const explicitStageKey = order.shippingAddress?.craftingStage;
   const matchedExplicit = HANDMADE_CRAFTING_STAGES.find(
     (s) => s.key === explicitStageKey
@@ -521,6 +542,54 @@ export async function fetchLiveCarrierJourney(
     };
   } catch {
     return { checkpoints: [], source: 'error' };
+  }
+}
+
+export interface SyncedOrderGoshipPayload {
+  id: string;
+  status: Order['status'];
+  shippingAddress: Partial<Order['shippingAddress']>;
+}
+
+/**
+ * Automatically polls `/api/shipping-tracker?action=sync_orders` so logged-in customers and Admin
+ * automatically receive SPX tracking codes & live station checkpoints from Goship without manual input!
+ */
+export async function syncActiveOrdersWithGoship(
+  orderIds: string[]
+): Promise<{
+  ok: boolean;
+  hasGoshipToken: boolean;
+  syncedOrders: SyncedOrderGoshipPayload[];
+}> {
+  const cleanIds = Array.from(
+    new Set((orderIds || []).map((id) => String(id || '').trim()).filter(Boolean))
+  ).slice(0, 10);
+  if (cleanIds.length === 0 || typeof window === 'undefined') {
+    return { ok: false, hasGoshipToken: false, syncedOrders: [] };
+  }
+  try {
+    const res = await fetch(
+      `/api/shipping-tracker?action=sync_orders&orderIds=${encodeURIComponent(
+        cleanIds.join(',')
+      )}&_t=${Date.now()}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      }
+    );
+    if (!res.ok) {
+      return { ok: false, hasGoshipToken: false, syncedOrders: [] };
+    }
+    const json = await res.json();
+    return {
+      ok: Boolean(json?.success),
+      hasGoshipToken: Boolean(json?.hasGoshipToken),
+      syncedOrders: Array.isArray(json?.syncedOrders) ? json.syncedOrders : [],
+    };
+  } catch {
+    return { ok: false, hasGoshipToken: false, syncedOrders: [] };
   }
 }
 

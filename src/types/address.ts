@@ -9,6 +9,7 @@ export interface GoshipHistoryEvent {
   status: number;
   statusText: string;
   description: string;
+  location?: string;
   timestamp: string;
 }
 

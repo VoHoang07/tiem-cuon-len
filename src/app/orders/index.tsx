@@ -16,6 +16,8 @@ import {
     getCarrierTrackingUrl,
     getCodCollectAmount,
     lookupPublicOrdersByPhoneOrCode,
+    syncActiveOrdersWithGoship,
+    type SyncedOrderGoshipPayload,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -34,7 +36,7 @@ import {
     Trash2,
     Truck,
 } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -80,15 +82,21 @@ export default function OrdersScreen() {
   const [hasSearchedGuest, setHasSearchedGuest] = useState(
     initialGuestCache.orders.length > 0
   );
+  const lastAutoSearchedQueryRef = useRef<string>(initialGuestCache.lastQuery);
+  const [syncedPatchesMap, setSyncedPatchesMap] = useState<
+    Record<string, SyncedOrderGoshipPayload>
+  >({});
 
-  const handleGuestLookup = async () => {
-    if (!guestLookupQuery.trim()) {
+  const runGuestLookup = useCallback(async (rawQuery: string) => {
+    const clean = rawQuery.trim();
+    if (!clean) {
       setGuestError('Vui lòng nhập Số điện thoại nhận hàng hoặc Mã đơn hàng.');
       return;
     }
+    lastAutoSearchedQueryRef.current = clean;
     setGuestError(null);
     setGuestLoading(true);
-    const res = await lookupPublicOrdersByPhoneOrCode(guestLookupQuery);
+    const res = await lookupPublicOrdersByPhoneOrCode(clean);
     setGuestLoading(false);
     setHasSearchedGuest(true);
     if (!res.ok) {
@@ -96,7 +104,28 @@ export default function OrdersScreen() {
       return;
     }
     setGuestOrders(res.orders);
+  }, []);
+
+  const handleGuestLookup = async () => {
+    await runGuestLookup(guestLookupQuery);
   };
+
+  // Auto-trigger Shopee-style lookup as soon as unauthenticated customer finishes typing a 10-digit phone number or CUONLEN code
+  useEffect(() => {
+    if (isAuthenticated) return;
+    const raw = guestLookupQuery.trim();
+    if (!raw || raw === lastAutoSearchedQueryRef.current) return;
+    const digits = raw.replace(/[^0-9]/g, '').replace(/^84/, '0');
+    const isCompleteVnPhone = /^0[35789]\d{8}$/.test(digits);
+    const isOrderCode =
+      raw.toUpperCase().startsWith('CUONLEN-') && raw.length >= 12;
+    if (!isCompleteVnPhone && !isOrderCode) return;
+
+    const timer = setTimeout(() => {
+      void runGuestLookup(raw);
+    }, 320);
+    return () => clearTimeout(timer);
+  }, [guestLookupQuery, isAuthenticated, runGuestLookup]);
 
   const handleCopySlip = async (order: Order) => {
     const text = formatShippingSlipForClipboard(order);
@@ -110,11 +139,70 @@ export default function OrdersScreen() {
   const isAdmin = role === 'admin';
   const { width: rawWidth } = useWindowDimensions();
   const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
-  const baseOrders = isAdmin
+  const rawBaseOrders = isAdmin
     ? orders
     : isAuthenticated
       ? getOrdersByUser(user?.id ?? '')
       : guestOrders;
+
+  const baseOrders = useMemo(
+    () =>
+      rawBaseOrders.map((o) => {
+        const patch = syncedPatchesMap[o.id];
+        if (!patch) return o;
+        return {
+          ...o,
+          status: patch.status || o.status,
+          shippingAddress: {
+            ...o.shippingAddress,
+            ...patch.shippingAddress,
+          },
+        };
+      }),
+    [rawBaseOrders, syncedPatchesMap]
+  );
+
+  const activeOrderIdsSignature = useMemo(
+    () =>
+      rawBaseOrders
+        .filter(
+          (o) =>
+            o.status === 'Đang giao' ||
+            o.status === 'Đang chuẩn bị hàng' ||
+            o.status === 'Đang xử lý'
+        )
+        .slice(0, 8)
+        .map((o) => o.id)
+        .join(','),
+    [rawBaseOrders]
+  );
+
+  // Auto-sync logged-in customer's active orders with Goship SPX in the background
+  useEffect(() => {
+    if (!isAuthenticated || !activeOrderIdsSignature) return;
+    let active = true;
+    const ids = activeOrderIdsSignature.split(',').filter(Boolean);
+    syncActiveOrdersWithGoship(ids).then((res) => {
+      if (!active || !res.ok || res.syncedOrders.length === 0) return;
+      let hasNewTracking = false;
+      const nextMap: Record<string, SyncedOrderGoshipPayload> = {};
+      for (const s of res.syncedOrders) {
+        if (s?.id) {
+          nextMap[s.id] = s;
+          if (s.shippingAddress?.trackingCode) {
+            hasNewTracking = true;
+          }
+        }
+      }
+      setSyncedPatchesMap((prev) => ({ ...prev, ...nextMap }));
+      if (hasNewTracking) {
+        void refetchOrders();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, activeOrderIdsSignature, refetchOrders]);
 
   const displayOrders = useMemo(() => {
     if (statusFilter === 'ALL') return baseOrders;
@@ -291,15 +379,76 @@ export default function OrdersScreen() {
 
               {/* Shipping & Handmade Crafting Schedule Pill */}
               <View style={styles.shippingMetaRow}>
-                {trackingCode ? (
-                  <View style={styles.trackingBadge}>
-                    <Truck size={12} color="#2E7D32" />
-                    <Text style={styles.trackingBadgeText} numberOfLines={1}>
-                      {carrier ? `${carrier}: ` : 'SPX: '}
-                      {trackingCode}
-                      {item.shippingAddress?.goshipStatusText
-                        ? ` • ${item.shippingAddress.goshipStatusText}`
-                        : ''}
+                {trackingCode ||
+                item.status === 'Đang giao' ||
+                item.status === 'Hoàn thành' ||
+                item.shippingAddress?.craftingStage === 'handed_to_spx' ? (
+                  <View
+                    style={{
+                      width: '100%',
+                      backgroundColor: '#F0FDF4',
+                      borderWidth: 1,
+                      borderColor: '#86EFAC',
+                      borderRadius: 10,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      gap: 4,
+                    }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 6,
+                      }}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                        }}>
+                        <Truck size={13} color="#15803D" />
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '900',
+                            color: '#14532D',
+                          }}>
+                          {carrier || 'SPX Express'}
+                          {trackingCode
+                            ? ` • Mã vận đơn: ${trackingCode}`
+                            : ' • Đã hoàn tất đan (100%) & Đang bàn giao ship'}
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: '800',
+                          color: '#16A34A',
+                        }}>
+                        Xem chi tiết trạm →
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '700',
+                        color: '#166534',
+                        lineHeight: 16,
+                      }}
+                      numberOfLines={2}>
+                      📍 Đơn hàng đang ở đâu:{' '}
+                      {item.shippingAddress?.goshipHistory?.[0]?.description ||
+                        item.shippingAddress?.goshipStatusText ||
+                        (item.status === 'Hoàn thành'
+                          ? 'Giao hàng thành công — Khách đã nhận hàng'
+                          : `Đang vận chuyển tới ${[
+                              item.shippingAddress?.district,
+                              item.shippingAddress?.city,
+                            ]
+                              .filter(Boolean)
+                              .join(', ') || 'địa chỉ nhận hàng'}`)}
                     </Text>
                   </View>
                 ) : item.status === 'Đang xử lý' ||

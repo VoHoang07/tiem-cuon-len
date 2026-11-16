@@ -32,10 +32,12 @@ import {
     quoteAdminGoshipRates,
     saveAdminGoshipWarehouse,
     SHIPPING_CARRIERS,
+    syncActiveOrdersWithGoship,
     updateAdminCraftingProgress,
     type AdminGoshipWarehouse,
     type GoshipRateOption,
     type LiveCarrierCheckpoint,
+    type SyncedOrderGoshipPayload,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -182,11 +184,37 @@ export default function OrderDetailScreen() {
   }, [id]);
 
   const rawOrder = orders.find((o) => o.id === id);
+  const [syncedOrderPatch, setSyncedOrderPatch] =
+    useState<SyncedOrderGoshipPayload | null>(null);
+  const isOwnerOfRawOrder = Boolean(
+    rawOrder &&
+      user &&
+      (rawOrder.userId === user.id ||
+        (user.email &&
+          String(rawOrder.shippingAddress?.email || '')
+            .toLowerCase()
+            .trim() === user.email.toLowerCase().trim()))
+  );
   // Logged-in owner / Admin gets full unmasked order; unauthenticated visitor gets privacy-masked public order!
-  const order: Order | undefined =
-    rawOrder && (isAdmin || (user && rawOrder.userId === user.id))
+  const baseOrder: Order | undefined =
+    rawOrder && (isAdmin || isOwnerOfRawOrder)
       ? rawOrder
       : guestFetchedOrder || cachedGuestMatch || undefined;
+
+  const order: Order | undefined = useMemo(() => {
+    if (!baseOrder) return undefined;
+    if (!syncedOrderPatch || syncedOrderPatch.id !== baseOrder.id) {
+      return baseOrder;
+    }
+    return {
+      ...baseOrder,
+      status: syncedOrderPatch.status || baseOrder.status,
+      shippingAddress: {
+        ...baseOrder.shippingAddress,
+        ...syncedOrderPatch.shippingAddress,
+      },
+    };
+  }, [baseOrder, syncedOrderPatch]);
 
   // Live SPX / Goship Checkpoints state
   const [liveCheckpoints, setLiveCheckpoints] = useState<LiveCarrierCheckpoint[]>([]);
@@ -310,19 +338,52 @@ export default function OrderDetailScreen() {
   }, [id, Boolean(order)]);
 
   const refreshLiveSpxJourney = useCallback(async () => {
-    const code = order?.shippingAddress?.trackingCode;
-    const carrier = order?.shippingAddress?.shippingCarrier || 'SPX';
-    if (!code) {
-      setLiveCheckpoints([]);
-      return;
-    }
+    if (!order?.id) return;
     setLoadingCheckpoints(true);
-    const res = await fetchLiveCarrierJourney(code, carrier);
-    setLoadingCheckpoints(false);
-    setLiveCheckpoints(res.checkpoints);
+    try {
+      // 1. Auto-sync with Goship on server (pulls SPX tracking code by Order ID or Customer Phone & saves to DB)
+      if (order.status !== 'pending_payment' && order.status !== 'Đã hủy') {
+        const syncRes = await syncActiveOrdersWithGoship([order.id]);
+        if (syncRes.ok && syncRes.syncedOrders.length > 0) {
+          const patch = syncRes.syncedOrders[0];
+          if (patch) {
+            setSyncedOrderPatch(patch);
+            if (
+              patch.shippingAddress?.trackingCode &&
+              patch.shippingAddress.trackingCode !==
+                order.shippingAddress?.trackingCode
+            ) {
+              void refetchOrders();
+            }
+          }
+        }
+      }
+
+      // 2. Fetch live station checkpoints from carrier if tracking code exists
+      const code =
+        syncedOrderPatch?.shippingAddress?.trackingCode ||
+        order?.shippingAddress?.trackingCode;
+      const carrier =
+        syncedOrderPatch?.shippingAddress?.shippingCarrier ||
+        order?.shippingAddress?.shippingCarrier ||
+        'SPX';
+      if (!code) {
+        setLiveCheckpoints([]);
+        return;
+      }
+      const res = await fetchLiveCarrierJourney(code, carrier);
+      setLiveCheckpoints(res.checkpoints);
+    } finally {
+      setLoadingCheckpoints(false);
+    }
   }, [
+    order?.id,
+    order?.status,
     order?.shippingAddress?.trackingCode,
     order?.shippingAddress?.shippingCarrier,
+    syncedOrderPatch?.shippingAddress?.trackingCode,
+    syncedOrderPatch?.shippingAddress?.shippingCarrier,
+    refetchOrders,
   ]);
 
   useEffect(() => {
@@ -375,18 +436,79 @@ export default function OrderDetailScreen() {
   }
 
   const craftingSchedule = computeHandmadeCraftingSchedule(order);
+  const isShippingStage =
+    Boolean(order.shippingAddress?.trackingCode) ||
+    order.status === 'Đang giao' ||
+    order.status === 'Hoàn thành' ||
+    order.shippingAddress?.craftingStage === 'handed_to_spx';
+
   const combinedJourneyEvents = (() => {
     if (liveCheckpoints.length > 0) {
       return liveCheckpoints;
     }
     const gsHist = order.shippingAddress?.goshipHistory || [];
-    return gsHist.map((h) => ({
-      code: String(h.status),
-      milestone: h.statusText,
-      title: h.description || h.statusText,
-      location: '',
-      timestamp: h.timestamp,
-    }));
+    if (gsHist.length > 0) {
+      return gsHist.map((h) => ({
+        code: String(h.status),
+        milestone: h.statusText,
+        title: h.description || h.statusText,
+        location: h.location || '',
+        timestamp: h.timestamp,
+      }));
+    }
+    if (isShippingStage) {
+      const destArea = [
+        order.shippingAddress?.ward,
+        order.shippingAddress?.district,
+        order.shippingAddress?.city,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      const shippedTs =
+        order.shippingAddress?.shippedAt ||
+        order.shippingAddress?.craftingUpdatedAt ||
+        order.createdAt;
+      if (order.status === 'Hoàn thành') {
+        return [
+          {
+            code: '905',
+            milestone: 'Giao hàng thành công',
+            title: 'Giao hàng thành công — Khách hàng đã nhận kiện hàng',
+            location: destArea,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            code: '902',
+            milestone: 'Đang vận chuyển',
+            title: `Kiện hàng đã hoàn tất công đoạn đan (100%) & bàn giao cho ${
+              order.shippingAddress?.shippingCarrier || 'SPX Express'
+            }`,
+            location: 'Kho Tiệm Cuộn Len — TP. Hồ Chí Minh',
+            timestamp: shippedTs,
+          },
+        ];
+      }
+      return [
+        {
+          code: '902',
+          milestone: 'Đang vận chuyển',
+          title: `Đơn hàng đang trên đường giao — Đã bàn giao kiện hàng cho ${
+            order.shippingAddress?.shippingCarrier || 'SPX Express'
+          }`,
+          location: destArea ? `Hướng giao tới: ${destArea}` : 'Bưu cục SPX Express',
+          timestamp: shippedTs,
+        },
+        {
+          code: '901',
+          milestone: 'Đã đóng gói hoàn tất',
+          title:
+            'Xưởng Tiệm Cuộn Len đã hoàn thiện đan mẫu 100%, kiểm tra form & đóng hộp quà',
+          location: 'Xưởng Tiệm Cuộn Len — TP. Hồ Chí Minh',
+          timestamp: order.createdAt,
+        },
+      ];
+    }
+    return [];
   })();
 
   const handleAdminUpdateCrafting = async (stageKey: string) => {
@@ -1062,29 +1184,69 @@ export default function OrderDetailScreen() {
                   </View>
                 )}
 
-                {savedTracking ? (
+                {isShippingStage ? (
                   <View style={styles.liveTrackingCard}>
+                    <View
+                      style={{
+                        backgroundColor: '#DCFCE7',
+                        borderWidth: 1,
+                        borderColor: '#86EFAC',
+                        borderRadius: 9,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        marginBottom: 8,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 6,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: '800',
+                          color: '#166534',
+                        }}>
+                        ✅ Công đoạn đan thủ công & Đóng hộp quà: Đã hoàn tất 100%
+                      </Text>
+                      {order.shippingAddress?.craftingNote ? (
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '700',
+                            color: '#15803D',
+                          }}>
+                          💌 &ldquo;{order.shippingAddress.craftingNote}&rdquo;
+                        </Text>
+                      ) : null}
+                    </View>
+
                     <View style={styles.liveTrackingTop}>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.liveTrackingLabel}>
                           ĐƠN VỊ VẬN CHUYỂN: {(savedCarrier || 'SPX EXPRESS').toUpperCase()}
                         </Text>
                         <Text style={styles.liveTrackingCode}>
-                          Mã vận đơn: {savedTracking}
+                          {savedTracking
+                            ? `Mã vận đơn: ${savedTracking}`
+                            : 'Mã vận đơn SPX: Đang tự động đồng bộ từ Goship...'}
                         </Text>
-                        {order.shippingAddress?.goshipStatusText ? (
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontWeight: '800',
-                              color: '#15803D',
-                              marginTop: 2,
-                            }}>
-                            📍 Trạng thái hiện tại: {order.shippingAddress.goshipStatusText}
-                          </Text>
-                        ) : null}
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '800',
+                            color: '#15803D',
+                            marginTop: 2,
+                          }}>
+                          📍 Đơn hàng đang ở đâu:{' '}
+                          {order.shippingAddress?.goshipStatusText ||
+                            combinedJourneyEvents[0]?.title ||
+                            (order.status === 'Hoàn thành'
+                              ? 'Giao hàng thành công'
+                              : 'Đã bàn giao cho đơn vị vận chuyển SPX Express')}
+                        </Text>
                       </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <TouchableOpacity
                           style={styles.copyCodePill}
                           onPress={() => void refreshLiveSpxJourney()}>
@@ -1094,21 +1256,23 @@ export default function OrderDetailScreen() {
                             <RefreshCw size={13} color="#2E7D32" />
                           )}
                           <Text style={[styles.copyCodePillText, { color: '#2E7D32' }]}>
-                            Cập nhật
+                            {savedTracking ? 'Cập nhật trạm' : 'Đồng bộ mã SPX'}
                           </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.copyCodePill}
-                          onPress={() => handleCopy(savedTracking, 'track_code')}>
-                          {copiedKey === 'track_code' ? (
-                            <Check size={13} color="#2E7D32" />
-                          ) : (
-                            <Copy size={13} color="#3D2B1F" />
-                          )}
-                          <Text style={styles.copyCodePillText}>
-                            {copiedKey === 'track_code' ? 'Đã chép' : 'Chép mã'}
-                          </Text>
-                        </TouchableOpacity>
+                        {savedTracking ? (
+                          <TouchableOpacity
+                            style={styles.copyCodePill}
+                            onPress={() => handleCopy(savedTracking, 'track_code')}>
+                            {copiedKey === 'track_code' ? (
+                              <Check size={13} color="#2E7D32" />
+                            ) : (
+                              <Copy size={13} color="#3D2B1F" />
+                            )}
+                            <Text style={styles.copyCodePillText}>
+                              {copiedKey === 'track_code' ? 'Đã chép' : 'Chép mã'}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     </View>
 
@@ -1122,7 +1286,7 @@ export default function OrderDetailScreen() {
                           padding: 11,
                           borderWidth: 1,
                           borderColor: '#C8E6C9',
-                          gap: 8,
+                          gap: 10,
                         }}>
                         <Text
                           style={{
@@ -1130,7 +1294,7 @@ export default function OrderDetailScreen() {
                             fontWeight: '900',
                             color: '#1B5E20',
                           }}>
-                          🚚 Chi tiết các chặng bưu cục ({combinedJourneyEvents.length} cập nhật):
+                          🚚 Hành trình chi tiết từng trạm giao hàng ({combinedJourneyEvents.length} mốc):
                         </Text>
                         {combinedJourneyEvents.slice(0, 12).map((cp, idx) => (
                           <View
@@ -1138,33 +1302,76 @@ export default function OrderDetailScreen() {
                             style={{
                               flexDirection: 'row',
                               alignItems: 'flex-start',
-                              gap: 9,
+                              gap: 10,
                             }}>
-                            <View
-                              style={{
-                                width: 10,
-                                height: 10,
-                                borderRadius: 5,
-                                marginTop: 4,
-                                backgroundColor: idx === 0 ? '#16A34A' : '#A7F3D0',
-                              }}
-                            />
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <Text
+                            <View style={{ alignItems: 'center', width: 14 }}>
+                              <View
                                 style={{
-                                  fontSize: 12.5,
-                                  fontWeight: idx === 0 ? '800' : '600',
-                                  color: idx === 0 ? '#14532D' : '#374151',
-                                  lineHeight: 17,
+                                  width: idx === 0 ? 12 : 9,
+                                  height: idx === 0 ? 12 : 9,
+                                  borderRadius: 6,
+                                  marginTop: 3,
+                                  backgroundColor: idx === 0 ? '#16A34A' : '#A7F3D0',
+                                  borderWidth: idx === 0 ? 2 : 0,
+                                  borderColor: '#DCFCE7',
+                                }}
+                              />
+                              {idx < Math.min(combinedJourneyEvents.length, 12) - 1 && (
+                                <View
+                                  style={{
+                                    width: 2,
+                                    flex: 1,
+                                    minHeight: 22,
+                                    backgroundColor: '#D1FAE5',
+                                    marginTop: 3,
+                                  }}
+                                />
+                              )}
+                            </View>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: 6,
                                 }}>
-                                {cp.title}
-                              </Text>
+                                {idx === 0 && (
+                                  <View
+                                    style={{
+                                      backgroundColor: '#16A34A',
+                                      paddingHorizontal: 6,
+                                      paddingVertical: 1.5,
+                                      borderRadius: 4,
+                                    }}>
+                                    <Text
+                                      style={{
+                                        fontSize: 9.5,
+                                        fontWeight: '900',
+                                        color: '#FFFFFF',
+                                      }}>
+                                      MỚI NHẤT
+                                    </Text>
+                                  </View>
+                                )}
+                                <Text
+                                  style={{
+                                    fontSize: 12.5,
+                                    fontWeight: idx === 0 ? '800' : '600',
+                                    color: idx === 0 ? '#14532D' : '#374151',
+                                    lineHeight: 17,
+                                    flex: 1,
+                                  }}>
+                                  {cp.title}
+                                </Text>
+                              </View>
                               {cp.location ? (
                                 <Text
                                   style={{
                                     fontSize: 11,
-                                    color: '#6B7280',
-                                    marginTop: 1,
+                                    color: '#15803D',
+                                    fontWeight: '700',
+                                    marginTop: 2,
                                   }}
                                   numberOfLines={2}>
                                   📍 {cp.location}
@@ -1174,7 +1381,7 @@ export default function OrderDetailScreen() {
                                 style={{
                                   fontSize: 10.5,
                                   color: '#6B7280',
-                                  marginTop: 1,
+                                  marginTop: 2,
                                 }}>
                                 {new Date(cp.timestamp).toLocaleString('vi-VN', {
                                   hour: '2-digit',
@@ -1188,19 +1395,9 @@ export default function OrderDetailScreen() {
                           </View>
                         ))}
                       </View>
-                    ) : (
-                      <Text
-                        style={{
-                          fontSize: 11.5,
-                          color: '#2E7D32',
-                          marginTop: 6,
-                          lineHeight: 16,
-                        }}>
-                        📦 Kiện hàng đã có mã {savedCarrier || 'SPX'}. Bưu cục sẽ cập nhật các trạm trung chuyển ngay sau khi quét nhận hàng, hoặc bạn bấm nút bên dưới để mở trực tiếp trang tra cứu của hãng nhé!
-                      </Text>
-                    )}
+                    ) : null}
 
-                    {trackingUrl ? (
+                    {trackingUrl && savedTracking ? (
                       <TouchableOpacity
                         style={[styles.openTrackingBtn, { marginTop: 10 }]}
                         onPress={() => Linking.openURL(trackingUrl)}
@@ -1435,110 +1632,131 @@ export default function OrderDetailScreen() {
                   </View>
                 )}
 
-                {/* Step A0: Admin 1-Tap Handmade Crafting Progress Updater (While crocheting 5–6 days, BEFORE calling SPX!) */}
-                <View
-                  style={{
-                    backgroundColor: '#FFFDF7',
-                    borderWidth: 1.5,
-                    borderColor: '#FDE68A',
-                    borderRadius: 12,
-                    padding: 11,
-                    gap: 8,
-                  }}>
-                  <Text
+                {/* Step A0: Admin 1-Tap Handmade Crafting Progress Updater (Only shown BEFORE shipping!) */}
+                {isShippingStage ? (
+                  <View
                     style={{
-                      fontSize: 12.5,
-                      fontWeight: '900',
-                      color: '#92400E',
+                      backgroundColor: '#ECFDF5',
+                      borderWidth: 1,
+                      borderColor: '#6EE7B7',
+                      borderRadius: 11,
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
                     }}>
-                    🧶 Giai đoạn 1 (Trong 5–6 ngày đang đan — CHƯA gọi Shipper): Cập nhật tiến độ cho khách yên tâm
-                  </Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {HANDMADE_CRAFTING_STAGES.map((st) => {
-                      const isCurr = order.shippingAddress?.craftingStage === st.key;
-                      return (
-                        <TouchableOpacity
-                          key={st.key}
-                          disabled={Boolean(savingCraftStage)}
-                          onPress={() => void handleAdminUpdateCrafting(st.key)}
-                          activeOpacity={0.8}
-                          style={{
-                            backgroundColor: isCurr ? '#B45309' : '#FFFFFF',
-                            borderWidth: 1,
-                            borderColor: isCurr ? '#B45309' : '#FCD34D',
-                            borderRadius: 999,
-                            paddingHorizontal: 10,
-                            paddingVertical: 5,
-                          }}>
-                          <Text
-                            style={{
-                              fontSize: 11.5,
-                              fontWeight: '800',
-                              color: isCurr ? '#FFFFFF' : '#78350F',
-                            }}>
-                            {savingCraftStage === st.key
-                              ? 'Đang lưu...'
-                              : isCurr
-                                ? `✓ ${st.shortLabel}`
-                                : st.shortLabel}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    <TextInput
+                    <Text
                       style={{
-                        flex: 1,
-                        minWidth: 180,
-                        backgroundColor: '#FFFFFF',
-                        borderWidth: 1,
-                        borderColor: '#E5D5C3',
-                        borderRadius: 9,
-                        paddingHorizontal: 10,
-                        paddingVertical: 7,
-                        fontSize: 16,
-                        color: '#3D2B1F',
-                      }}
-                      placeholder="Ghi chú tiến độ ngắn cho khách (VD: Đã móc xong 2 bé Twinkle, chiều mai đóng hộp)..."
-                      placeholderTextColor={COLORS.lightText}
-                      value={craftingNoteInput}
-                      onChangeText={setCraftingNoteInput}
-                    />
-                    <TouchableOpacity
-                      onPress={() =>
-                        void handleAdminUpdateCrafting(
-                          order.shippingAddress?.craftingStage || 'crocheting'
-                        )
-                      }
-                      style={{
-                        backgroundColor: '#78350F',
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        borderRadius: 9,
-                        justifyContent: 'center',
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: '#065F46',
                       }}>
+                      ✅ Giai đoạn 1 (Xưởng đan thủ công): Đã hoàn tất 100% — Đơn hàng đang ở Giai đoạn 2 (Giao hàng SPX Express).
+                    </Text>
+                  </View>
+                ) : (
+                  <View
+                    style={{
+                      backgroundColor: '#FFFDF7',
+                      borderWidth: 1.5,
+                      borderColor: '#FDE68A',
+                      borderRadius: 12,
+                      padding: 11,
+                      gap: 8,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: '900',
+                        color: '#92400E',
+                      }}>
+                      🧶 Giai đoạn 1 (Trong 5–6 ngày đang đan — CHƯA gọi Shipper): Cập nhật tiến độ cho khách yên tâm
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {HANDMADE_CRAFTING_STAGES.map((st) => {
+                        const isCurr = order.shippingAddress?.craftingStage === st.key;
+                        return (
+                          <TouchableOpacity
+                            key={st.key}
+                            disabled={Boolean(savingCraftStage)}
+                            onPress={() => void handleAdminUpdateCrafting(st.key)}
+                            activeOpacity={0.8}
+                            style={{
+                              backgroundColor: isCurr ? '#B45309' : '#FFFFFF',
+                              borderWidth: 1,
+                              borderColor: isCurr ? '#B45309' : '#FCD34D',
+                              borderRadius: 999,
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                            }}>
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '800',
+                                color: isCurr ? '#FFFFFF' : '#78350F',
+                              }}>
+                              {savingCraftStage === st.key
+                                ? 'Đang lưu...'
+                                : isCurr
+                                  ? `✓ ${st.shortLabel}`
+                                  : st.shortLabel}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      <TextInput
+                        style={{
+                          flex: 1,
+                          minWidth: 180,
+                          backgroundColor: '#FFFFFF',
+                          borderWidth: 1,
+                          borderColor: '#E5D5C3',
+                          borderRadius: 9,
+                          paddingHorizontal: 10,
+                          paddingVertical: 7,
+                          fontSize: 16,
+                          color: '#3D2B1F',
+                        }}
+                        placeholder="Ghi chú tiến độ ngắn cho khách (VD: Đã móc xong 2 bé Twinkle, chiều mai đóng hộp)..."
+                        placeholderTextColor={COLORS.lightText}
+                        value={craftingNoteInput}
+                        onChangeText={setCraftingNoteInput}
+                      />
+                      <TouchableOpacity
+                        onPress={() =>
+                          void handleAdminUpdateCrafting(
+                            order.shippingAddress?.craftingStage || 'crocheting'
+                          )
+                        }
+                        style={{
+                          backgroundColor: '#78350F',
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 9,
+                          justifyContent: 'center',
+                        }}>
+                        <Text
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: '800',
+                            color: '#FFFFFF',
+                          }}>
+                          Lưu ghi chú
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {craftSavedBanner && (
                       <Text
                         style={{
                           fontSize: 11.5,
                           fontWeight: '800',
-                          color: '#FFFFFF',
+                          color: '#15803D',
                         }}>
-                        Lưu ghi chú
+                        ✅ Đã cập nhật tiến độ xưởng đan lên màn hình theo dõi của khách!
                       </Text>
-                    </TouchableOpacity>
+                    )}
                   </View>
-                  {craftSavedBanner && (
-                    <Text
-                      style={{
-                        fontSize: 11.5,
-                        fontWeight: '800',
-                        color: '#15803D',
-                      }}>
-                      ✅ Đã cập nhật tiến độ xưởng đan lên màn hình theo dõi của khách!
-                    </Text>
-                  )}
-                </View>
+                )}
 
                 {/* Step A1: Manual 2-Step Goship SPX Shipment Creator (ONLY fires when Admin clicks after finishing crocheting!) */}
                 <View
