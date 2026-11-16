@@ -46,17 +46,58 @@ function loadCachedAddresses(userId: string): Address[] {
   const keyId = userId || 'guest';
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
+      const tagsMap = loadAddressTagsMap();
       const raw = window.localStorage.getItem(`${ADDRESSES_CACHE_PREFIX}${keyId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        const tagsMap = loadAddressTagsMap();
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return (parsed as Address[])
             .filter((a) => !String(a.fullName || '').startsWith('__TCL_'))
             .map((a) => ({
               ...a,
+              userId: userId || a.userId,
               addressTag: a.addressTag || tagsMap[a.id] || 'home',
             }));
+        }
+      }
+      // Rescue saved addresses from previous Supabase UUID keys on the same browser
+      if (userId) {
+        const rescuedMap = new Map<string, Address>();
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (!k || !k.startsWith(ADDRESSES_CACHE_PREFIX)) continue;
+          try {
+            const kRaw = window.localStorage.getItem(k);
+            const kParsed = kRaw ? JSON.parse(kRaw) : null;
+            if (Array.isArray(kParsed)) {
+              for (const a of kParsed as Address[]) {
+                if (
+                  a &&
+                  a.id &&
+                  a.fullName &&
+                  !String(a.fullName).startsWith('__TCL_') &&
+                  a.phone &&
+                  a.city
+                ) {
+                  const dedupKey = `${a.phone}_${a.detailAddress}`;
+                  if (!rescuedMap.has(dedupKey)) {
+                    rescuedMap.set(dedupKey, {
+                      ...a,
+                      userId,
+                      addressTag: a.addressTag || tagsMap[a.id] || 'home',
+                    });
+                  }
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (rescuedMap.size > 0) {
+          const rescuedList = Array.from(rescuedMap.values());
+          saveCachedAddresses(userId, rescuedList);
+          return rescuedList;
         }
       }
     }
@@ -140,9 +181,21 @@ export function AddressProvider({ children }: { children: ReactNode }) {
               addressTag: a.addressTag || tagsMap[a.id] || 'home',
             }));
 
-          if (filtered.length > 0 || cached.length === 0) {
+          if (filtered.length > 0) {
             setAddresses(filtered);
             saveCachedAddresses(activeUserId, filtered);
+          } else if (cached.length > 0) {
+            // Rescue cached addresses to the new Supabase project if remote is empty
+            for (const cAddr of cached) {
+              supabase
+                .from('addresses')
+                .upsert(toSupabaseAddressRow({ ...cAddr, userId: activeUserId }), {
+                  onConflict: 'id',
+                })
+                .then(() => {}, () => {});
+            }
+          } else {
+            setAddresses([]);
           }
         }
       } catch {

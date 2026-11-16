@@ -64,11 +64,56 @@ const STATUS_FILTERS: { key: 'ALL' | OrderStatus; label: string }[] = [
 
 export default function OrdersScreen() {
   const router = useRouter();
-  const { orders, getOrdersByUser, refetchOrders, deleteOrder, updateOrderStatus } = useOrders();
+  const {
+    orders,
+    getOrdersByUser,
+    refetchOrders,
+    deleteOrder,
+    updateOrderStatus,
+    rescueOrdersManual,
+  } = useOrders();
   const { user, role, isAuthenticated } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [rescuingOrders, setRescuingOrders] = useState(false);
+  const [rescueStatusMsg, setRescueStatusMsg] = useState<string | null>(null);
+
+  const handleScanLocalRescue = useCallback(async () => {
+    setRescuingOrders(true);
+    setRescueStatusMsg(null);
+    try {
+      const res = await rescueOrdersManual();
+      setRescueStatusMsg(res.message);
+    } catch {
+      setRescueStatusMsg('Không thể quét khôi phục đơn hàng lúc này.');
+    } finally {
+      setRescuingOrders(false);
+    }
+  }, [rescueOrdersManual]);
+
+  const handleImportOrdersFile = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.json,text/csv,application/json';
+    input.onchange = async (e: any) => {
+      const file = e?.target?.files?.[0];
+      if (!file) return;
+      setRescuingOrders(true);
+      setRescueStatusMsg(null);
+      try {
+        const text = await file.text();
+        const res = await rescueOrdersManual(text);
+        setRescueStatusMsg(res.message);
+      } catch {
+        setRescueStatusMsg('Lỗi đọc file CSV/JSON đơn hàng.');
+      } finally {
+        setRescuingOrders(false);
+      }
+    };
+    input.click();
+  }, [rescueOrdersManual]);
 
   const initialGuestCache = useMemo(() => getCachedGuestTrackedOrders(), []);
   const [guestLookupQuery, setGuestLookupQuery] = useState<string>(
@@ -906,8 +951,8 @@ export default function OrdersScreen() {
         })}
       </ScrollView>
 
-      {/* Admin Goship.io Bulk Export & Portal Bar */}
-      {isAdmin && displayOrders.length > 0 && (
+      {/* Admin Goship.io Bulk Export, Order Rescue & Portal Bar */}
+      {isAdmin && (
         <View
           style={{
             marginHorizontal: isMobile ? 12 : 20,
@@ -918,76 +963,146 @@ export default function OrdersScreen() {
             borderRadius: 14,
             paddingHorizontal: 12,
             paddingVertical: 10,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
             gap: 8,
           }}>
-          <View style={{ flex: 1, minWidth: 180 }}>
-            <Text
-              style={{
-                fontSize: 12.5,
-                fontWeight: '800',
-                color: '#3B281E',
-              }}>
-              📦 Công cụ đẩy đơn hàng loạt lên Goship.io ({displayOrders.length} đơn)
-            </Text>
-            <Text
-              style={{
-                fontSize: 11,
-                color: '#6E5643',
-                marginTop: 2,
-              }}>
-              Tải file Excel/CSV chuẩn định dạng Goship (Tên, SĐT, ĐC 3 cấp, Tiền COD, Khai giá, Ghi chú thiệp)
-            </Text>
-          </View>
           <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
+              justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: 8,
             }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#4A3427',
-                paddingHorizontal: 12,
-                paddingVertical: 7,
-                borderRadius: 9,
-              }}
-              onPress={() => exportOrdersToGoshipCsv(displayOrders)}
-              activeOpacity={0.85}>
+            <View style={{ flex: 1, minWidth: 180 }}>
               <Text
                 style={{
-                  fontSize: 11.5,
+                  fontSize: 12.5,
                   fontWeight: '800',
-                  color: '#FFFDF9',
+                  color: '#3B281E',
                 }}>
-                📥 Xuất Excel / CSV Goship ({displayOrders.length} đơn)
+                📦 Quản lý Vận đơn Goship & Khôi phục đơn hàng ({displayOrders.length} đơn)
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#FFFDF9',
-                borderWidth: 1,
-                borderColor: '#D6C2AD',
-                paddingHorizontal: 11,
-                paddingVertical: 7,
-                borderRadius: 9,
-              }}
-              onPress={() => Linking.openURL('https://goship.io')}
-              activeOpacity={0.85}>
               <Text
                 style={{
-                  fontSize: 11.5,
-                  fontWeight: '800',
-                  color: '#4A3427',
+                  fontSize: 11,
+                  color: '#6E5643',
+                  marginTop: 2,
                 }}>
-                🚀 Mở Goship.io ›
+                Tự động khôi phục đơn từ bộ nhớ trình duyệt hoặc nhập file CSV/JSON từ Supabase cũ
               </Text>
-            </TouchableOpacity>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 8,
+              }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#15803D',
+                  paddingHorizontal: 11,
+                  paddingVertical: 7,
+                  borderRadius: 9,
+                  opacity: rescuingOrders ? 0.7 : 1,
+                }}
+                disabled={rescuingOrders}
+                onPress={() => void handleScanLocalRescue()}
+                activeOpacity={0.85}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '800',
+                    color: '#FFFDF9',
+                  }}>
+                  {rescuingOrders
+                    ? '⏳ Đang khôi phục...'
+                    : '🔄 Quét khôi phục đơn trên máy'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FFFDF9',
+                  borderWidth: 1,
+                  borderColor: '#15803D',
+                  paddingHorizontal: 11,
+                  paddingVertical: 7,
+                  borderRadius: 9,
+                }}
+                disabled={rescuingOrders}
+                onPress={handleImportOrdersFile}
+                activeOpacity={0.85}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '800',
+                    color: '#15803D',
+                  }}>
+                  📂 Nhập CSV/JSON đơn cũ
+                </Text>
+              </TouchableOpacity>
+              {displayOrders.length > 0 && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#4A3427',
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 9,
+                  }}
+                  onPress={() => exportOrdersToGoshipCsv(displayOrders)}
+                  activeOpacity={0.85}>
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: '800',
+                      color: '#FFFDF9',
+                    }}>
+                    📥 Xuất CSV Goship ({displayOrders.length})
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FFFDF9',
+                  borderWidth: 1,
+                  borderColor: '#D6C2AD',
+                  paddingHorizontal: 11,
+                  paddingVertical: 7,
+                  borderRadius: 9,
+                }}
+                onPress={() => Linking.openURL('https://goship.io')}
+                activeOpacity={0.85}>
+                <Text
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: '800',
+                    color: '#4A3427',
+                  }}>
+                  🚀 Mở Goship.io ›
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
+          {rescueStatusMsg ? (
+            <View
+              style={{
+                backgroundColor: '#ECFDF5',
+                borderWidth: 1,
+                borderColor: '#A7F3D0',
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+              }}>
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: '700',
+                  color: '#065F46',
+                }}>
+                ✨ {rescueStatusMsg}
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
       </View>

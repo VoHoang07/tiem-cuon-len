@@ -97,7 +97,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
 
   const action = sanitizeTextServer(rawBody.action || 'create', 30);
 
-  if (!authUser && action !== 'notify_email') {
+  if (!authUser && action !== 'notify_email' && action !== 'rescue_orders') {
     return res.status(401).json({
       success: false,
       error: 'Unauthorized: Vui lòng đăng nhập lại.',
@@ -820,7 +820,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     });
   }
 
-  // ─── 4. DELETE ORDER (ANTI-IDOR OWNERSHIP CHECK) ──────────────────────────
+  // ─── 4. DELETE ORDER (ANTI-IDOR OWNERSHIP CHECK & TOMBSTONE SYNC) ─────────
   if (action === 'delete') {
     const orderId = sanitizeTextServer(rawBody.orderId, 80);
     if (!orderId) {
@@ -835,11 +835,11 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     );
     const rows = orderRes.ok ? await orderRes.json() : [];
     const existingOrder = Array.isArray(rows) ? rows[0] : null;
-    if (!existingOrder) {
-      return res.status(200).json({ success: true });
-    }
-
-    if (!authUser.isAdmin && String(existingOrder.userId) !== authUser.id) {
+    if (
+      existingOrder &&
+      !authUser.isAdmin &&
+      String(existingOrder.userId) !== authUser.id
+    ) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden (Anti-IDOR): Bạn không có quyền xoá đơn hàng của người khác.',
@@ -851,7 +851,310 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       headers: buildSupabaseServiceHeaders(authUser.accessToken),
     });
 
+    // Persist deleted order ID in `tcl_deleted_orders_v1` so cross-device browser caches never resurrect it
+    try {
+      const tombRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/addresses?id=eq.tcl_deleted_orders_v1&select=detailAddress&limit=1`,
+        {
+          headers: buildSupabaseServiceHeaders(authUser.accessToken),
+        }
+      );
+      const tombRows = tombRes.ok ? await tombRes.json() : [];
+      let deletedSet = new Set();
+      if (Array.isArray(tombRows) && tombRows[0] && tombRows[0].detailAddress) {
+        try {
+          const parsed = JSON.parse(tombRows[0].detailAddress);
+          if (Array.isArray(parsed)) {
+            deletedSet = new Set(parsed.map((x) => String(x)));
+          }
+        } catch {
+          // ignore
+        }
+      }
+      deletedSet.add(orderId);
+      const nextList = Array.from(deletedSet).slice(-500);
+      await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
+        method: 'POST',
+        headers: buildSupabaseServiceHeaders(authUser.accessToken, {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        }),
+        body: JSON.stringify({
+          id: 'tcl_deleted_orders_v1',
+          userId: '57090d46-4e82-4fa0-93bb-1ff5e46c22c2',
+          fullName: '__TCL_CHAT_MSG_V1__',
+          phone: '__TCL_DELETED_ORDERS_V1__',
+          city: 'HCM',
+          district: 'Q8',
+          ward: '1',
+          detailAddress: JSON.stringify(nextList),
+          isDefault: false,
+        }),
+      });
+    } catch {
+      // ignore tombstone sync failure
+    }
+
     return res.status(200).json({ success: true, deletedId: orderId });
+  }
+
+  // ─── 5. RESCUE / IMPORT HISTORICAL ORDERS FROM BROWSER CACHE OR CSV/JSON ───
+  if (action === 'rescue_orders') {
+    const rawList = Array.isArray(rawBody.orders) ? rawBody.orders.slice(0, 100) : [];
+    const allowOverwrite = Boolean(authUser && authUser.isAdmin && rawBody.overwriteExisting);
+    if (rawList.length === 0) {
+      return res.status(200).json({ success: true, rescuedCount: 0, rescuedIds: [] });
+    }
+
+    const serviceToken = authUser && authUser.accessToken ? authUser.accessToken : null;
+
+    // 1. Load deleted order IDs tombstone + existing order IDs in DB
+    const [tombRes, existingRes] = await Promise.all([
+      fetch(
+        `${SUPABASE_URL}/rest/v1/addresses?id=eq.tcl_deleted_orders_v1&select=detailAddress&limit=1`,
+        { headers: buildSupabaseServiceHeaders(serviceToken) }
+      ).catch(() => null),
+      fetch(`${SUPABASE_URL}/rest/v1/orders?select=id&limit=500`, {
+        headers: buildSupabaseServiceHeaders(serviceToken),
+      }).catch(() => null),
+    ]);
+
+    const deletedSet = new Set();
+    if (tombRes && tombRes.ok) {
+      try {
+        const tombRows = await tombRes.json();
+        if (Array.isArray(tombRows) && tombRows[0] && tombRows[0].detailAddress) {
+          const parsed = JSON.parse(tombRows[0].detailAddress);
+          if (Array.isArray(parsed)) {
+            for (const id of parsed) deletedSet.add(String(id));
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const existingIds = new Set();
+    if (existingRes && existingRes.ok) {
+      try {
+        const exRows = await existingRes.json();
+        if (Array.isArray(exRows)) {
+          for (const r of exRows) {
+            if (r && r.id) existingIds.add(String(r.id));
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const rowsToUpsert = [];
+    for (const rawOrd of rawList) {
+      if (!rawOrd || typeof rawOrd !== 'object') continue;
+      const cleanOrd = stripUnknownFieldsServer(rawOrd, [
+        'id',
+        'userId',
+        'items',
+        'total',
+        'status',
+        'paymentMethod',
+        'shippingAddress',
+        'createdAt',
+      ]);
+      const id = sanitizeTextServer(cleanOrd.id || '', 80).replace(/[^A-Za-z0-9_-]/g, '');
+      if (!id.startsWith('CUONLEN-') || id.length < 10) continue;
+      if (deletedSet.has(id)) continue;
+      if (!allowOverwrite && existingIds.has(id)) continue;
+
+      const rawItems = Array.isArray(cleanOrd.items) ? cleanOrd.items.slice(0, 50) : [];
+      const cleanItems = [];
+      for (const it of rawItems) {
+        if (!it || typeof it !== 'object') continue;
+        const p = (it.product && typeof it.product === 'object' ? it.product : it) || {};
+        const cleanProd = stripUnknownFieldsServer(p, [
+          'id',
+          'baseProductId',
+          'name',
+          'category',
+          'material',
+          'color',
+          'image',
+          'price',
+          'isMadeToOrder',
+          'selectedColorId',
+          'selectedColorName',
+          'selectedColorHex',
+          'selectedAccessoryId',
+          'selectedAccessoryName',
+          'selectedAccessoryEmoji',
+          'comboSlot1Id',
+          'comboSlot2Id',
+          'giftCardNote',
+        ]);
+        const rawImg = cleanProd.image;
+        const safeImg =
+          typeof rawImg === 'string' &&
+          !rawImg.startsWith('data:image/') &&
+          !rawImg.trim().startsWith('{') &&
+          rawImg.length < 600
+            ? rawImg
+            : null;
+        const itemPrice = Math.max(0, Math.round(Number(it.price ?? cleanProd.price ?? 0) || 0));
+        const itemQty = Math.max(1, Math.min(99, Math.round(Number(it.quantity) || 1)));
+        cleanItems.push({
+          product: {
+            id: sanitizeTextServer(cleanProd.id || 'rescued_item', 140),
+            baseProductId: sanitizeTextServer(
+              cleanProd.baseProductId || String(cleanProd.id || '').split('__')[0] || 'rescued_item',
+              80
+            ),
+            name: sanitizeTextServer(cleanProd.name || 'Sản phẩm len thủ công', 160),
+            category: sanitizeTextServer(cleanProd.category || 'Keychains', 40),
+            material: sanitizeTextServer(cleanProd.material || 'Len thủ công', 120),
+            color: sanitizeTextServer(cleanProd.color || '', 90),
+            image: safeImg,
+            price: itemPrice,
+            isMadeToOrder: cleanProd.isMadeToOrder !== false,
+            selectedColorId: cleanProd.selectedColorId
+              ? sanitizeTextServer(cleanProd.selectedColorId, 60)
+              : undefined,
+            selectedColorName: cleanProd.selectedColorName
+              ? sanitizeTextServer(cleanProd.selectedColorName, 90)
+              : undefined,
+            selectedAccessoryId: cleanProd.selectedAccessoryId
+              ? sanitizeTextServer(cleanProd.selectedAccessoryId, 60)
+              : undefined,
+            selectedAccessoryName: cleanProd.selectedAccessoryName
+              ? sanitizeTextServer(cleanProd.selectedAccessoryName, 90)
+              : undefined,
+            comboSlot1Id: cleanProd.comboSlot1Id
+              ? sanitizeTextServer(cleanProd.comboSlot1Id, 90)
+              : undefined,
+            comboSlot2Id: cleanProd.comboSlot2Id
+              ? sanitizeTextServer(cleanProd.comboSlot2Id, 90)
+              : undefined,
+            giftCardNote: cleanProd.giftCardNote
+              ? sanitizeTextServer(cleanProd.giftCardNote, 300)
+              : undefined,
+          },
+          quantity: itemQty,
+          price: itemPrice,
+        });
+      }
+      if (cleanItems.length === 0) continue;
+
+      const rawAddr =
+        cleanOrd.shippingAddress && typeof cleanOrd.shippingAddress === 'object'
+          ? cleanOrd.shippingAddress
+          : {};
+      const cleanAddr = stripUnknownFieldsServer(rawAddr, [
+        'id',
+        'userId',
+        'fullName',
+        'phone',
+        'email',
+        'city',
+        'district',
+        'ward',
+        'detailAddress',
+        'shippingMethod',
+        'shippingFee',
+        'note',
+        'promoCode',
+        'discountAmount',
+        'bonusGiftProductId',
+        'bonusGiftProductName',
+        'bonusGiftValue',
+        'shippingCarrier',
+        'trackingCode',
+        'shippedAt',
+        'craftingStage',
+        'craftingUpdatedAt',
+        'goshipShipmentId',
+        'goshipCarrierName',
+        'goshipStatusText',
+        'goshipCheckpoints',
+        'goshipSyncedAt',
+        'customerAuthProvider',
+        'isVerifiedAccount',
+        'emailNotifiedAt',
+      ]);
+
+      const rawStatus = sanitizeTextServer(cleanOrd.status || 'Đang xử lý', 40);
+      const validStatus = ALLOWED_STATUSES.has(rawStatus) ? rawStatus : 'Đang xử lý';
+      const computedItemsSum = cleanItems.reduce(
+        (sum, ci) => sum + (Number(ci.price) || 0) * (Number(ci.quantity) || 1),
+        0
+      );
+      const totalVal = Math.max(
+        0,
+        Math.round(Number(cleanOrd.total) || computedItemsSum || 0)
+      );
+      const createdIso =
+        cleanOrd.createdAt && !Number.isNaN(new Date(cleanOrd.createdAt).getTime())
+          ? new Date(cleanOrd.createdAt).toISOString()
+          : new Date().toISOString();
+
+      rowsToUpsert.push({
+        id,
+        userId: sanitizeTextServer(
+          cleanOrd.userId || cleanAddr.userId || (authUser && authUser.id) || 'rescued_customer',
+          100
+        ),
+        items: cleanItems,
+        total: totalVal,
+        status: validStatus,
+        paymentMethod: sanitizeTextServer(
+          cleanOrd.paymentMethod || 'Thanh toán khi nhận hàng (COD)',
+          100
+        ),
+        shippingAddress: {
+          ...cleanAddr,
+          id: sanitizeTextServer(cleanAddr.id || `addr_${id}`, 60),
+          fullName: sanitizeTextServer(cleanAddr.fullName || 'Khách hàng', 80),
+          phone: sanitizeTextServer(cleanAddr.phone || '', 24),
+          email: cleanAddr.email
+            ? sanitizeTextServer(cleanAddr.email, 120).toLowerCase()
+            : undefined,
+          city: sanitizeTextServer(cleanAddr.city || 'TP. Hồ Chí Minh', 80),
+          district: sanitizeTextServer(cleanAddr.district || '', 80),
+          ward: sanitizeTextServer(cleanAddr.ward || '', 80),
+          detailAddress: sanitizeTextServer(cleanAddr.detailAddress || '', 220),
+        },
+        createdAt: createdIso,
+      });
+    }
+
+    if (rowsToUpsert.length === 0) {
+      return res.status(200).json({
+        success: true,
+        rescuedCount: 0,
+        rescuedIds: [],
+      });
+    }
+
+    const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=id`, {
+      method: 'POST',
+      headers: buildSupabaseServiceHeaders(serviceToken, {
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      }),
+      body: JSON.stringify(rowsToUpsert),
+    });
+
+    if (!upsertRes.ok) {
+      return res.status(500).json({
+        success: false,
+        error: 'Không thể đồng bộ đơn hàng khôi phục lên cơ sở dữ liệu.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      rescuedCount: rowsToUpsert.length,
+      rescuedIds: rowsToUpsert.map((r) => r.id),
+      orders: rowsToUpsert,
+    });
   }
 
   return res.status(400).json({ success: false, error: 'Unsupported action' });
