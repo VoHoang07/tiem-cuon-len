@@ -344,11 +344,12 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       return res.status(200).json({ success: true });
       }
 
-      // ─── AUTO-CONFIRMED AUTH PROVISIONING FOR NEW SUPABASE PROJECT ────────────
-      // Works out-of-the-box even when GoTrue `mailer_autoconfirm` is OFF:
-      // - Creates a brand-new account ONCE with `email_confirm: true`
-      // - Or confirms an unverified account ONLY after verifying the user's real password via `/auth/v1/token`
-      // - NEVER overwrites an existing confirmed user's password!
+      // ─── AUTO-CONFIRMED AUTH PROVISIONING & LEGACY ACCOUNT MIGRATION ─────────
+      // Works out-of-the-box on a newly migrated Supabase project:
+      // 1. Signs in directly on the server (avoiding client `sb_publishable_...` Bearer header rejection)
+      // 2. Creates migrated Admin / Customer accounts once with `email_confirm: true` & preserves legacy `userId` UUID from `public.orders`
+      // 3. Auto-confirms unverified accounts & links migrated orders/addresses by email
+      // 4. Never overwrites an already-confirmed password account!
       if (action === 'provision_auth_user') {
       if (!checkAuthProvisionRateLimit(telemetry.ip)) {
         return res.status(429).json({
@@ -356,7 +357,7 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           error: 'Thao tác quá nhanh. Vui lòng thử lại sau 1 phút.',
         });
       }
-      if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || SUPABASE_SERVICE_KEY === SUPABASE_KEY) {
+      if (!SUPABASE_URL || (!SUPABASE_SERVICE_KEY && !SUPABASE_KEY)) {
         return res.status(503).json({
           success: false,
           error: 'Máy chủ chưa sẵn sàng đồng bộ xác thực.',
@@ -397,131 +398,212 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
       const adminHeaders = buildSupabaseServiceHeaders('', {
         'Content-Type': 'application/json',
       });
-
-      // 1. Attempt to create the user once with `email_confirm: true`
-      const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-        method: 'POST',
-        headers: adminHeaders,
-        body: JSON.stringify({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: {
-            name: displayName,
-            full_name: displayName,
-            ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
-            role: isAdminEmail ? 'admin' : 'customer',
-            avatar: 'capybara',
-            auth_provider: authProvider,
-          },
-        }),
-      });
-
-      if (createRes.ok) {
-        return res.status(200).json({ success: true, status: 'created' });
+      const publicAuthHeaders = {
+        apikey: SUPABASE_KEY || SUPABASE_SERVICE_KEY,
+        'Content-Type': 'application/json',
+      };
+      if (
+        SUPABASE_KEY &&
+        SUPABASE_KEY.split('.').length === 3 &&
+        SUPABASE_KEY.startsWith('eyJ')
+      ) {
+        publicAuthHeaders.Authorization = `Bearer ${SUPABASE_KEY}`;
       }
 
-      const createErrJson = await createRes.json().catch(() => ({}));
-      const createMsg = String(
-        createErrJson.msg || createErrJson.message || createErrJson.error_description || ''
-      ).toLowerCase();
-
-      const alreadyExists =
-        createRes.status === 422 ||
-        createMsg.includes('already') ||
-        createMsg.includes('exists') ||
-        createMsg.includes('registered');
-
-      if (!alreadyExists) {
-        // Fallback when GoTrue Admin API rejects key format or returns transient error:
-        // Use standard public `/auth/v1/signup` (when `mailer_autoconfirm: true`, this creates & confirms immediately;
-        // if the user already exists, GoTrue returns `user_already_exists` or obfuscated empty identities without overwriting password).
-        const signupFallbackRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
-          method: 'POST',
-          headers: {
-            apikey: SUPABASE_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            data: {
-              name: displayName,
-              full_name: displayName,
-              ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
-              role: isAdminEmail ? 'admin' : 'customer',
-              avatar: 'capybara',
-              auth_provider: authProvider,
-            },
-          }),
-        });
-
-        if (signupFallbackRes.ok) {
-          const signupJson = await signupFallbackRes.json().catch(() => ({}));
-          const createdUser = signupJson.user || signupJson;
-          const identities = Array.isArray(createdUser && createdUser.identities)
-            ? createdUser.identities
-            : null;
-          // Non-empty identities or access_token means a brand-new account was just created
-          if (signupJson.access_token || (identities && identities.length > 0)) {
-            return res.status(200).json({ success: true, status: 'created' });
+      const signInViaGoTrueServer = async () => {
+        try {
+          const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: publicAuthHeaders,
+            body: JSON.stringify({ email, password }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (r.ok && j && j.access_token) {
+            return {
+              ok: true,
+              session: {
+                access_token: j.access_token,
+                refresh_token: j.refresh_token,
+                expires_in: j.expires_in,
+                expires_at: j.expires_at,
+                token_type: j.token_type || 'bearer',
+                user: j.user,
+              },
+              errorMsg: '',
+            };
           }
+          const msg = String(
+            j.msg || j.error_description || j.message || ''
+          ).toLowerCase();
+          return { ok: false, session: null, errorMsg: msg };
+        } catch {
+          return { ok: false, session: null, errorMsg: 'network_error' };
         }
-      }
+      };
 
-      // 2. Account already exists: test password against GoTrue `/auth/v1/token`
-      // GoTrue checks the password BEFORE checking `email_confirmed_at`!
-      // - Wrong password -> returns "Invalid login credentials" -> strictly reject!
-      // - Right password + unconfirmed -> returns "Email not confirmed" -> safely confirm email!
-      const checkTokenRes = await fetch(
-        `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
-        {
-          method: 'POST',
-          headers: {
-            apikey: SUPABASE_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
+      const findAndRelinkLegacyCustomerServer = async (activeUserId) => {
+        let legacyUserId = '';
+        let legacyName = '';
+        const uuidRegex =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        try {
+          const ordRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/orders?select=id,userId,shippingAddress&order=createdAt.desc&limit=250`,
+            {
+              headers: buildSupabaseServiceHeaders(),
+            }
+          );
+          const rows = ordRes.ok ? await ordRes.json() : [];
+          if (Array.isArray(rows)) {
+            const matchedOrderIdsToPatch = [];
+            const legacyUserIdsToPatch = new Set();
+            for (const row of rows) {
+              if (!row || !row.shippingAddress) continue;
+              const addr =
+                typeof row.shippingAddress === 'string'
+                  ? JSON.parse(row.shippingAddress)
+                  : row.shippingAddress;
+              const orderEmail = String((addr && addr.email) || '')
+                .toLowerCase()
+                .trim();
+              if (orderEmail !== email) continue;
+
+              const rowUid = String(row.userId || '').trim();
+              if (
+                !legacyUserId &&
+                uuidRegex.test(rowUid) &&
+                rowUid !== HOLDER_USER_ID &&
+                rowUid !== '00000000-0000-0000-0000-000000000000'
+              ) {
+                legacyUserId = rowUid;
+              }
+              if (!legacyName && addr && addr.fullName) {
+                legacyName = sanitizeTextServer(addr.fullName, 80);
+              }
+              if (activeUserId && rowUid !== String(activeUserId)) {
+                matchedOrderIdsToPatch.push(row.id);
+                if (
+                  uuidRegex.test(rowUid) &&
+                  rowUid !== HOLDER_USER_ID &&
+                  rowUid !== '00000000-0000-0000-0000-000000000000'
+                ) {
+                  legacyUserIdsToPatch.add(rowUid);
+                }
+              }
+            }
+
+            if (activeUserId && matchedOrderIdsToPatch.length > 0) {
+              const patchHeaders = buildSupabaseServiceHeaders('', {
+                'Content-Type': 'application/json',
+                Prefer: 'return=minimal',
+              });
+              await Promise.all(
+                matchedOrderIdsToPatch.slice(0, 30).map((oid) =>
+                  fetch(
+                    `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(oid)}`,
+                    {
+                      method: 'PATCH',
+                      headers: patchHeaders,
+                      body: JSON.stringify({ userId: String(activeUserId) }),
+                    }
+                  ).catch(() => {})
+                )
+              );
+              for (const oldUid of legacyUserIdsToPatch) {
+                await Promise.all([
+                  fetch(
+                    `${SUPABASE_URL}/rest/v1/addresses?userId=eq.${encodeURIComponent(
+                      oldUid
+                    )}`,
+                    {
+                      method: 'PATCH',
+                      headers: patchHeaders,
+                      body: JSON.stringify({ userId: String(activeUserId) }),
+                    }
+                  ).catch(() => {}),
+                  fetch(
+                    `${SUPABASE_URL}/rest/v1/favorites?userId=eq.${encodeURIComponent(
+                      oldUid
+                    )}`,
+                    {
+                      method: 'PATCH',
+                      headers: patchHeaders,
+                      body: JSON.stringify({ userId: String(activeUserId) }),
+                    }
+                  ).catch(() => {}),
+                ]);
+              }
+            }
+          }
+        } catch {
+          // ignore relink errors
         }
-      );
+        return { legacyUserId, legacyName };
+      };
 
-      if (checkTokenRes.ok) {
-        return res.status(200).json({ success: true, status: 'already_confirmed' });
-      }
+      const findAuthUserByEmailAdmin = async () => {
+        try {
+          const listRes = await fetch(
+            `${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1000`,
+            { method: 'GET', headers: adminHeaders }
+          );
+          if (!listRes.ok) return null;
+          const listData = await listRes.json().catch(() => ({}));
+          const usersArr = Array.isArray(listData && listData.users)
+            ? listData.users
+            : Array.isArray(listData)
+            ? listData
+            : [];
+          return (
+            usersArr.find(
+              (u) => u && String(u.email || '').toLowerCase().trim() === email
+            ) || null
+          );
+        } catch {
+          return null;
+        }
+      };
 
-      const tokenErrJson = await checkTokenRes.json().catch(() => ({}));
-      const tokenErrMsg = String(
-        tokenErrJson.msg ||
-          tokenErrJson.error_description ||
-          tokenErrJson.message ||
-          ''
-      ).toLowerCase();
-
-      if (!tokenErrMsg.includes('email not confirmed')) {
-        return res.status(401).json({
-          success: false,
-          status: 'wrong_password',
-          error: 'Email hoặc mật khẩu không đúng.',
+      // 1. Fast Path: Check if account already exists and password is valid right now
+      const firstSignIn = await signInViaGoTrueServer();
+      if (firstSignIn.ok && firstSignIn.session) {
+        const signedInUser = firstSignIn.session.user;
+        if (
+          isAdminEmail &&
+          signedInUser &&
+          signedInUser.id &&
+          (!signedInUser.user_metadata || signedInUser.user_metadata.role !== 'admin')
+        ) {
+          await fetch(
+            `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(signedInUser.id)}`,
+            {
+              method: 'PUT',
+              headers: adminHeaders,
+              body: JSON.stringify({
+                email_confirm: true,
+                user_metadata: {
+                  ...(signedInUser.user_metadata || {}),
+                  role: 'admin',
+                },
+              }),
+            }
+          ).catch(() => {});
+        }
+        if (signedInUser && signedInUser.id) {
+          await findAndRelinkLegacyCustomerServer(signedInUser.id);
+        }
+        return res.status(200).json({
+          success: true,
+          status: 'signed_in',
+          session: firstSignIn.session,
         });
       }
 
-      // 3. Password matched an unconfirmed user -> Confirm `email_confirm: true` via Admin API
-      const listRes = await fetch(
-        `${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=200`,
-        { method: 'GET', headers: adminHeaders }
-      );
-      if (listRes.ok) {
-        const listData = await listRes.json().catch(() => ({}));
-        const usersArr = Array.isArray(listData && listData.users)
-          ? listData.users
-          : Array.isArray(listData)
-          ? listData
-          : [];
-        const targetUser = usersArr.find(
-          (u) => u && String(u.email || '').toLowerCase().trim() === email
-        );
+      // 2. If `firstSignIn` returned "email not confirmed", the password is 100% verified!
+      if (firstSignIn.errorMsg.includes('email not confirmed')) {
+        const targetUser = await findAuthUserByEmailAdmin();
         if (targetUser && targetUser.id) {
-          const patchRes = await fetch(
+          await fetch(
             `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(targetUser.id)}`,
             {
               method: 'PUT',
@@ -535,15 +617,187 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
               }),
             }
           );
-          if (patchRes.ok) {
-            return res.status(200).json({ success: true, status: 'confirmed' });
+          const confirmedSignIn = await signInViaGoTrueServer();
+          if (confirmedSignIn.ok && confirmedSignIn.session) {
+            await findAndRelinkLegacyCustomerServer(
+              confirmedSignIn.session.user && confirmedSignIn.session.user.id
+            );
+            return res.status(200).json({
+              success: true,
+              status: 'confirmed',
+              session: confirmedSignIn.session,
+            });
           }
         }
       }
 
-      return res.status(400).json({
+      // 3. Look up migrated customer metadata (existing `userId` UUID & `fullName` from `public.orders`)
+      const legacyInfo = await findAndRelinkLegacyCustomerServer(null);
+      const effectiveName = cleanAuth.name
+        ? displayName
+        : sanitizeTextServer(legacyInfo.legacyName || displayName, 80);
+
+      const buildCreatePayload = (includeLegacyId) => ({
+        ...(includeLegacyId && legacyInfo.legacyUserId
+          ? { id: legacyInfo.legacyUserId }
+          : {}),
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          name: effectiveName,
+          full_name: effectiveName,
+          ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+          role: isAdminEmail ? 'admin' : 'customer',
+          avatar: 'capybara',
+          auth_provider: authProvider,
+        },
+      });
+
+      // 4. Attempt to create the user once with `email_confirm: true`
+      let createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify(buildCreatePayload(true)),
+      });
+
+      if (!createRes.ok && legacyInfo.legacyUserId) {
+        // Retry without forcing `id` in case the UUID was already taken
+        createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+          method: 'POST',
+          headers: adminHeaders,
+          body: JSON.stringify(buildCreatePayload(false)),
+        });
+      }
+
+      if (createRes.ok) {
+        const createdSignIn = await signInViaGoTrueServer();
+        if (createdSignIn.session && createdSignIn.session.user) {
+          await findAndRelinkLegacyCustomerServer(createdSignIn.session.user.id);
+        }
+        return res.status(200).json({
+          success: true,
+          status: 'created',
+          session: createdSignIn.session || null,
+        });
+      }
+
+      const createErrJson = await createRes.json().catch(() => ({}));
+      const createMsg = String(
+        createErrJson.msg || createErrJson.message || createErrJson.error_description || ''
+      ).toLowerCase();
+
+      const alreadyExists =
+        createRes.status === 422 ||
+        createMsg.includes('already') ||
+        createMsg.includes('exists') ||
+        createMsg.includes('registered');
+
+      if (alreadyExists) {
+        // Check if existing row in `auth.users` was never confirmed or was an OAuth-only placeholder (`TclOAuth#...`)
+        const existingUser = await findAuthUserByEmailAdmin();
+        if (existingUser && existingUser.id) {
+          const existingMeta = existingUser.user_metadata || {};
+          const existingProvider = String(existingMeta.auth_provider || '').toLowerCase();
+          const isUnconfirmed = !existingUser.email_confirmed_at;
+          const isOAuthPlaceholder =
+            (existingProvider === 'google' || existingProvider === 'facebook') &&
+            authProvider === 'password';
+
+          if (isUnconfirmed || isOAuthPlaceholder) {
+            const patchRes = await fetch(
+              `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(existingUser.id)}`,
+              {
+                method: 'PUT',
+                headers: adminHeaders,
+                body: JSON.stringify({
+                  email_confirm: true,
+                  password,
+                  user_metadata: {
+                    ...existingMeta,
+                    name: existingMeta.name || effectiveName,
+                    full_name: existingMeta.full_name || effectiveName,
+                    role: isAdminEmail ? 'admin' : 'customer',
+                    auth_provider: authProvider,
+                  },
+                }),
+              }
+            );
+            if (patchRes.ok) {
+              const patchedSignIn = await signInViaGoTrueServer();
+              if (patchedSignIn.ok && patchedSignIn.session) {
+                await findAndRelinkLegacyCustomerServer(
+                  patchedSignIn.session.user && patchedSignIn.session.user.id
+                );
+                return res.status(200).json({
+                  success: true,
+                  status: 'confirmed',
+                  session: patchedSignIn.session,
+                });
+              }
+            }
+          }
+        }
+
+        return res.status(401).json({
+          success: false,
+          status: 'wrong_password',
+          error: 'Email hoặc mật khẩu không đúng.',
+        });
+      }
+
+      // 5. Fallback when Admin API is unavailable: try public `/auth/v1/signup` + sign-in verification
+      const signupFallbackRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+        method: 'POST',
+        headers: publicAuthHeaders,
+        body: JSON.stringify({
+          email,
+          password,
+          data: {
+            name: effectiveName,
+            full_name: effectiveName,
+            ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+            role: isAdminEmail ? 'admin' : 'customer',
+            avatar: 'capybara',
+            auth_provider: authProvider,
+          },
+        }),
+      });
+
+      if (signupFallbackRes.ok) {
+        const signupJson = await signupFallbackRes.json().catch(() => ({}));
+        if (signupJson && signupJson.access_token) {
+          const fallbackSession = {
+            access_token: signupJson.access_token,
+            refresh_token: signupJson.refresh_token,
+            expires_in: signupJson.expires_in,
+            expires_at: signupJson.expires_at,
+            token_type: signupJson.token_type || 'bearer',
+            user: signupJson.user,
+          };
+          if (signupJson.user && signupJson.user.id) {
+            await findAndRelinkLegacyCustomerServer(signupJson.user.id);
+          }
+          return res.status(200).json({
+            success: true,
+            status: 'created',
+            session: fallbackSession,
+          });
+        }
+        const afterFallbackSignIn = await signInViaGoTrueServer();
+        if (afterFallbackSignIn.ok && afterFallbackSignIn.session) {
+          return res.status(200).json({
+            success: true,
+            status: 'created',
+            session: afterFallbackSignIn.session,
+          });
+        }
+      }
+
+      return res.status(401).json({
         success: false,
-        error: 'Không thể kích hoạt xác nhận email tự động.',
+        status: 'wrong_password',
+        error: 'Email hoặc mật khẩu không đúng.',
       });
       }
 

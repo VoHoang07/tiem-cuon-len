@@ -1,4 +1,9 @@
-import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
+import {
+    buildSupabasePublicHeaders,
+    supabase,
+    supabaseAnonKey,
+    supabaseUrl,
+} from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 import { Order, OrderStatus } from '@/types/order';
 import {
@@ -171,8 +176,33 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           });
         }
       } else if (user) {
-        const { data, error } = await query.eq('userId', user.id);
-        if (!error && data) {
+        const cleanUserEmail = (user.email || '').toLowerCase().trim();
+        const [byIdRes, byEmailRes] = await Promise.all([
+          query.eq('userId', user.id),
+          cleanUserEmail
+            ? supabase
+                .from('orders')
+                .select(ORDER_COLUMNS)
+                .eq('shippingAddress->>email', cleanUserEmail)
+                .order('createdAt', { ascending: false })
+                .limit(50)
+            : Promise.resolve({ data: null, error: null }),
+        ]);
+        const combinedMap = new Map<string, Order>();
+        if (!byIdRes.error && Array.isArray(byIdRes.data)) {
+          for (const row of byIdRes.data as Order[]) {
+            if (row?.id) combinedMap.set(row.id, row);
+          }
+        }
+        if (!byEmailRes.error && Array.isArray(byEmailRes.data)) {
+          for (const row of byEmailRes.data as Order[]) {
+            if (row?.id && !combinedMap.has(row.id)) {
+              combinedMap.set(row.id, row);
+            }
+          }
+        }
+        if (!byIdRes.error || !byEmailRes.error) {
+          const data = [...combinedMap.values()];
           // Merge remote orders with only brand-new in-flight local orders (< 10s old)
           // so orders deleted by Admin on the server are also removed on the client
           setOrders((prev) => {
@@ -181,7 +211,11 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             const now = Date.now();
             const localInFlight = prev.filter(
               (o) =>
-                o.userId === user.id &&
+                (o.userId === user.id ||
+                  (cleanUserEmail &&
+                    String(o.shippingAddress?.email || '')
+                      .toLowerCase()
+                      .trim() === cleanUserEmail)) &&
                 !deletedOrderIdsRef.current.has(o.id) &&
                 !remoteIds.has(o.id) &&
                 now - new Date(o.createdAt).getTime() < 10000
@@ -289,12 +323,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       if (error && supabaseUrl && supabaseAnonKey) {
         await fetch(`${supabaseUrl}/rest/v1/orders?on_conflict=id`, {
           method: 'POST',
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
+          headers: buildSupabasePublicHeaders(null, {
             'Content-Type': 'application/json',
             Prefer: 'resolution=merge-duplicates,return=minimal',
-          },
+          }),
           body: JSON.stringify(compactOrder),
         });
       }
@@ -303,12 +335,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         try {
           await fetch(`${supabaseUrl}/rest/v1/orders?on_conflict=id`, {
             method: 'POST',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
+            headers: buildSupabasePublicHeaders(null, {
               'Content-Type': 'application/json',
               Prefer: 'resolution=merge-duplicates,return=minimal',
-            },
+            }),
             body: JSON.stringify(compactOrder),
           });
         } catch {
@@ -364,12 +394,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       if (error && supabaseUrl && supabaseAnonKey) {
         await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
           method: 'PATCH',
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
+          headers: buildSupabasePublicHeaders(null, {
             'Content-Type': 'application/json',
             Prefer: 'return=minimal',
-          },
+          }),
           body: JSON.stringify({ status }),
         });
       }
@@ -461,8 +489,24 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
 
   const getOrdersByUser = useCallback(
-    (userId: string) => orders.filter((o) => o.userId === userId),
-    [orders]
+    (userId: string) => {
+      const cleanEmail = (user?.email || '').toLowerCase().trim();
+      return orders.filter((o) => {
+        if (o.userId === userId) return true;
+        if (
+          user &&
+          userId === user.id &&
+          cleanEmail &&
+          String(o.shippingAddress?.email || '')
+            .toLowerCase()
+            .trim() === cleanEmail
+        ) {
+          return true;
+        }
+        return false;
+      });
+    },
+    [orders, user]
   );
 
   const deleteOrder = useCallback(async (orderId: string) => {

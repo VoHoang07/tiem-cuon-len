@@ -1,6 +1,7 @@
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
+  buildSupabaseServiceHeaders,
   sanitizeTextServer,
   stripUnknownFieldsServer,
   verifyCsrfRequest,
@@ -54,10 +55,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     const orderRes = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*`,
       {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(authUser.accessToken),
       }
     );
     const rows = orderRes.ok ? await orderRes.json() : [];
@@ -560,12 +558,10 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
 
     const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+      headers: buildSupabaseServiceHeaders(authUser.accessToken, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal',
-      },
+      }),
       body: JSON.stringify(finalOrder),
     });
 
@@ -606,10 +602,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     const orderRes = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*`,
       {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${(authUser && authUser.accessToken) || SUPABASE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(authUser && authUser.accessToken),
       }
     );
     const rows = orderRes.ok ? await orderRes.json() : [];
@@ -649,12 +642,10 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`,
       {
         method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${(authUser && authUser.accessToken) || SUPABASE_KEY}`,
+        headers: buildSupabaseServiceHeaders(authUser && authUser.accessToken, {
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
-        },
+        }),
         body: JSON.stringify({ shippingAddress: updatedAddr }),
       }
     );
@@ -690,10 +681,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     const orderRes = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*`,
       {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(authUser.accessToken),
       }
     );
     const rows = orderRes.ok ? await orderRes.json() : [];
@@ -766,12 +754,10 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
 
     await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
       method: 'PATCH',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
+      headers: buildSupabaseServiceHeaders(authUser.accessToken, {
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
-      },
+      }),
       body: JSON.stringify(updatePayload),
     });
 
@@ -844,10 +830,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     const orderRes = await fetch(
       `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=id,userId`,
       {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(authUser.accessToken),
       }
     );
     const rows = orderRes.ok ? await orderRes.json() : [];
@@ -865,10 +848,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
 
     await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
       method: 'DELETE',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${authUser.accessToken || SUPABASE_KEY}`,
-      },
+      headers: buildSupabaseServiceHeaders(authUser.accessToken),
     });
 
     return res.status(200).json({ success: true, deletedId: orderId });

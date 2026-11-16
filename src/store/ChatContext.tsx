@@ -1,4 +1,9 @@
-import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
+import {
+    buildSupabasePublicHeaders,
+    supabase,
+    supabaseAnonKey,
+    supabaseUrl,
+} from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 import {
     ChatConversation,
@@ -362,10 +367,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const res = await fetch(
         `${supabaseUrl}/rest/v1/addresses?fullName=eq.${CHAT_PARTITION_KEY}${convFilter}&select=id,fullName,city,phone,district,ward,detailAddress`,
         {
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
+          headers: buildSupabasePublicHeaders(),
         }
       );
       if (!res.ok) return;
@@ -420,12 +422,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     try {
       await fetch(`${supabaseUrl}/rest/v1/addresses`, {
         method: 'POST',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
+        headers: buildSupabasePublicHeaders(null, {
           'Content-Type': 'application/json',
           Prefer: 'resolution=merge-duplicates',
-        },
+        }),
         body: JSON.stringify(chatMessageToRow(msg)),
       });
     } catch {
@@ -442,11 +442,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           msgs.map((m) =>
             fetch(`${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(m.id)}`, {
               method: 'PATCH',
-              headers: {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
+              headers: buildSupabasePublicHeaders(null, {
                 'Content-Type': 'application/json',
-              },
+              }),
               body: JSON.stringify({
                 ward: `${m.readByAdmin ? '1' : '0'}|${m.readByCustomer ? '1' : '0'}`,
               }),
@@ -812,7 +810,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
 
       // Authenticate with Admin JWT token so Supabase RLS (`is_shop_admin()`) permits DELETE
-      let adminToken = supabaseAnonKey || '';
+      let adminToken = '';
       try {
         if (supabase) {
           const { data } = await supabase.auth.getSession();
@@ -832,10 +830,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             )}`,
             {
               method: 'DELETE',
-              headers: {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${adminToken}`,
-              },
+              headers: buildSupabasePublicHeaders(adminToken),
             }
           );
         } catch {
@@ -877,7 +872,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return next;
       });
 
-      let adminToken = supabaseAnonKey || '';
+      let adminToken = '';
       try {
         if (supabase) {
           const { data } = await supabase.auth.getSession();
@@ -897,10 +892,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             )}`,
             {
               method: 'DELETE',
-              headers: {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${adminToken}`,
-              },
+              headers: buildSupabasePublicHeaders(adminToken),
             }
           );
         } catch {

@@ -1,5 +1,10 @@
 import { MOCK_PRODUCTS } from '@/data/products';
-import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
+import {
+    buildSupabasePublicHeaders,
+    supabase,
+    supabaseAnonKey,
+    supabaseUrl,
+} from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 import { Product, Review, ShopCategoryItem } from '@/types/product';
 import { uploadImageToCloudMedia } from '@/utils/fileUploadGuard';
@@ -494,12 +499,10 @@ async function syncDeletedIdsToSupabase(ids: Set<string>): Promise<void> {
     const bearer = await getSupabaseAuthBearer();
     const res = await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${bearer}`,
+      headers: buildSupabasePublicHeaders(bearer, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
-      },
+      }),
       body: JSON.stringify(payload),
     });
     if (res.ok) return;
@@ -509,12 +512,10 @@ async function syncDeletedIdsToSupabase(ids: Set<string>): Promise<void> {
   try {
     await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+      headers: buildSupabasePublicHeaders(null, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
-      },
+      }),
       body: JSON.stringify(payload),
     });
   } catch {
@@ -529,10 +530,7 @@ async function fetchRemoteDeletedIds(): Promise<string[]> {
       `${supabaseUrl}/rest/v1/addresses?id=eq.${DELETED_PRODUCTS_ROW_ID}&select=detailAddress`,
       {
         cache: 'no-store',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
+        headers: buildSupabasePublicHeaders(),
       }
     );
     if (!res.ok) return [];
@@ -927,12 +925,10 @@ async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>
       const bearer = await getSupabaseAuthBearer();
       const res = await fetch(`${supabaseUrl}/rest/v1/products?on_conflict=id`, {
         method: 'POST',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${bearer}`,
+        headers: buildSupabasePublicHeaders(bearer, {
           'Content-Type': 'application/json',
           Prefer: 'resolution=merge-duplicates',
-        },
+        }),
         body: JSON.stringify(dbProduct),
       });
       if (res.ok) productsTableOk = true;
@@ -967,12 +963,10 @@ async function upsertProductToSupabase(dbProduct: ReturnType<typeof toDbProduct>
       const bearer = await getSupabaseAuthBearer();
       const rRes = await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
         method: 'POST',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${bearer}`,
+        headers: buildSupabasePublicHeaders(bearer, {
           'Content-Type': 'application/json',
           Prefer: 'resolution=merge-duplicates',
-        },
+        }),
         body: JSON.stringify(rescuePayload),
       });
       if (rRes.ok) return true;
@@ -1000,20 +994,14 @@ async function deleteProductFromSupabase(id: string): Promise<void> {
           `${supabaseUrl}/rest/v1/products?id=eq.${encodeURIComponent(id)}`,
           {
             method: 'DELETE',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${bearer}`,
-            },
+            headers: buildSupabasePublicHeaders(bearer),
           }
         ),
         fetch(
           `${supabaseUrl}/rest/v1/addresses?id=eq.${encodeURIComponent(`tcl_rescue_${id}`)}`,
           {
             method: 'DELETE',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${bearer}`,
-            },
+            headers: buildSupabasePublicHeaders(bearer),
           }
         ),
       ]);
@@ -1118,12 +1106,10 @@ async function syncShopCategoriesToSupabase(list: ShopCategoryItem[]): Promise<v
     const bearer = await getSupabaseAuthBearer();
     const res = await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${bearer}`,
+      headers: buildSupabasePublicHeaders(bearer, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
-      },
+      }),
       body: JSON.stringify(payload),
     });
     if (res.ok) return;
@@ -1133,12 +1119,10 @@ async function syncShopCategoriesToSupabase(list: ShopCategoryItem[]): Promise<v
   try {
     await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+      headers: buildSupabasePublicHeaders(null, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
-      },
+      }),
       body: JSON.stringify(payload),
     });
   } catch {
@@ -1153,10 +1137,7 @@ async function fetchRemoteShopCategories(): Promise<ShopCategoryItem[] | null> {
       `${supabaseUrl}/rest/v1/addresses?id=eq.${SHOP_CATEGORIES_ROW_ID}&select=detailAddress`,
       {
         cache: 'no-store',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
+        headers: buildSupabasePublicHeaders(),
       }
     );
     if (!res.ok) return null;
@@ -1264,12 +1245,10 @@ async function pushRescuedProductToSupabase(product: Product): Promise<void> {
   try {
     await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+      headers: buildSupabasePublicHeaders(null, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
-      },
+      }),
       body: JSON.stringify(payload),
     });
   } catch {
@@ -1287,10 +1266,7 @@ async function fetchRemoteRescuedProducts(): Promise<
       `${supabaseUrl}/rest/v1/addresses?phone=eq.${RESCUE_PRODUCT_PHONE_TAG}&select=id,ward`,
       {
         cache: 'no-store',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
+        headers: buildSupabasePublicHeaders(),
       }
     );
     if (!listRes.ok) return [];
@@ -1315,10 +1291,7 @@ async function fetchRemoteRescuedProducts(): Promise<
           )}&select=id,ward,detailAddress`,
           {
             cache: 'no-store',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
-            },
+            headers: buildSupabasePublicHeaders(),
           }
         );
         if (!detailRes.ok) continue;
@@ -1542,12 +1515,10 @@ async function syncShopReviewsToSupabase(list: Review[]): Promise<void> {
   try {
     await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
+      headers: buildSupabasePublicHeaders(null, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
-      },
+      }),
       body: JSON.stringify(payload),
     });
   } catch {
@@ -1562,10 +1533,7 @@ async function fetchRemoteShopReviews(): Promise<Review[] | null> {
       `${supabaseUrl}/rest/v1/addresses?id=eq.${SHOP_REVIEWS_ROW_ID}&select=detailAddress`,
       {
         cache: 'no-store',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
+        headers: buildSupabasePublicHeaders(),
       }
     );
     if (!res.ok) return null;
@@ -1787,10 +1755,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                 singleCoverId
               )}`,
               {
-                headers: {
-                  apikey: supabaseAnonKey,
-                  Authorization: `Bearer ${supabaseAnonKey}`,
-                },
+                headers: buildSupabasePublicHeaders(),
               }
             );
             if (sRes.ok) {
@@ -1846,10 +1811,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
                   singleId
                 )}`,
                 {
-                  headers: {
-                    apikey: supabaseAnonKey,
-                    Authorization: `Bearer ${supabaseAnonKey}`,
-                  },
+                  headers: buildSupabasePublicHeaders(),
                 }
               );
               if (res.ok) {
@@ -1934,10 +1896,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           const endpoint = `${supabaseUrl}/rest/v1/products?select=${METADATA_COLUMNS}&order=createdAt.desc&offset=${from}&limit=${PAGE_SIZE}`;
           const res = await fetch(endpoint, {
             cache: 'no-store',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
-            },
+            headers: buildSupabasePublicHeaders(),
             signal: controller?.signal,
           });
           if (res.ok) {
@@ -2229,10 +2188,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
               cleanId
             )}`,
             {
-              headers: {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-              },
+              headers: buildSupabasePublicHeaders(),
             }
           );
           if (res.ok) {

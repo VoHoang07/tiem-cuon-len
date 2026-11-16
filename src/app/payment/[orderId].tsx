@@ -1,6 +1,11 @@
 import { getOrderStatusLabel } from '@/constants/orderStatus';
 import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
-import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
+import {
+    buildSupabasePublicHeaders,
+    supabase,
+    supabaseAnonKey,
+    supabaseUrl,
+} from '@/services/supabase';
 import { useAuth } from '@/store/AuthContext';
 import { useOrders } from '@/store/OrderContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
@@ -302,10 +307,7 @@ export default function PaymentScreen() {
         String(paramOrderId)
       )}&select=id,userId,items,total,status,paymentMethod,shippingAddress,createdAt&limit=1`,
       {
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
+        headers: buildSupabasePublicHeaders(),
       }
     )
       .then((r) => (r.ok ? r.json() : []))
@@ -402,10 +404,7 @@ export default function PaymentScreen() {
           order.id
         )}&select=id,status`,
         {
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
+          headers: buildSupabasePublicHeaders(),
         }
       );
       if (!res.ok) return;

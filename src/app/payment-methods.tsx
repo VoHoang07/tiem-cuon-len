@@ -34,7 +34,11 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/store/AuthContext';
 import { usePaymentMethods } from '@/store/PaymentMethodsContext';
-import { supabaseUrl, supabaseAnonKey } from '@/services/supabase';
+import {
+    buildSupabasePublicHeaders,
+    supabaseAnonKey,
+    supabaseUrl,
+} from '@/services/supabase';
 import { type PaymentMethod, type PaymentMethodType } from '@/types/payment-method';
 import { COLORS, SPACING, SHADOWS } from '@/constants/theme';
 import { formatVND } from '@/utils/formatCurrency';
@@ -115,10 +119,7 @@ export default function PaymentMethodsScreen() {
       const res = await fetch(
         `${supabaseUrl}/rest/v1/addresses?fullName=eq.${SEPAY_LOG_PARTITION}&select=*&limit=10`,
         {
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
+          headers: buildSupabasePublicHeaders(),
         }
       );
       if (!res.ok) return;

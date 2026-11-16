@@ -1,4 +1,9 @@
-import { supabase, supabaseAnonKey, supabaseUrl } from '@/services/supabase';
+import {
+    buildSupabasePublicHeaders,
+    supabase,
+    supabaseAnonKey,
+    supabaseUrl,
+} from '@/services/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -196,7 +201,12 @@ async function provisionConfirmedUserOnServer(params: {
   name?: string;
   avatarUrl?: string;
   authProvider?: string;
-}): Promise<{ ok: boolean; status?: string; error?: string }> {
+}): Promise<{
+  ok: boolean;
+  status?: string;
+  error?: string;
+  session?: Session | null;
+}> {
   try {
     const endpoint =
       typeof window !== 'undefined'
@@ -216,11 +226,15 @@ async function provisionConfirmedUserOnServer(params: {
     });
     const json = await res.json().catch(() => ({}));
     if (res.ok && json?.success) {
-      return { ok: true, status: json.status };
+      return {
+        ok: true,
+        status: json.status,
+        session: (json.session as Session) || null,
+      };
     }
-    return { ok: false, status: json?.status, error: json?.error };
+    return { ok: false, status: json?.status, error: json?.error, session: null };
   } catch {
-    return { ok: false };
+    return { ok: false, session: null };
   }
 }
 
@@ -325,10 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const res = await fetch(
           `${supabaseUrl}/rest/v1/addresses?id=eq.tcl_oauth_config_v1&select=detailAddress&limit=1`,
           {
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
-            },
+            headers: buildSupabasePublicHeaders(),
           }
         );
         if (res.ok && active) {
@@ -386,12 +397,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (supabaseUrl && supabaseAnonKey) {
           await fetch(`${supabaseUrl}/rest/v1/addresses?on_conflict=id`, {
             method: 'POST',
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
+            headers: buildSupabasePublicHeaders(null, {
               'Content-Type': 'application/json',
               Prefer: 'resolution=merge-duplicates,return=minimal',
-            },
+            }),
             body: JSON.stringify({
               id: 'tcl_oauth_config_v1',
               userId: '00000000-0000-0000-0000-000000000000',
@@ -497,6 +506,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState(0);
 
+  const applyProvisionedSession = useCallback(
+    async (serverSession: Session): Promise<AuthUser | null> => {
+      if (!serverSession?.user) return null;
+      if (serverSession.access_token && serverSession.refresh_token) {
+        await Promise.race([
+          supabase.auth
+            .setSession({
+              access_token: serverSession.access_token,
+              refresh_token: serverSession.refresh_token,
+            })
+            .catch(() => null),
+          new Promise((r) => setTimeout(r, 1500)),
+        ]);
+      }
+      const localAvatar = await AsyncStorage.getItem(
+        `${AVATAR_STORAGE_PREFIX}${serverSession.user.id}`
+      ).catch(() => null);
+      const resolved = toAuthUser(serverSession, localAvatar);
+      if (resolved) {
+        setUser(resolved);
+        saveCachedAuthUser(resolved);
+      }
+      return resolved;
+    },
+    []
+  );
+
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     if (configError) {
       return { success: false, error: configError };
@@ -534,35 +570,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (__DEV__) console.log('[LOGIN ERROR]', error);
         const errMsg = String(error.message || '').toLowerCase();
 
-        // If Supabase GoTrue is temporarily timing out on Free Tier, allow non-admin customers with valid email + password (>=6 chars) to sign in immediately
-        if (
-          errMsg.includes('__auth_timeout__') &&
-          password.length >= 6 &&
-          !ADMIN_EMAILS.has(cleanEmail)
-        ) {
-          const fallbackCustomer: AuthUser = {
-            id: `local_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
-            email: cleanEmail,
-            name: cleanEmail.split('@')[0] || 'Khách hàng',
-            role: 'customer',
-            avatar: 'capybara',
-            authProvider: 'password',
-          };
-          setUser(fallbackCustomer);
-          saveCachedAuthUser(fallbackCustomer);
-          return { success: true };
-        }
-
-        // Seamless migration & auto-confirmation for fresh Supabase projects
-        // (even when GoTrue `mailer_autoconfirm` is OFF by default):
-        // - If account doesn't exist yet -> Server creates it ONCE with `email_confirm: true`
-        // - If account exists but was unconfirmed -> Server verifies the exact password first and sets `email_confirm: true`
-        // - If account exists with a different password -> Server strictly rejects (`wrong_password`)!
-        if (
-          (errMsg.includes('invalid login credentials') ||
-            errMsg.includes('email not confirmed')) &&
-          password.length >= 6
-        ) {
+        // Seamless migration & auto-confirmation for fresh Supabase projects:
+        // - Always consult `/api/security-audit` (`action: 'provision_auth_user'`) when client login fails
+        // - Server verifies credentials, creates/confirms migrated Admin & Customer accounts with `email_confirm: true`,
+        //   relinks historical `public.orders` / `public.addresses` by email, and returns a live `session` directly!
+        if (password.length >= 6) {
           const isAdminEmail = ADMIN_EMAILS.has(cleanEmail);
           const defaultName = isAdminEmail
             ? 'Quản trị viên'
@@ -576,6 +588,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
 
           if (prov.ok) {
+            if (prov.session?.access_token) {
+              setFailedAttempts(0);
+              await applyProvisionedSession(prov.session);
+              return { success: true };
+            }
             const { data: retryData, error: retryErr } =
               await supabase.auth.signInWithPassword({
                 email: cleanEmail,
@@ -634,6 +651,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 authProvider: 'password',
               });
               if (confirmProv.ok) {
+                if (confirmProv.session?.access_token) {
+                  setFailedAttempts(0);
+                  await applyProvisionedSession(confirmProv.session);
+                  return { success: true };
+                }
                 const { data: confirmedSignIn } =
                   await supabase.auth.signInWithPassword({
                     email: cleanEmail,
@@ -652,6 +674,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }
           }
+        }
+
+        // If Supabase GoTrue is temporarily timing out on Free Tier, allow non-admin customers with valid email + password (>=6 chars) to sign in immediately
+        if (
+          errMsg.includes('__auth_timeout__') &&
+          password.length >= 6 &&
+          !ADMIN_EMAILS.has(cleanEmail)
+        ) {
+          const fallbackCustomer: AuthUser = {
+            id: `local_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+            email: cleanEmail,
+            name: cleanEmail.split('@')[0] || 'Khách hàng',
+            role: 'customer',
+            avatar: 'capybara',
+            authProvider: 'password',
+          };
+          setUser(fallbackCustomer);
+          saveCachedAuthUser(fallbackCustomer);
+          return { success: true };
         }
 
         const nextFailed = failedAttempts + 1;
@@ -674,7 +715,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (__DEV__) console.log('[LOGIN ERROR]', err);
       return { success: false, error: NETWORK_ERROR_MSG };
     }
-  }, [configError, failedAttempts, lockoutUntil]);
+  }, [configError, failedAttempts, lockoutUntil, applyProvisionedSession]);
 
   const register = useCallback(async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     if (configError) {
@@ -697,7 +738,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: safeName,
         authProvider: 'password',
       });
-      if (prov.ok && prov.status === 'created') {
+      if (prov.ok) {
+        if (prov.session?.access_token) {
+          await applyProvisionedSession(prov.session);
+          return { success: true };
+        }
         const { data: signInData } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password,
@@ -746,20 +791,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(resolved);
         saveCachedAuthUser(resolved);
       } else if (data.user) {
-        await provisionConfirmedUserOnServer({
+        const confirmProv = await provisionConfirmedUserOnServer({
           email: cleanEmail,
           password,
           name: safeName,
           authProvider: 'password',
         });
-        const { data: signInData } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
-        if (signInData.session) {
-          const resolved = toAuthUser(signInData.session);
-          setUser(resolved);
-          saveCachedAuthUser(resolved);
+        if (confirmProv.ok && confirmProv.session?.access_token) {
+          await applyProvisionedSession(confirmProv.session);
+        } else {
+          const { data: signInData } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          });
+          if (signInData.session) {
+            const resolved = toAuthUser(signInData.session);
+            setUser(resolved);
+            saveCachedAuthUser(resolved);
+          }
         }
       }
       return { success: true };
@@ -777,7 +826,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveCachedAuthUser(fallbackUser);
       return { success: true };
     }
-  }, [configError, lockoutUntil]);
+  }, [configError, lockoutUntil, applyProvisionedSession]);
 
   const logout = useCallback(async () => {
     // 1. Immediately clear user state and purge local storage tokens so mobile browsers never get stuck
@@ -1070,13 +1119,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return;
             }
 
-            await provisionConfirmedUserOnServer({
+            const oauthProv = await provisionConfirmedUserOnServer({
               email: verifiedEmail,
               password: oauthSecret,
               name: verifiedName,
               avatarUrl: verifiedPicture,
               authProvider: provider,
             });
+
+            if (oauthProv.ok && oauthProv.session?.access_token) {
+              await supabase.auth
+                .setSession({
+                  access_token: oauthProv.session.access_token,
+                  refresh_token: oauthProv.session.refresh_token || '',
+                })
+                .catch(() => null);
+              const resolved: AuthUser = {
+                id: oauthProv.session.user.id,
+                email: verifiedEmail,
+                name: verifiedName,
+                role: isAdminEmail ? 'admin' : 'customer',
+                avatar: 'capybara',
+                avatarUrl: verifiedPicture,
+                authProvider: provider,
+                isVerifiedRealAccount: true,
+              };
+              setUser(resolved);
+              saveCachedAuthUser(resolved);
+              return;
+            }
 
             const { data: retrySignIn, error: retrySignErr } =
               await supabase.auth.signInWithPassword({

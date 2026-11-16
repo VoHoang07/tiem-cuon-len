@@ -684,10 +684,7 @@ async function resolveAuthoritativeProductPrices(baseIds) {
       `${SUPABASE_URL}/rest/v1/products?id=in.(${idFilter})&select=id,price,name&limit=200`,
       {
         method: 'GET',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(),
       }
     );
     const baseRows = baseRes.ok ? await baseRes.json() : [];
@@ -762,10 +759,7 @@ async function resolveAuthoritativeProductPrices(baseIds) {
             )}&select=id,price,tags&limit=1`,
             {
               method: 'GET',
-              headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: `Bearer ${SUPABASE_KEY}`,
-              },
+              headers: buildSupabaseServiceHeaders(),
             }
           ),
           fetch(
@@ -774,10 +768,7 @@ async function resolveAuthoritativeProductPrices(baseIds) {
             )}&ward=eq.ADMIN_SYNC&select=id,detailAddress&limit=1`,
             {
               method: 'GET',
-              headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: `Bearer ${SUPABASE_KEY}`,
-              },
+              headers: buildSupabaseServiceHeaders(),
             }
           ),
         ]);
@@ -823,10 +814,7 @@ async function resolveAuthoritativeShippingConfig() {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/addresses?id=eq.tcl_shipping_config_v3&select=detailAddress&limit=1`,
       {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
+        headers: buildSupabaseServiceHeaders(),
       }
     );
     if (res.ok) {
