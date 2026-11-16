@@ -386,72 +386,86 @@ export default function OrdersScreen() {
                   <View
                     style={{
                       width: '100%',
-                      backgroundColor: '#F0FDF4',
+                      backgroundColor: '#F8FAFC',
                       borderWidth: 1,
-                      borderColor: '#86EFAC',
-                      borderRadius: 10,
-                      paddingHorizontal: 10,
-                      paddingVertical: 8,
-                      gap: 4,
+                      borderColor: '#BBF7D0',
+                      borderRadius: 12,
+                      paddingHorizontal: 11,
+                      paddingVertical: 9,
+                      gap: 7,
                     }}>
+                    {/* Top Row: Carrier + Waybill (Never overflows right border) */}
                     <View
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: 6,
+                        gap: 8,
                       }}>
                       <View
                         style={{
                           flexDirection: 'row',
                           alignItems: 'center',
-                          gap: 5,
+                          gap: 6,
+                          flex: 1,
+                          minWidth: 0,
                         }}>
-                        <Truck size={13} color="#15803D" />
+                        <View
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 6,
+                            backgroundColor: '#DCFCE7',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                          <Truck size={12} color="#15803D" />
+                        </View>
                         <Text
                           style={{
+                            flex: 1,
                             fontSize: 12,
-                            fontWeight: '900',
-                            color: '#14532D',
-                          }}>
+                            fontWeight: '800',
+                            color: '#1E293B',
+                          }}
+                          numberOfLines={1}>
                           {carrier || 'SPX Express'}
                           {trackingCode
-                            ? ` • Mã vận đơn: ${trackingCode}`
-                            : ' • Đã hoàn tất đan (100%) & Đang bàn giao ship'}
+                            ? ` • ${trackingCode}`
+                            : ' • Đang vận chuyển'}
                         </Text>
                       </View>
                       <Text
                         style={{
-                          fontSize: 10.5,
-                          fontWeight: '800',
-                          color: '#16A34A',
+                          fontSize: 11,
+                          fontWeight: '700',
+                          color: '#15803D',
                         }}>
-                        Xem bản đồ & trạm →
+                        Bản đồ ›
                       </Text>
                     </View>
 
-                    {/* Compact Mobile Shopee Route Track Strip on Order Card */}
+                    {/* Compact Mobile Shopee Route Track Strip */}
                     <View
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        gap: 6,
-                        paddingVertical: 3,
+                        gap: 8,
+                        paddingVertical: 2,
                       }}>
                       <Text
                         style={{
                           fontSize: 10.5,
-                          fontWeight: '800',
-                          color: '#78350F',
+                          fontWeight: '700',
+                          color: '#64748B',
                         }}>
-                        📍 Thủ Đức
+                        Kho Thủ Đức
                       </Text>
                       <View
                         style={{
                           flex: 1,
-                          height: 5,
-                          backgroundColor: '#D1FAE5',
+                          height: 4,
+                          backgroundColor: '#E2E8F0',
                           borderRadius: 999,
                           position: 'relative',
                           justifyContent: 'center',
@@ -459,7 +473,7 @@ export default function OrdersScreen() {
                         <View
                           style={{
                             width:
-                              item.status === 'Hoàn thành' ? '100%' : '58%',
+                              item.status === 'Hoàn thành' ? '100%' : '55%',
                             height: '100%',
                             backgroundColor: '#16A34A',
                             borderRadius: 999,
@@ -468,17 +482,17 @@ export default function OrdersScreen() {
                         <View
                           style={{
                             position: 'absolute',
-                            left: item.status === 'Hoàn thành' ? '92%' : '54%',
+                            left: item.status === 'Hoàn thành' ? '90%' : '50%',
                             width: 18,
                             height: 18,
                             borderRadius: 9,
-                            backgroundColor: '#15803D',
+                            backgroundColor: '#16A34A',
                             borderWidth: 1.5,
                             borderColor: '#FFFFFF',
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}>
-                          <Truck size={10} color="#FFFFFF" />
+                          <Truck size={9.5} color="#FFFFFF" />
                         </View>
                       </View>
                       <Text
@@ -486,30 +500,29 @@ export default function OrdersScreen() {
                           fontSize: 10.5,
                           fontWeight: '800',
                           color: '#14532D',
-                          maxWidth: 120,
+                          maxWidth: 110,
                         }}
                         numberOfLines={1}>
-                        🏠{' '}
                         {item.shippingAddress?.district ||
                           item.shippingAddress?.city ||
                           'Điểm nhận'}
                       </Text>
                     </View>
 
+                    {/* Single-Line Clean Current Checkpoint */}
                     <Text
                       style={{
                         fontSize: 11.5,
-                        fontWeight: '700',
-                        color: '#166534',
-                        lineHeight: 16,
+                        fontWeight: '600',
+                        color: '#334155',
                       }}
-                      numberOfLines={2}>
-                      📍 Đơn hàng đang ở đâu:{' '}
-                      {item.shippingAddress?.goshipHistory?.[0]?.description ||
-                        item.shippingAddress?.goshipStatusText ||
+                      numberOfLines={1}>
+                      📍{' '}
+                      {item.shippingAddress?.goshipStatusText ||
+                        item.shippingAddress?.goshipHistory?.[0]?.description ||
                         (item.status === 'Hoàn thành'
-                          ? 'Giao hàng thành công — Khách đã nhận hàng'
-                          : `Đang vận chuyển tới ${[
+                          ? 'Đã giao hàng thành công'
+                          : `Đang giao tới ${[
                               item.shippingAddress?.district,
                               item.shippingAddress?.city,
                             ]
@@ -720,18 +733,18 @@ export default function OrdersScreen() {
         <View style={{ width: isMobile ? 38 : 80 }} />
         </View>
 
-        {/* GUEST PUBLIC LOOKUP CARD (Only shown when NOT logged in; logged-in users see all orders immediately!) */}
+        {/* GUEST PUBLIC LOOKUP CARD (Compact, Single-Row Search Bar for Mobile) */}
         {!isAuthenticated && (
         <View
           style={{
             marginHorizontal: isMobile ? 12 : 20,
-            marginBottom: 12,
+            marginBottom: 10,
             backgroundColor: '#FFFDF9',
-            borderWidth: 1.5,
-            borderColor: '#DFCBB5',
-            borderRadius: 18,
-            padding: 14,
-            gap: 10,
+            borderWidth: 1,
+            borderColor: '#E5D5C3',
+            borderRadius: 16,
+            padding: 12,
+            gap: 8,
             ...SHADOWS.small,
           }}>
           <View
@@ -739,18 +752,17 @@ export default function OrdersScreen() {
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
-              flexWrap: 'wrap',
               gap: 8,
             }}>
             <Text
               style={{
-                fontSize: 14,
-                fontWeight: '900',
+                fontSize: 13,
+                fontWeight: '800',
                 color: '#3D2B1F',
                 flex: 1,
-                minWidth: 180,
-              }}>
-              🔍 Nhập Số điện thoại nhận hàng hoặc Mã đơn để xem ngay:
+              }}
+              numberOfLines={1}>
+              Tra cứu nhanh bằng SĐT hoặc Mã đơn
             </Text>
             <TouchableOpacity
               onPress={() =>
@@ -763,22 +775,20 @@ export default function OrdersScreen() {
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 5,
+                gap: 4,
                 backgroundColor: '#F3ECE2',
-                borderWidth: 1,
-                borderColor: '#D8C3AD',
-                paddingHorizontal: 10,
-                paddingVertical: 5,
+                paddingHorizontal: 9,
+                paddingVertical: 4,
                 borderRadius: 999,
               }}>
-              <LogIn size={13} color="#3D2B1F" />
+              <LogIn size={11.5} color="#3D2B1F" />
               <Text
                 style={{
-                  fontSize: 11.5,
+                  fontSize: 11,
                   fontWeight: '800',
                   color: '#3D2B1F',
                 }}>
-                Đăng nhập để tự hiện mọi đơn
+                Đăng nhập
               </Text>
             </TouchableOpacity>
           </View>
@@ -786,24 +796,24 @@ export default function OrdersScreen() {
           <View
             style={{
               flexDirection: 'row',
-              flexWrap: 'wrap',
+              alignItems: 'center',
               gap: 8,
             }}>
             <View
               style={{
                 flex: 1,
-                minWidth: 200,
+                minWidth: 0,
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 8,
+                gap: 7,
                 backgroundColor: '#FAF6F0',
                 borderWidth: 1,
                 borderColor: '#DCCAB8',
-                borderRadius: 12,
-                paddingHorizontal: 12,
+                borderRadius: 11,
+                paddingHorizontal: 11,
                 paddingVertical: 8,
               }}>
-              <Search size={16} color={COLORS.mediumText} />
+              <Search size={15} color={COLORS.mediumText} />
               <TextInput
                 style={{
                   flex: 1,
@@ -811,7 +821,7 @@ export default function OrdersScreen() {
                   fontSize: 16,
                   color: COLORS.darkText,
                 }}
-                placeholder="VD: 0901234567 hoặc CUONLEN-..."
+                placeholder="Nhập SĐT (10 số) hoặc Mã đơn..."
                 placeholderTextColor={COLORS.lightText}
                 value={guestLookupQuery}
                 onChangeText={(txt) => {
@@ -829,26 +839,26 @@ export default function OrdersScreen() {
               activeOpacity={0.85}
               style={{
                 backgroundColor: '#3D2B1F',
-                paddingHorizontal: 18,
-                paddingVertical: 11,
-                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                borderRadius: 11,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 6,
+                gap: 5,
               }}>
               {guestLoading ? (
                 <ActivityIndicator size="small" color="#FFFDF9" />
               ) : (
-                <Truck size={15} color="#FFFDF9" />
+                <Search size={14} color="#FFFDF9" />
               )}
               <Text
                 style={{
-                  fontSize: 13,
-                  fontWeight: '900',
+                  fontSize: 12.5,
+                  fontWeight: '800',
                   color: '#FFFDF9',
                 }}>
-                Tra cứu đơn
+                Tìm
               </Text>
             </TouchableOpacity>
           </View>
@@ -856,7 +866,7 @@ export default function OrdersScreen() {
           {guestError ? (
             <Text
               style={{
-                fontSize: 12,
+                fontSize: 11.5,
                 fontWeight: '700',
                 color: '#B91C1C',
               }}>
@@ -865,11 +875,11 @@ export default function OrdersScreen() {
           ) : (
             <Text
               style={{
-                fontSize: 11.5,
-                color: '#6E5643',
-                lineHeight: 16,
-              }}>
-              🧶 Vì sản phẩm đan mới thủ công tỉ mỉ trong 5–6 ngày, bạn có thể vào kiểm tra tiến độ xưởng đan & hành trình bưu cục SPX bất cứ lúc nào (số nhà chi tiết được tự động ẩn bảo mật khi chưa đăng nhập).
+                fontSize: 11,
+                color: '#7A6555',
+              }}
+              numberOfLines={1}>
+              ✨ Gõ đủ 10 số SĐT sẽ tự động hiện đơn & vị trí bưu cục SPX
             </Text>
           )}
         </View>

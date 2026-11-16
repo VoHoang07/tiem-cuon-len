@@ -282,6 +282,7 @@ export function ShopChatWidget() {
     normalizedRoute === 'cart' ||
     normalizedRoute === 'add-product' ||
     normalizedRoute === 'payment-methods' ||
+    normalizedRoute.startsWith('orders/') ||
     normalizedRoute.startsWith('payment/') ||
     normalizedRoute.startsWith('product/') ||
     normalizedRoute.startsWith('edit-product/') ||

@@ -1,23 +1,23 @@
 import type { Order } from '@/types/order';
 import type { LiveCarrierCheckpoint } from '@/utils/shippingTracker';
 import {
+    Check,
     CheckCircle2,
+    Copy,
     ExternalLink,
     Home,
     MapPin,
-    Navigation,
     Package,
+    RefreshCw,
     Truck,
 } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
-    Image,
+    ActivityIndicator,
     Linking,
-    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
-    useWindowDimensions,
     View,
 } from 'react-native';
 
@@ -27,11 +27,10 @@ interface GeoPoint {
   shortLabel: string;
 }
 
-// Sender warehouse: Vinhomes Grand Park, TP. Thủ Đức, TP. Hồ Chí Minh
 const SENDER_WAREHOUSE_POINT: GeoPoint = {
   lat: 10.8412,
   lon: 106.8371,
-  shortLabel: 'Kho Tiệm Cuộn Len (TP. Thủ Đức)',
+  shortLabel: 'Kho Thủ Đức',
 };
 
 const HCMC_DISTRICT_COORDS: Record<string, { lat: number; lon: number }> = {
@@ -109,24 +108,33 @@ function resolveRecipientGeoPoint(order: Order): GeoPoint {
   const addr = order.shippingAddress;
   const distNorm = normalizeAscii(addr?.district);
   const cityNorm = normalizeAscii(addr?.city);
-  const label =
-    [addr?.ward, addr?.district, addr?.city].filter(Boolean).slice(-2).join(', ') ||
-    'Địa chỉ nhận hàng';
+  const cleanDist = (addr?.district || '')
+    .replace(/^(Thành phố|Quận|Huyện|Thị xã)\s+/i, '')
+    .trim();
+  const cleanCity = (addr?.city || '')
+    .replace(/^(Thành phố|Tỉnh|TP\.?)\s+/i, '')
+    .trim();
+  const shortLabel =
+    cleanDist && cleanCity
+      ? `${addr?.district?.startsWith('Quận') ? addr.district : cleanDist}, ${
+          cleanCity === 'Hồ Chí Minh' ? 'TP.HCM' : cleanCity
+        }`
+      : cleanDist || cleanCity || 'Điểm nhận';
 
   for (const [key, coords] of Object.entries(HCMC_DISTRICT_COORDS)) {
     if (distNorm.includes(key)) {
-      return { ...coords, shortLabel: label };
+      return { ...coords, shortLabel };
     }
   }
   for (const [key, coords] of Object.entries(VIETNAM_PROVINCE_COORDS)) {
     if (cityNorm.includes(key) || distNorm.includes(key)) {
-      return { ...coords, shortLabel: label };
+      return { ...coords, shortLabel };
     }
   }
   return {
     lat: 10.7626,
     lon: 106.6602,
-    shortLabel: label,
+    shortLabel,
   };
 }
 
@@ -141,18 +149,7 @@ function computeHaversineKm(a: GeoPoint, b: GeoPoint): number {
   const h =
     sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
   const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-  // Multiply road factor (~1.28x straight line) for realistic road distance
   return Math.max(2, Math.round(R * c * 1.28));
-}
-
-function latLonToTileXY(lat: number, lon: number, zoom: number): { x: number; y: number } {
-  const n = Math.pow(2, zoom);
-  const x = Math.floor(((lon + 180) / 360) * n);
-  const latRad = (lat * Math.PI) / 180;
-  const y = Math.floor(
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
-  );
-  return { x, y };
 }
 
 function computeDeliveryProgressPct(
@@ -178,46 +175,50 @@ function computeDeliveryProgressPct(
       latestText.includes('shipper') ||
       latestText.includes('nhan vien'))
   ) {
-    return 86;
+    return 84;
   }
   if (
     latestText.includes('kho giao') ||
     latestText.includes('tram giao') ||
-    latestText.includes('SOC') ||
+    latestText.includes('soc') ||
     checkpoints.length >= 4
   ) {
-    return 74;
+    return 70;
   }
   if (
     latestText.includes('trung chuyen') ||
     latestText.includes('phan loai') ||
     checkpoints.length >= 2
   ) {
-    return 56;
+    return 55;
   }
   if (
     order.status === 'Đang giao' ||
     Boolean(order.shippingAddress?.trackingCode) ||
     order.shippingAddress?.craftingStage === 'handed_to_spx'
   ) {
-    return 38;
+    return 44;
   }
-  return 12;
+  return 15;
 }
 
 interface ShopeeDeliveryRouteMapProps {
   order: Order;
   checkpoints: LiveCarrierCheckpoint[];
+  loadingCheckpoints?: boolean;
+  onRefresh?: () => void;
+  onCopyTracking?: (code: string) => void;
+  copiedTracking?: boolean;
 }
 
 export function ShopeeDeliveryRouteMap({
   order,
   checkpoints,
+  loadingCheckpoints = false,
+  onRefresh,
+  onCopyTracking,
+  copiedTracking = false,
 }: ShopeeDeliveryRouteMapProps) {
-  const { width: rawWidth } = useWindowDimensions();
-  const isMobile = (rawWidth > 0 ? rawWidth : 390) < 640;
-  const [expanded, setExpanded] = useState(false);
-
   const recipientPoint = useMemo(() => resolveRecipientGeoPoint(order), [order]);
   const roadDistanceKm = useMemo(
     () => computeHaversineKm(SENDER_WAREHOUSE_POINT, recipientPoint),
@@ -228,59 +229,16 @@ export function ShopeeDeliveryRouteMap({
     [order, checkpoints]
   );
 
-  const mapTiles = useMemo(() => {
-    const midLat = (SENDER_WAREHOUSE_POINT.lat + recipientPoint.lat) / 2;
-    const midLon = (SENDER_WAREHOUSE_POINT.lon + recipientPoint.lon) / 2;
-    const zoom = roadDistanceKm <= 35 ? 12 : roadDistanceKm <= 160 ? 9 : 6;
-    const center = latLonToTileXY(midLat, midLon, zoom);
-    // 3 columns x 2 rows of Carto Voyager street map tiles
-    const urls: string[] = [];
-    for (let dy = 0; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        urls.push(
-          `https://a.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${
-            center.x + dx
-          }/${center.y + dy}@2x.png`
-        );
-      }
-    }
-    return urls;
-  }, [recipientPoint, roadDistanceKm]);
+  const carrierName = order.shippingAddress?.shippingCarrier || 'SPX Express';
+  const trackingCode = (order.shippingAddress?.trackingCode || '').trim();
+  const isCompleted = order.status === 'Hoàn thành';
 
-  const currentStationHeadline = useMemo(() => {
-    if (order.status === 'Hoàn thành') {
-      return '🎉 Đã giao hàng thành công tới tay người nhận';
-    }
-    if (checkpoints.length > 0 && checkpoints[0]?.title) {
-      return checkpoints[0].title;
-    }
-    if (order.shippingAddress?.goshipStatusText) {
-      return order.shippingAddress.goshipStatusText;
-    }
-    if (
-      order.status === 'Đang giao' ||
-      Boolean(order.shippingAddress?.trackingCode)
-    ) {
-      return `Đang vận chuyển từ TP. Thủ Đức tới ${recipientPoint.shortLabel}`;
-    }
-    return 'Đang chuẩn bị tại Xưởng Tiệm Cuộn Len (TP. Thủ Đức)';
-  }, [order, checkpoints, recipientPoint.shortLabel]);
-
-  const currentLocationBadge = useMemo(() => {
-    if (order.status === 'Hoàn thành') {
-      return recipientPoint.shortLabel;
-    }
-    if (checkpoints[0]?.location) {
-      return checkpoints[0].location;
-    }
-    if (progressPct >= 65) {
-      return `Trạm giao ${recipientPoint.shortLabel}`;
-    }
-    if (progressPct >= 30) {
-      return 'Trung tâm phân loại SPX TP.HCM';
-    }
-    return 'Kho Tiệm Cuộn Len • TP. Thủ Đức';
-  }, [order.status, checkpoints, progressPct, recipientPoint.shortLabel]);
+  const statusBadgeLabel = useMemo(() => {
+    if (isCompleted) return 'Giao thành công • 100%';
+    if (progressPct >= 80) return 'Shipper đang giao tới bạn';
+    if (progressPct >= 55) return `Đang trung chuyển • ~${roadDistanceKm} km`;
+    return `Đang vận chuyển • ~${roadDistanceKm} km`;
+  }, [isCompleted, progressPct, roadDistanceKm]);
 
   const googleMapsRouteUrl = useMemo(() => {
     const origin = encodeURIComponent('Vinhomes Grand Park, Thủ Đức, Hồ Chí Minh');
@@ -300,417 +258,482 @@ export function ShopeeDeliveryRouteMap({
     order.shippingAddress?.city,
   ]);
 
-  // Clamp truck horizontal position between 14% and 88% so the floating bubble never clips on mobile edges
-  const clampedTruckLeftPct = Math.max(14, Math.min(86, progressPct));
-  const mapHeight = isMobile ? (expanded ? 228 : 176) : expanded ? 260 : 204;
+  // Keep truck strictly between 24% and 76% on the track so it never collides with origin/destination nodes
+  const truckTrackLeftPct = isCompleted
+    ? 78
+    : Math.max(26, Math.min(74, progressPct));
 
   return (
-    <View style={styles.wrapper}>
-      {/* Map Canvas Container */}
-      <TouchableOpacity
-        activeOpacity={0.94}
-        onPress={() => setExpanded((v) => !v)}
-        style={[styles.mapViewport, { height: mapHeight }]}>
-        {/* Real Street Map Tile Grid Layer (OpenStreetMap / Carto Voyager) */}
-        <View style={styles.tileGrid} pointerEvents="none">
-          {mapTiles.map((url, idx) => (
-            <View key={idx} style={styles.tileCell}>
-              {Platform.OS === 'web' ? (
-                React.createElement('img', {
-                  src: url,
-                  alt: '',
-                  loading: 'lazy',
-                  style: {
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                    filter: 'saturate(1.06) contrast(0.98)',
-                  },
-                })
-              ) : (
-                <Image
-                  source={{ uri: url }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="cover"
-                />
-              )}
+    <View style={styles.card}>
+      {/* 1. Clean Carrier & Waybill Header Bar */}
+      <View style={styles.headerBar}>
+        <View style={styles.headerLeft}>
+          <View style={styles.carrierIconBox}>
+            <Truck size={15} color="#15803D" />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.carrierTitleRow}>
+              <Text style={styles.carrierTitleText} numberOfLines={1}>
+                {carrierName}
+              </Text>
+              <View style={styles.distanceTag}>
+                <Text style={styles.distanceTagText}>~{roadDistanceKm} km</Text>
+              </View>
             </View>
-          ))}
+            <Text style={styles.trackingSubText} numberOfLines={1}>
+              {trackingCode
+                ? `Mã vận đơn: ${trackingCode}`
+                : 'Đã bàn giao đơn vị vận chuyển (Tự động cập nhật mã SPX)'}
+            </Text>
+          </View>
         </View>
 
-        {/* Soft warm tint overlay so route line & pins pop clearly on mobile */}
-        <View style={styles.mapTintOverlay} pointerEvents="none" />
+        <View style={styles.headerActions}>
+          {trackingCode && onCopyTracking ? (
+            <TouchableOpacity
+              style={styles.actionPill}
+              onPress={() => onCopyTracking(trackingCode)}
+              activeOpacity={0.8}>
+              {copiedTracking ? (
+                <Check size={12} color="#15803D" />
+              ) : (
+                <Copy size={12} color="#3D2B1F" />
+              )}
+              <Text style={styles.actionPillText}>
+                {copiedTracking ? 'Đã chép' : 'Chép mã'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
-        {/* Top Floating Header Pill (Carrier + Distance + Expand Toggle) */}
-        <View style={styles.topFloatingRow}>
-          <View style={styles.carrierBadge}>
-            <Navigation size={11} color="#FFFFFF" />
-            <Text style={styles.carrierBadgeText} numberOfLines={1}>
-              {order.shippingAddress?.shippingCarrier || 'SPX Express'} • ~{roadDistanceKm} km
+          {onRefresh ? (
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={onRefresh}
+              disabled={loadingCheckpoints}
+              activeOpacity={0.8}>
+              {loadingCheckpoints ? (
+                <ActivityIndicator size="small" color="#15803D" />
+              ) : (
+                <RefreshCw size={13} color="#15803D" />
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+
+      {/* 2. Clean Vector Map Canvas (Zero Watermark, Mobile-First Layout) */}
+      <View style={styles.mapCanvas}>
+        {/* Subtle Vector Map Grid & River Aesthetics */}
+        <View style={styles.mapRoadHorizontal1} pointerEvents="none" />
+        <View style={styles.mapRoadHorizontal2} pointerEvents="none" />
+        <View style={styles.mapRoadVertical1} pointerEvents="none" />
+        <View style={styles.mapRoadVertical2} pointerEvents="none" />
+        <View style={styles.mapRiverCurve} pointerEvents="none" />
+
+        {/* Top Row inside Map: Floating Status Pill + Google Maps Link */}
+        <View style={styles.mapTopRow}>
+          <View style={styles.liveStatusPill}>
+            <View style={styles.livePulseDot} />
+            <Text style={styles.liveStatusPillText} numberOfLines={1}>
+              {statusBadgeLabel}
             </Text>
           </View>
 
           <TouchableOpacity
+            style={styles.gmapsBtn}
             onPress={() => Linking.openURL(googleMapsRouteUrl)}
-            style={styles.openGmapsPill}
             activeOpacity={0.85}>
-            <MapPin size={11} color="#0F5132" />
-            <Text style={styles.openGmapsText}>Bản đồ lớn</Text>
-            <ExternalLink size={10} color="#0F5132" />
+            <MapPin size={11} color="#166534" />
+            <Text style={styles.gmapsBtnText}>Xem lộ trình</Text>
+            <ExternalLink size={10} color="#166534" />
           </TouchableOpacity>
         </View>
 
-        {/* Floating Live Truck Callout Bubble (Shopee Style) */}
-        <View
-          style={[
-            styles.calloutContainer,
-            {
-              left: `${clampedTruckLeftPct}%` as any,
-            },
-          ]}
-          pointerEvents="none">
-          <View style={styles.calloutBubble}>
-            <View style={styles.calloutPulseDot} />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.calloutTitle} numberOfLines={1}>
-                {order.status === 'Hoàn thành'
-                  ? 'Đã giao thành công'
-                  : `Đang ở: ${currentLocationBadge}`}
-              </Text>
-              <Text style={styles.calloutSub} numberOfLines={1}>
-                {currentStationHeadline}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.calloutArrow} />
-        </View>
-
-        {/* Interactive Shopee Route Track Bar (Origin Pin ➔ Moving SPX Truck ➔ Destination Pin) */}
-        <View style={styles.routeTrackZone} pointerEvents="none">
-          {/* Background Dashed Uncompleted Track */}
-          <View style={styles.trackBgLine} />
-
-          {/* Active Completed Green/Orange Route Track */}
-          <View
-            style={[
-              styles.trackActiveLine,
-              { width: `${progressPct}%` as any },
-            ]}
-          />
-
-          {/* Origin Node: Kho Tiệm Cuộn Len (TP. Thủ Đức) */}
-          <View style={[styles.pinNode, { left: '4%' }]}>
-            <View style={styles.originPinCircle}>
+        {/* Center Route Track with Aligned Endpoints & Moving Truck */}
+        <View style={styles.routeContainer}>
+          <View style={styles.trackRow}>
+            {/* Left Endpoint Circle: Kho Thủ Đức */}
+            <View style={styles.originDot}>
               <Package size={12} color="#FFFFFF" />
             </View>
-            <View style={styles.pinLabelPill}>
-              <Text style={styles.pinLabelText} numberOfLines={1}>
-                Kho Thủ Đức
-              </Text>
-            </View>
-          </View>
 
-          {/* Moving SPX Delivery Truck Marker */}
-          <View
-            style={[
-              styles.truckMarkerWrap,
-              { left: `${clampedTruckLeftPct}%` as any },
-            ]}>
-            <View style={styles.truckRadarRing} />
+            {/* Route Progress Bar */}
+            <View style={styles.trackBarWrapper}>
+              <View style={styles.trackBarBg} />
+              <View
+                style={[
+                  styles.trackBarFill,
+                  { width: `${progressPct}%` as any },
+                ]}
+              />
+
+              {/* Moving SPX Truck Badge on Track */}
+              <View
+                style={[
+                  styles.truckNodeWrap,
+                  { left: `${truckTrackLeftPct}%` as any },
+                ]}>
+                <View style={styles.truckHalo} />
+                <View style={styles.truckBadgeCircle}>
+                  {isCompleted ? (
+                    <CheckCircle2 size={14} color="#FFFFFF" />
+                  ) : (
+                    <Truck size={13} color="#FFFFFF" />
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* Right Endpoint Circle: Địa chỉ nhận */}
             <View
               style={[
-                styles.truckCircle,
-                order.status === 'Hoàn thành' && { backgroundColor: '#15803D' },
-              ]}>
-              {order.status === 'Hoàn thành' ? (
-                <CheckCircle2 size={15} color="#FFFFFF" />
-              ) : (
-                <Truck size={14} color="#FFFFFF" />
-              )}
-            </View>
-          </View>
-
-          {/* Destination Node: Địa chỉ Khách hàng */}
-          <View style={[styles.pinNode, { right: '4%' }]}>
-            <View
-              style={[
-                styles.destPinCircle,
-                order.status === 'Hoàn thành' && {
-                  backgroundColor: '#16A34A',
-                  borderColor: '#DCFCE7',
-                },
+                styles.destDot,
+                isCompleted && { backgroundColor: '#16A34A' },
               ]}>
               <Home size={12} color="#FFFFFF" />
             </View>
-            <View style={[styles.pinLabelPill, styles.destLabelPill]}>
-              <Text
-                style={[styles.pinLabelText, { color: '#14532D' }]}
-                numberOfLines={1}>
+          </View>
+
+          {/* Endpoint Labels Row (Cleanly aligned underneath) */}
+          <View style={styles.endpointLabelsRow}>
+            <View style={styles.endpointLabelLeft}>
+              <Text style={styles.endpointTitle}>Kho Tiệm Cuộn Len</Text>
+              <Text style={styles.endpointSub}>TP. Thủ Đức, TP.HCM</Text>
+            </View>
+
+            <View style={styles.endpointLabelRight}>
+              <Text style={[styles.endpointTitle, { textAlign: 'right', color: '#14532D' }]} numberOfLines={1}>
                 {recipientPoint.shortLabel}
+              </Text>
+              <Text style={[styles.endpointSub, { textAlign: 'right' }]} numberOfLines={1}>
+                {order.shippingAddress?.ward || 'Địa chỉ nhận hàng'}
               </Text>
             </View>
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
 
-      {/* Bottom Live Route Status Strip */}
-      <View style={styles.bottomBar}>
-        <View style={styles.bottomLeft}>
-          <View style={styles.liveDot} />
-          <Text style={styles.bottomStatusText} numberOfLines={2}>
-            <Text style={{ fontWeight: '900', color: '#065F46' }}>
-              Lộ trình ({progressPct}%):{' '}
-            </Text>
-            {currentStationHeadline}
-          </Text>
-        </View>
+      {/* 3. Compact Handmade Completion & Shop Note Strip */}
+      <View style={styles.footerStrip}>
+        <CheckCircle2 size={13} color="#15803D" />
+        <Text style={styles.footerStripText} numberOfLines={2}>
+          Đã hoàn thiện đan & đóng hộp quà 100%
+          {order.shippingAddress?.craftingNote
+            ? ` • 💌 "${order.shippingAddress.craftingNote}"`
+            : ''}
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
+  card: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: '#86EFAC',
-    backgroundColor: '#ECFDF5',
-    marginBottom: 10,
-  },
-  mapViewport: {
-    width: '100%',
-    position: 'relative',
-    backgroundColor: '#E2EFE9',
-    overflow: 'hidden',
-    justifyContent: 'space-between',
-  },
-  tileGrid: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  tileCell: {
-    width: '33.3333%',
-    height: '50%',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
     overflow: 'hidden',
   },
-  mapTintOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(240, 253, 244, 0.22)',
-  },
-  topFloatingRow: {
+  headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
-    paddingTop: 9,
-    zIndex: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    gap: 8,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    flex: 1,
+    minWidth: 0,
+  },
+  carrierIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carrierTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
-  carrierBadge: {
+  carrierTitleText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  distanceTag: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 5,
+  },
+  distanceTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  trackingSubText: {
+    fontSize: 11.5,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(20, 83, 45, 0.9)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    maxWidth: '64%',
+    gap: 6,
   },
-  carrierBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  openGmapsPill: {
+  actionPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#86EFAC',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
+    borderColor: '#CBD5E1',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
-  openGmapsText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: '#0F5132',
+  actionPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
   },
-  calloutContainer: {
-    position: 'absolute',
-    bottom: 62,
-    transform: [{ translateX: -95 }],
-    width: 190,
+  iconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
     alignItems: 'center',
-    zIndex: 5,
+    justifyContent: 'center',
   },
-  calloutBubble: {
+  mapCanvas: {
+    position: 'relative',
+    backgroundColor: '#ECF6F0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    overflow: 'hidden',
+    gap: 14,
+  },
+  mapRoadHorizontal1: {
+    position: 'absolute',
+    top: '28%',
+    left: -10,
+    right: -10,
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    transform: [{ rotate: '-4deg' }],
+  },
+  mapRoadHorizontal2: {
+    position: 'absolute',
+    bottom: '22%',
+    left: -10,
+    right: -10,
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    transform: [{ rotate: '3deg' }],
+  },
+  mapRoadVertical1: {
+    position: 'absolute',
+    top: -10,
+    bottom: -10,
+    left: '32%',
+    width: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    transform: [{ rotate: '12deg' }],
+  },
+  mapRoadVertical2: {
+    position: 'absolute',
+    top: -10,
+    bottom: -10,
+    right: '28%',
+    width: 7,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    transform: [{ rotate: '-8deg' }],
+  },
+  mapRiverCurve: {
+    position: 'absolute',
+    top: -20,
+    bottom: -20,
+    left: '48%',
+    width: 22,
+    backgroundColor: 'rgba(186, 230, 253, 0.55)',
+    borderRadius: 12,
+    transform: [{ rotate: '18deg' }],
+  },
+  mapTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    zIndex: 2,
+  },
+  liveStatusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: '#14532D',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#86EFAC',
-    width: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: 999,
+    maxWidth: '65%',
   },
-  calloutPulseDot: {
-    width: 7,
-    height: 7,
+  livePulseDot: {
+    width: 6.5,
+    height: 6.5,
     borderRadius: 4,
     backgroundColor: '#4ADE80',
   },
-  calloutTitle: {
-    fontSize: 10.5,
-    fontWeight: '900',
+  liveStatusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
     color: '#FFFFFF',
   },
-  calloutSub: {
-    fontSize: 9.5,
-    fontWeight: '600',
-    color: '#DCFCE7',
-    marginTop: 1,
-  },
-  calloutArrow: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 6,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#14532D',
-  },
-  routeTrackZone: {
-    position: 'relative',
-    height: 58,
-    marginHorizontal: 14,
-    marginBottom: 6,
-    justifyContent: 'center',
-    zIndex: 4,
-  },
-  trackBgLine: {
-    position: 'absolute',
-    left: '6%',
-    right: '6%',
-    height: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#94A3B8',
-  },
-  trackActiveLine: {
-    position: 'absolute',
-    left: '6%',
-    height: 6,
-    backgroundColor: '#16A34A',
-    borderRadius: 999,
-  },
-  pinNode: {
-    position: 'absolute',
+  gmapsBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    top: 8,
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 999,
   },
-  originPinCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  gmapsBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  routeContainer: {
+    zIndex: 2,
+    gap: 8,
+    paddingTop: 2,
+  },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  originDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#78350F',
     borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 3,
   },
-  destPinCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  destDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#EA580C',
     borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 3,
   },
-  pinLabelPill: {
-    marginTop: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    maxWidth: 112,
+  trackBarWrapper: {
+    flex: 1,
+    height: 28,
+    justifyContent: 'center',
+    position: 'relative',
+    marginHorizontal: -2,
   },
-  destLabelPill: {
-    borderColor: '#86EFAC',
+  trackBarBg: {
+    height: 5,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 999,
+    width: '100%',
   },
-  pinLabelText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    color: '#334155',
-  },
-  truckMarkerWrap: {
+  trackBarFill: {
     position: 'absolute',
-    top: 4,
-    transform: [{ translateX: -16 }],
-    width: 32,
-    height: 32,
+    left: 0,
+    height: 5,
+    backgroundColor: '#16A34A',
+    borderRadius: 999,
+  },
+  truckNodeWrap: {
+    position: 'absolute',
+    transform: [{ translateX: -15 }],
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  truckRadarRing: {
+  truckHalo: {
     position: 'absolute',
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(22, 163, 74, 0.25)',
-    borderWidth: 1,
-    borderColor: 'rgba(22, 163, 74, 0.5)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(22, 163, 74, 0.22)',
   },
-  truckCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  truckBadgeCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#16A34A',
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bottomBar: {
+  endpointLabelsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  endpointLabelLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  endpointLabelRight: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+  },
+  endpointTitle: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  endpointSub: {
+    fontSize: 10.5,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  footerStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: '#F0FDF4',
-    paddingHorizontal: 11,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: '#BBF7D0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+    borderTopColor: '#DCFCE7',
   },
-  bottomLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
+  footerStripText: {
     flex: 1,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#16A34A',
-  },
-  bottomStatusText: {
     fontSize: 11.5,
-    color: '#14532D',
-    fontWeight: '600',
-    flex: 1,
+    fontWeight: '700',
+    color: '#166534',
     lineHeight: 16,
   },
 });

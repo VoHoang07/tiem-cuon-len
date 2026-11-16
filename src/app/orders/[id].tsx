@@ -1133,7 +1133,7 @@ export default function OrderDetailScreen() {
                 {order.isMaskedGuestView && (
                   <View
                     style={{
-                      backgroundColor: '#FAF5EF',
+                      backgroundColor: '#FAF6F0',
                       borderWidth: 1,
                       borderColor: '#E5D5C3',
                       borderRadius: 11,
@@ -1143,18 +1143,19 @@ export default function OrderDetailScreen() {
                       flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      flexWrap: 'wrap',
                       gap: 8,
                     }}>
                     <Text
                       style={{
                         flex: 1,
-                        minWidth: 180,
+                        minWidth: 0,
                         fontSize: 11.5,
                         color: '#5C4332',
                         fontWeight: '600',
-                      }}>
-                      🔒 Đang xem ở chế độ Tra cứu nhanh (đã ẩn số nhà để bảo mật). Đăng nhập để xem đầy đủ & nhận Voucher đánh giá.
+                        lineHeight: 16,
+                      }}
+                      numberOfLines={2}>
+                      🔒 Chế độ tra cứu nhanh (đã ẩn số nhà). Đăng nhập để xem đầy đủ & nhận ưu đãi.
                     </Text>
                     <TouchableOpacity
                       onPress={() =>
@@ -1169,7 +1170,7 @@ export default function OrderDetailScreen() {
                         gap: 4,
                         backgroundColor: '#3D2B1F',
                         paddingHorizontal: 10,
-                        paddingVertical: 5,
+                        paddingVertical: 6,
                         borderRadius: 999,
                       }}>
                       <LogIn size={12} color="#FFFDF9" />
@@ -1186,234 +1187,181 @@ export default function OrderDetailScreen() {
                 )}
 
                 {isShippingStage ? (
-                  <View style={styles.liveTrackingCard}>
-                    {/* Interactive Shopee-Style Live Delivery Route Map (Mobile-First) */}
+                  <View style={{ gap: 10 }}>
+                    {/* Unified Clean Shopee-Style Route Map & Waybill Card */}
                     <ShopeeDeliveryRouteMap
                       order={order}
                       checkpoints={combinedJourneyEvents}
+                      loadingCheckpoints={loadingCheckpoints}
+                      onRefresh={() => void refreshLiveSpxJourney()}
+                      onCopyTracking={(code) => handleCopy(code, 'track_code')}
+                      copiedTracking={copiedKey === 'track_code'}
                     />
 
-                    <View
-                      style={{
-                        backgroundColor: '#DCFCE7',
-                        borderWidth: 1,
-                        borderColor: '#86EFAC',
-                        borderRadius: 9,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        marginBottom: 8,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: 6,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 11.5,
-                          fontWeight: '800',
-                          color: '#166534',
-                        }}>
-                        ✅ Công đoạn đan thủ công & Đóng hộp quà: Đã hoàn tất 100%
-                      </Text>
-                      {order.shippingAddress?.craftingNote ? (
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            fontWeight: '700',
-                            color: '#15803D',
-                          }}>
-                          💌 &ldquo;{order.shippingAddress.craftingNote}&rdquo;
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <View style={styles.liveTrackingTop}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.liveTrackingLabel}>
-                          ĐƠN VỊ VẬN CHUYỂN: {(savedCarrier || 'SPX EXPRESS').toUpperCase()}
-                        </Text>
-                        <Text style={styles.liveTrackingCode}>
-                          {savedTracking
-                            ? `Mã vận đơn: ${savedTracking}`
-                            : 'Mã vận đơn SPX: Đang tự động đồng bộ từ Goship...'}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '800',
-                            color: '#15803D',
-                            marginTop: 2,
-                          }}>
-                          📍 Đơn hàng đang ở đâu:{' '}
-                          {order.shippingAddress?.goshipStatusText ||
-                            combinedJourneyEvents[0]?.title ||
-                            (order.status === 'Hoàn thành'
-                              ? 'Giao hàng thành công'
-                              : 'Đã bàn giao cho đơn vị vận chuyển SPX Express')}
-                        </Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <TouchableOpacity
-                          style={styles.copyCodePill}
-                          onPress={() => void refreshLiveSpxJourney()}>
-                          {loadingCheckpoints ? (
-                            <ActivityIndicator size="small" color="#2E7D32" />
-                          ) : (
-                            <RefreshCw size={13} color="#2E7D32" />
-                          )}
-                          <Text style={[styles.copyCodePillText, { color: '#2E7D32' }]}>
-                            {savedTracking ? 'Cập nhật trạm' : 'Đồng bộ mã SPX'}
-                          </Text>
-                        </TouchableOpacity>
-                        {savedTracking ? (
-                          <TouchableOpacity
-                            style={styles.copyCodePill}
-                            onPress={() => handleCopy(savedTracking, 'track_code')}>
-                            {copiedKey === 'track_code' ? (
-                              <Check size={13} color="#2E7D32" />
-                            ) : (
-                              <Copy size={13} color="#3D2B1F" />
-                            )}
-                            <Text style={styles.copyCodePillText}>
-                              {copiedKey === 'track_code' ? 'Đã chép' : 'Chép mã'}
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    </View>
-
-                    {/* Live SPX / Goship Station Checkpoints right inside Tiệm Cuộn Len! */}
+                    {/* Clean Vertical Station Timeline (Full-Width Text, Zero Column Squishing) */}
                     {combinedJourneyEvents.length > 0 ? (
                       <View
                         style={{
-                          marginTop: 10,
                           backgroundColor: '#FFFFFF',
-                          borderRadius: 11,
-                          padding: 11,
+                          borderRadius: 14,
+                          padding: 13,
                           borderWidth: 1,
-                          borderColor: '#C8E6C9',
-                          gap: 10,
+                          borderColor: '#E2E8F0',
+                          gap: 12,
                         }}>
-                        <Text
+                        <View
                           style={{
-                            fontSize: 12,
-                            fontWeight: '900',
-                            color: '#1B5E20',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
                           }}>
-                          🚚 Hành trình chi tiết từng trạm giao hàng ({combinedJourneyEvents.length} mốc):
-                        </Text>
-                        {combinedJourneyEvents.slice(0, 12).map((cp, idx) => (
-                          <View
-                            key={`${cp.timestamp}_${idx}`}
+                          <Text
                             style={{
-                              flexDirection: 'row',
-                              alignItems: 'flex-start',
-                              gap: 10,
+                              fontSize: 12.5,
+                              fontWeight: '800',
+                              color: '#1E293B',
                             }}>
-                            <View style={{ alignItems: 'center', width: 14 }}>
-                              <View
-                                style={{
-                                  width: idx === 0 ? 12 : 9,
-                                  height: idx === 0 ? 12 : 9,
-                                  borderRadius: 6,
-                                  marginTop: 3,
-                                  backgroundColor: idx === 0 ? '#16A34A' : '#A7F3D0',
-                                  borderWidth: idx === 0 ? 2 : 0,
-                                  borderColor: '#DCFCE7',
-                                }}
-                              />
-                              {idx < Math.min(combinedJourneyEvents.length, 12) - 1 && (
+                            Hành trình bưu cục
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '700',
+                              color: '#64748B',
+                            }}>
+                            {combinedJourneyEvents.length} cập nhật
+                          </Text>
+                        </View>
+
+                        {combinedJourneyEvents.slice(0, 12).map((cp, idx) => {
+                          const isLatest = idx === 0;
+                          const isLast =
+                            idx === Math.min(combinedJourneyEvents.length, 12) - 1;
+                          return (
+                            <View
+                              key={`${cp.timestamp}_${idx}`}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'stretch',
+                                gap: 10,
+                              }}>
+                              {/* Left Timeline Dot & Vertical Line */}
+                              <View style={{ alignItems: 'center', width: 14 }}>
                                 <View
                                   style={{
-                                    width: 2,
-                                    flex: 1,
-                                    minHeight: 22,
-                                    backgroundColor: '#D1FAE5',
-                                    marginTop: 3,
+                                    width: isLatest ? 11 : 8,
+                                    height: isLatest ? 11 : 8,
+                                    borderRadius: 6,
+                                    marginTop: 4,
+                                    backgroundColor: isLatest
+                                      ? '#16A34A'
+                                      : '#CBD5E1',
                                   }}
                                 />
-                              )}
-                            </View>
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <View
-                                style={{
-                                  flexDirection: 'row',
-                                  alignItems: 'center',
-                                  flexWrap: 'wrap',
-                                  gap: 6,
-                                }}>
-                                {idx === 0 && (
+                                {!isLast && (
                                   <View
                                     style={{
-                                      backgroundColor: '#16A34A',
-                                      paddingHorizontal: 6,
-                                      paddingVertical: 1.5,
-                                      borderRadius: 4,
+                                      width: 1.5,
+                                      flex: 1,
+                                      minHeight: 20,
+                                      backgroundColor: '#E2E8F0',
+                                      marginTop: 4,
+                                    }}
+                                  />
+                                )}
+                              </View>
+
+                              {/* Right Full-Width Content Column */}
+                              <View
+                                style={{
+                                  flex: 1,
+                                  minWidth: 0,
+                                  paddingBottom: isLast ? 0 : 4,
+                                }}>
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 6,
+                                  }}>
+                                  {isLatest && (
+                                    <View
+                                      style={{
+                                        backgroundColor: '#DCFCE7',
+                                        borderWidth: 1,
+                                        borderColor: '#86EFAC',
+                                        paddingHorizontal: 6,
+                                        paddingVertical: 1,
+                                        borderRadius: 5,
+                                      }}>
+                                      <Text
+                                        style={{
+                                          fontSize: 9.5,
+                                          fontWeight: '800',
+                                          color: '#15803D',
+                                        }}>
+                                        Mới nhất
+                                      </Text>
+                                    </View>
+                                  )}
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: '600',
+                                      color: '#64748B',
                                     }}>
+                                    {new Date(cp.timestamp).toLocaleString(
+                                      'vi-VN',
+                                      {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                      }
+                                    )}
+                                  </Text>
+                                  {cp.location ? (
                                     <Text
                                       style={{
-                                        fontSize: 9.5,
-                                        fontWeight: '900',
-                                        color: '#FFFFFF',
-                                      }}>
-                                      MỚI NHẤT
+                                        fontSize: 11,
+                                        color: '#15803D',
+                                        fontWeight: '700',
+                                      }}
+                                      numberOfLines={1}>
+                                      • {cp.location}
                                     </Text>
-                                  </View>
-                                )}
+                                  ) : null}
+                                </View>
+
                                 <Text
                                   style={{
-                                    fontSize: 12.5,
-                                    fontWeight: idx === 0 ? '800' : '600',
-                                    color: idx === 0 ? '#14532D' : '#374151',
-                                    lineHeight: 17,
-                                    flex: 1,
+                                    fontSize: 13,
+                                    fontWeight: isLatest ? '700' : '500',
+                                    color: isLatest ? '#0F172A' : '#475569',
+                                    lineHeight: 18,
+                                    marginTop: 3,
                                   }}>
                                   {cp.title}
                                 </Text>
                               </View>
-                              {cp.location ? (
-                                <Text
-                                  style={{
-                                    fontSize: 11,
-                                    color: '#15803D',
-                                    fontWeight: '700',
-                                    marginTop: 2,
-                                  }}
-                                  numberOfLines={2}>
-                                  📍 {cp.location}
-                                </Text>
-                              ) : null}
-                              <Text
-                                style={{
-                                  fontSize: 10.5,
-                                  color: '#6B7280',
-                                  marginTop: 2,
-                                }}>
-                                {new Date(cp.timestamp).toLocaleString('vi-VN', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  year: 'numeric',
-                                })}
-                              </Text>
                             </View>
-                          </View>
-                        ))}
+                          );
+                        })}
                       </View>
                     ) : null}
 
                     {trackingUrl && savedTracking ? (
                       <TouchableOpacity
-                        style={[styles.openTrackingBtn, { marginTop: 10 }]}
+                        style={styles.openTrackingBtn}
                         onPress={() => Linking.openURL(trackingUrl)}
                         activeOpacity={0.85}>
-                        <Truck size={16} color="#FFFDF9" />
+                        <Truck size={15} color="#FFFDF9" />
                         <Text style={styles.openTrackingBtnText}>
-                          Mở trang tra cứu chính thức {savedCarrier || 'SPX.vn'}
+                          Tra cứu trên trang {savedCarrier || 'SPX.vn'}
                         </Text>
-                        <ExternalLink size={14} color="#FFFDF9" />
+                        <ExternalLink size={13} color="#FFFDF9" />
                       </TouchableOpacity>
                     ) : null}
                   </View>
