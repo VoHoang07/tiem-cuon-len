@@ -364,7 +364,7 @@ async function resolveGoshipLocationCodes(cityName, districtName, wardName) {
 async function getSavedSenderWarehouse(authToken) {
   const defaults = {
     senderName: process.env.GOSHIP_SENDER_NAME || 'Tiệm Cuộn Len',
-    senderPhone: process.env.GOSHIP_SENDER_PHONE || '0387966507',
+    senderPhone: process.env.GOSHIP_SENDER_PHONE || '0775111750',
     fromCity: process.env.GOSHIP_FROM_CITY || 'Hồ Chí Minh',
     fromDistrict: process.env.GOSHIP_FROM_DISTRICT || 'Thành phố Thủ Đức',
     fromWard: process.env.GOSHIP_FROM_WARD || 'Phường Long Thạnh Mỹ',
@@ -1144,7 +1144,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
         id: GOSHIP_CONFIG_ROW_ID,
         userId: HOLDER_USER_ID,
         fullName: GOSHIP_CONFIG_PARTITION,
-        phone: whObj.senderPhone || '0387966507',
+        phone: whObj.senderPhone || '0775111750',
         city: whObj.fromCity,
         district: new Date().toISOString(),
         ward: 'GOSHIP_WAREHOUSE',

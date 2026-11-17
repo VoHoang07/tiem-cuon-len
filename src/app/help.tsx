@@ -13,6 +13,7 @@ import {
     Clock,
     Copy,
     CreditCard,
+    Gift,
     HelpCircle,
     Home,
     Mail,
@@ -24,7 +25,6 @@ import {
     ShieldCheck,
     ShoppingBag,
     Sparkles,
-    Store,
     Truck,
     X,
 } from 'lucide-react-native';
@@ -54,6 +54,8 @@ interface GuideCardData {
   id: string;
   icon: ComponentType<{ size?: number; color?: string }>;
   badge: string;
+  badgeBg: string;
+  badgeColor: string;
   title: string;
   summary: string;
   steps: string[];
@@ -61,73 +63,77 @@ interface GuideCardData {
   onAction: () => void;
 }
 
+const SHOP_HOTLINE_RAW = '0775111750';
+const SHOP_HOTLINE_DISPLAY = '0775 111 750';
+const SHOP_EMAIL = 'tiemcuonlen@gmail.com';
+
 const CUSTOMER_FAQ: FaqItem[] = [
   {
     category: 'order',
-    q: 'Làm sao để chọn đúng màu len và phụ kiện kèm theo?',
-    a: 'Tại trang chi tiết sản phẩm, bạn chỉ cần chạm vào từng ô Màu sắc (ảnh sẽ tự động đổi theo đúng màu đó) và chọn Phụ kiện đi kèm (nơ, chuông, cài áo, bó hoa...). Giá sản phẩm sẽ tự động cập nhật minh bạch trước khi thêm vào giỏ.',
+    q: 'Cách chọn mẫu màu, Combo 2 mẫu và Set Quà Tặng (+25.000₫)?',
+    a: 'Tại trang sản phẩm, bạn chạm vào từng mẫu màu để xem đúng ảnh & giá của mẫu đó (hoặc chọn gói Combo 2 mẫu để tự động giảm giá cặp). Về đóng gói: mặc định là "Tự dùng / Tiêu chuẩn (0₫)", hoặc bạn chọn "🎁 Set Quà Tặng Đặc Biệt (+25.000₫)" để kèm hộp quà cứng và thiệp viết tay theo lời nhắn.',
   },
   {
     category: 'order',
-    q: 'Sản phẩm "Hàng Order (Đặt đan theo mẫu)" mất bao lâu để hoàn thiện?',
-    a: 'Các mẫu có sẵn sẽ được đóng gói gửi đi trong ngày. Với các mẫu "Đặt đan thủ công theo mẫu", nghệ nhân của tiệm sẽ móc mới tỉ mỉ trong khoảng 5–6 ngày trước khi bàn giao cho đơn vị vận chuyển.',
+    q: 'Sản phẩm đan thủ công mất bao lâu để hoàn thiện và gửi đi?',
+    a: 'Mỗi sản phẩm tại Tiệm đều được đan móc mới tỉ mỉ trong khoảng 5–6 ngày (Giai đoạn 1: Xưởng đan thủ công). Ngay khi hoàn thiện 100%, Tiệm sẽ đóng hộp và bàn giao cho SPX Express (Giai đoạn 2: Vận chuyển).',
   },
   {
-    category: 'payment',
-    q: 'Thanh toán chuyển khoản VietQR xác nhận như thế nào?',
-    a: 'Khi chọn Chuyển khoản ngân hàng, hệ thống tạo mã VietQR đã điền sẵn đúng Số tiền và Nội dung chuyển khoản của đơn hàng. Ngay sau khi bạn chuyển khoản thành công, hệ thống tự động xác nhận đơn trong 3–5 giây mà không cần chụp màn hình biên lai.',
-  },
-  {
-    category: 'payment',
-    q: 'Tiệm có nhận thanh toán khi nhận hàng (COD) không?',
-    a: 'Có! Bạn có thể chọn "Thanh toán khi nhận hàng (COD)" ở bước Đặt hàng để kiểm tra kiện hàng và thanh toán tiền mặt trực tiếp cho bưu tá.',
+    category: 'shipping',
+    q: 'Làm sao để tra cứu tiến độ đan & bản đồ trạm SPX khi chưa đăng nhập?',
+    a: 'Bạn chỉ cần vào mục "Theo dõi đơn" (/orders) và gõ đủ 10 số Điện thoại nhận hàng (hoặc mã đơn CUONLEN-...). Hệ thống sẽ tự động hiển thị tiến độ xưởng đan và bản đồ lộ trình các trạm bưu cục SPX Express trực tiếp trên điện thoại.',
   },
   {
     category: 'shipping',
     q: 'Phí vận chuyển và điều kiện Miễn phí vận chuyển (Freeship)?',
-    a: 'Tiệm hỗ trợ 3 hình thức: (1) Giao tiêu chuẩn 15.000₫ (Miễn phí cho đơn từ 299.000₫); (2) Giao trong ngày (TP.HCM) (Grab/Ahamove khoảng 45.000₫ – 65.000₫ — khách trả cước trực tiếp cho tài xế theo giá App); (3) Nhận trực tiếp tại Tiệm (Miễn phí).',
+    a: 'Phí giao tiêu chuẩn nội thành TP.HCM là 15.000₫, ngoại tỉnh 25.000₫, và Tự động Miễn phí vận chuyển (0₫) cho mọi đơn hàng từ 299.000₫ trở lên. Ngoài ra Tiệm hỗ trợ Giao hỏa tốc trong ngày tại TP.HCM.',
   },
   {
-    category: 'shipping',
-    q: 'Làm sao để tra cứu hành trình đơn hàng và mã vận đơn?',
-    a: 'Bạn vào mục "Đơn hàng của tôi", chọn đơn cần xem. Tại đây có Timeline 4 bước trực quan cùng Mã vận đơn và nút "Tra cứu hành trình đơn hàng" dẫn thẳng tới trang định vị của Viettel Post, GHTK, GHN, J&T hoặc SPX.',
+    category: 'payment',
+    q: 'Thanh toán chuyển khoản VietQR và COD hoạt động như thế nào?',
+    a: '• Với COD (Thanh toán khi nhận hàng): Bạn được Mở hộp đồng kiểm 100% trước khi thanh toán cho bưu tá.\n• Với Chuyển khoản VietQR: Hệ thống tạo mã QR điền sẵn Số tiền & Nội dung; ngay sau khi bạn quét mã chuyển khoản, SePay sẽ tự động xác nhận đơn trong vài giây.',
   },
   {
     category: 'policy',
-    q: 'Chính sách bảo hành & đổi trả đồ thủ công tại tiệm như thế nào?',
-    a: 'Tiệm hỗ trợ đổi mới hoặc hoàn tiền 100% trong vòng 7 ngày nếu sản phẩm bị bung mối len, hư hỏng do vận chuyển hoặc giao sai phân loại màu/phụ kiện đã đặt. Bạn chỉ cần bấm "Chat trực tiếp với Tiệm" ngay trên web để được xử lý trong ngày.',
+    q: 'Làm sao để nhận Gói Quà 60.000₫ và Mã giảm 15.000₫ sau khi nhận hàng?',
+    a: 'Khi đơn hàng chuyển sang "Hoàn thành", bạn bấm sang mục "Đánh giá" ngay kế bên:\n• Mục 1 (Nhận Gói Quà 60.000₫ = Giảm 25k + Tặng 01 SP 35k giá 0₫): Đăng Video/Story khui hàng lên FB/IG/TikTok kèm tên & link tiemcuonlen.shop rồi tải ảnh màn hình lên.\n• Mục 2 (Nhận Mã -15.000₫): Follow Fanpage FB & Chia sẻ bài công khai rồi tải ảnh màn hình lên. Tiệm sẽ duyệt và gửi mã riêng ngay trong khung Chat!',
+  },
+  {
+    category: 'policy',
+    q: 'Chính sách bảo hành & đổi trả đồ thủ công tại Tiệm?',
+    a: 'Tiệm cam kết hỗ trợ đổi mới hoặc hoàn tiền 100% trong vòng 7 ngày nếu sản phẩm bị bung mối len, hư hỏng do vận chuyển hoặc giao sai mẫu đã đặt. Bạn chỉ cần nhắn qua khung Chat trên web hoặc Zalo 0775 111 750.',
   },
 ];
 
 const ADMIN_FAQ: FaqItem[] = [
   {
-    category: 'order',
-    q: 'Làm sao để đăng sản phẩm có nhiều màu, phụ kiện và chế độ Hàng Order?',
-    a: 'Vào tab "Thêm" (+) hoặc trang Sửa sản phẩm: bạn có thể thêm nhiều Phân loại màu (kèm ảnh riêng cho từng màu), thêm các tuỳ chọn Phụ kiện cộng thêm giá, và chuyển trạng thái kho giữa "Có sẵn theo số lượng" hoặc "Hàng Order (Đặt đan theo mẫu)".',
-  },
-  {
     category: 'shipping',
-    q: 'Quy trình lên đơn Ship và gửi Mã vận đơn cho khách chỉ trong 10 giây?',
-    a: 'Tại chi tiết đơn hàng, bạn bấm "📋 Chép đơn Ship" (hệ thống tự động tính tiền thu hộ COD = 0₫ nếu khách đã chuyển khoản QR, hoặc bằng tổng đơn nếu khách chọn COD). Sau đó dán vào web Viettel Post / GHTK / Goship, rồi chọn Hãng vận chuyển + nhập Mã vận đơn và bấm "Lưu & Báo đang giao".',
-  },
-  {
-    category: 'payment',
-    q: 'Làm sao để kiểm tra các giao dịch chuyển khoản VietQR tự động?',
-    a: 'Khi khách chuyển khoản đúng nội dung đơn hàng, Webhook SePay sẽ tự động chuyển trạng thái đơn từ "Chờ thanh toán" sang "Đang xử lý" và gửi thông báo về kho đơn. Bạn có thể cấu hình tài khoản ngân hàng nhận tiền tại mục "Phương thức thanh toán".',
+    q: 'Quy trình 2 giai đoạn: Đan mẫu (5–6 ngày) và Lên đơn Goship SPX?',
+    a: '• Giai đoạn 1 (Đang đan): Mở chi tiết đơn → Bấm 1 chạm cập nhật tiến độ ("Đang móc thân len", "Khâu ráp & Kiểm tra form"...) mà chưa gọi Shipper.\n• Giai đoạn 2 (Gửi hàng): Khi đan xong, bấm tạo vận đơn SPX trực tiếp trên web (hoặc tạo trên shop.goship.io). Hệ thống tự động đối chiếu theo SĐT/Mã đơn để gắn mã SPX, vẽ bản đồ trạm và gửi Gmail báo khách.',
   },
   {
     category: 'policy',
-    q: 'Làm sao để tư vấn khi khách gửi câu hỏi kèm sản phẩm qua Chat?',
-    a: 'Nhấn vào biểu tượng nút Chat nổi ở góc dưới phải hoặc nút "Mở Hộp thư Khách hàng" ngay trên trang này. Bạn sẽ thấy danh sách từng khách hàng cùng thẻ sản phẩm họ đang quan tâm để phản hồi tức thì.',
+    q: 'Làm sao để duyệt ảnh minh chứng và cấp mã thưởng 60k / 15k cho khách?',
+    a: 'Khi khách gửi ảnh màn hình ở mục "Đánh giá", ảnh sẽ hiện ngay trong Hộp thư Chat kèm nút "🎟️ Duyệt & Cấp Gói Quà 60k" hoặc "🎟️ Duyệt & Cấp mã -15.000₫". Bạn chỉ cần bấm 1 chạm, hệ thống sẽ tự tạo mã khóa 1-1 gửi vào khung Chat cho khách.',
+  },
+  {
+    category: 'payment',
+    q: 'Làm sao phân biệt đơn Chuyển khoản QR đã trả tiền hay chưa?',
+    a: 'Đơn khách chọn QR nhưng chưa chuyển tiền sẽ hiện cảnh báo đỏ "⛔ CHƯA CHUYỂN KHOẢN" và hệ thống tự động khóa nút tạo đơn Ship. Chỉ khi SePay xác nhận tiền về (hoặc bạn bấm duyệt tay), đơn mới chuyển sang "Đang xử lý" với Thu COD = 0₫.',
+  },
+  {
+    category: 'order',
+    q: 'Làm sao để khôi phục đơn hàng cũ hoặc xuất file CSV đẩy đơn hàng loạt?',
+    a: 'Tại trang Quản lý đơn (/orders), thanh công cụ Admin trên cùng có nút "🔄 Quét khôi phục đơn trên máy", "📂 Nhập CSV/JSON đơn cũ" và "📥 Xuất CSV Goship" để tải danh sách đơn đủ điều kiện lên Goship.io.',
   },
 ];
 
 const CATEGORY_TABS: { key: FaqCategory; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
-  { key: 'order', label: 'Đặt hàng & Sản phẩm' },
+  { key: 'order', label: 'Đặt mẫu & Combo' },
+  { key: 'shipping', label: 'Vận chuyển SPX' },
   { key: 'payment', label: 'Thanh toán' },
-  { key: 'shipping', label: 'Vận chuyển' },
-  { key: 'policy', label: 'Bảo hành & Hỗ trợ' },
+  { key: 'policy', label: 'Quà 60k & Bảo hành' },
 ];
 
 export default function HelpScreen() {
@@ -173,29 +179,49 @@ export default function HelpScreen() {
         {
           id: 'admin-ship',
           icon: Truck,
-          badge: 'Vận đơn 10s',
-          title: 'Lên đơn Ship & Đồng bộ Mã vận đơn',
+          badge: 'Tự động SPX',
+          badgeBg: '#ECFDF5',
+          badgeColor: '#059669',
+          title: '1. Cập nhật tiến độ đan & Lên đơn Goship SPX',
           summary:
-            'Sao chép phiếu giao hàng tự tính COD và gửi mã tra cứu hành trình cho khách.',
+            'Báo tiến độ 5–6 ngày khi đang đan, chỉ tạo đơn SPX khi đã hoàn thiện mẫu.',
           steps: [
-            'Mở đơn hàng cần gửi → Bấm nút "📋 Chép đơn Ship" để chép sẵn Tên, SĐT, Địa chỉ, Món đồ & Tiền thu hộ COD chuẩn xác.',
-            'Mở nhanh cổng Goship / Viettel Post / GHTK / GHN ngay trong đơn để tạo phiếu gửi.',
-            'Chọn Hãng vận chuyển, dán Mã vận đơn và bấm "Lưu & Báo đang giao" để khách tự tra cứu trực tiếp.',
+            'Giai đoạn 1 (Đang đan): Mở đơn hàng → Bấm chọn mốc tiến độ ("Đang móc thân len", "Khâu ráp & Kiểm tra form"...) để khách yên tâm theo dõi.',
+            'Giai đoạn 2 (Gửi hàng): Khi đã đan xong 100%, bấm báo giá & tạo đơn SPX ngay trên web (hoặc tạo trên shop.goship.io).',
+            'Hệ thống tự động đối chiếu SĐT/Mã đơn để lấy mã vận đơn SPX, hiển thị bản đồ trạm và gửi Gmail báo khách.',
           ],
           actionLabel: 'Mở Quản lý Đơn hàng',
           onAction: () => router.push('/orders'),
         },
         {
+          id: 'admin-reward',
+          icon: Gift,
+          badge: 'Duyệt 1 chạm',
+          badgeBg: '#FFF1EE',
+          badgeColor: '#EE4D2D',
+          title: '2. Duyệt ảnh Đánh giá & Cấp mã Quà 60k qua Chat',
+          summary:
+            'Cấp mã riêng khóa 1-1 (VD25- / FB15-) ngay trong hộp thư khi khách gửi ảnh màn hình.',
+          steps: [
+            'Khách hoàn thành đơn vào mục "Đánh giá" tải ảnh màn hình Story/Video hoặc Follow/Share FB.',
+            'Tin nhắn kèm ảnh sẽ hiện trong Hộp thư Chat của bạn cùng nút bấm duyệt.',
+            'Bấm "Duyệt & Cấp mã": hệ thống tự sinh mã riêng cho đúng tài khoản khách và nhắc bạn bỏ kèm quà 35k trên phiếu đơn tiếp theo.',
+          ],
+          actionLabel: 'Mở Hộp thư Chat',
+          onAction: () => openChat(),
+        },
+        {
           id: 'admin-studio',
           icon: Package,
-          badge: 'Studio SP',
-          title: 'Đăng & Quản lý Sản phẩm Đa phân loại',
+          badge: 'Cloudflare R2',
+          badgeBg: '#EFF6FF',
+          badgeColor: '#2563EB',
+          title: '3. Đăng sản phẩm đa phân loại & Kho ảnh R2',
           summary:
-            'Thêm ảnh chất lượng cao, nhiều màu sắc, phụ kiện kèm theo và chế độ Hàng Order.',
+            'Tải ảnh vuông 1:1 sắc nét lên đám mây R2, cài giá riêng cho từng mẫu màu.',
           steps: [
-            'Tải ảnh đại diện sắc nét (hỗ trợ tỷ lệ vuông 1:1 chuẩn Studio).',
-            'Thêm các phân loại Màu sắc (kèm ảnh riêng cho từng màu) và Phụ kiện (tự cộng giá chênh lệch).',
-            'Chọn trạng thái "Có sẵn theo số lượng" hoặc "Hàng Order (Đặt đan theo mẫu 5–6 ngày)".',
+            'Tải ảnh bìa & ảnh từng phân loại màu (hệ thống tự động chuyển sang chuẩn WebP nhẹ mượt trên Cloudflare R2).',
+            'Đặt giá riêng cho từng mẫu (VD: size nhỏ / size lớn) — các gói Combo sẽ tự động tính giá theo đúng 2 mẫu khách chọn.',
           ],
           actionLabel: 'Mở Studio Thêm SP',
           onAction: () => router.push('/add-product'),
@@ -203,30 +229,18 @@ export default function HelpScreen() {
         {
           id: 'admin-payment',
           icon: CreditCard,
-          badge: 'VietQR 24/7',
-          title: 'Cấu hình Ngân hàng & Tự động xác nhận',
+          badge: 'SePay 24/7',
+          badgeBg: '#FEF3C7',
+          badgeColor: '#B45309',
+          title: '4. Đối soát VietQR tự động & Khóa đơn chưa thanh toán',
           summary:
-            'Quản lý tài khoản VietQR nhận tiền và đối soát giao dịch tự động qua SePay.',
+            'Chặn nhầm lẫn đơn QR chưa chuyển khoản và tự động xác nhận khi tiền về.',
           steps: [
-            'Kiểm tra thông tin Ngân hàng, Số tài khoản và Chủ tài khoản nhận tiền tại mục Phương thức thanh toán.',
-            'Đơn hàng chuyển khoản chỉ gửi thông báo sau khi hệ thống xác nhận khách đã thanh toán thành công.',
+            'Đơn chuyển khoản chưa quét QR sẽ mang trạng thái chờ và hiện nhãn đỏ "⛔ CHƯA CHUYỂN KHOẢN".',
+            'Ngay khi khách chuyển khoản đúng nội dung, SePay tự động chuyển đơn sang "Đang xử lý" (Thu COD = 0₫) và báo về Gmail tiemcuonlen@gmail.com.',
           ],
           actionLabel: 'Cấu hình Thanh toán',
           onAction: () => router.push('/payment-methods'),
-        },
-        {
-          id: 'admin-chat',
-          icon: MessageCircle,
-          badge: 'Live Chat',
-          title: 'Tư vấn & Chăm sóc Khách hàng Trực tuyến',
-          summary:
-            'Nhận tin nhắn kèm thẻ sản phẩm khách đang xem và phản hồi tức thì.',
-          steps: [
-            'Mở Hộp thư Chat để xem danh sách khách đang nhắn tư vấn.',
-            'Bấm trực tiếp vào thẻ sản phẩm khách đính kèm để kiểm tra mẫu và báo thời gian hoàn thiện.',
-          ],
-          actionLabel: 'Mở Hộp thư Chat',
-          onAction: () => openChat(),
         },
       ];
     }
@@ -235,59 +249,65 @@ export default function HelpScreen() {
       {
         id: 'client-order',
         icon: ShoppingBag,
-        badge: 'Đặt mẫu dễ dàng',
-        title: 'Cách chọn mẫu len & Đặt đan thủ công',
+        badge: 'Bước 1',
+        badgeBg: '#FFF1EE',
+        badgeColor: '#EE4D2D',
+        title: '1. Chọn mẫu màu, Đóng gói & Áp mã giảm giá',
         summary:
-          'Tuỳ chọn màu sắc, phối phụ kiện xinh xắn và đặt làm theo yêu cầu.',
+          'Chọn mẫu lẻ hoặc ghép đôi Combo tiết kiệm, tùy chọn Set hộp quà + thiệp viết tay.',
         steps: [
-          'Chọn sản phẩm yêu thích → Chạm vào từng phân loại Màu sắc và Phụ kiện để xem ảnh thực tế & giá tương ứng.',
-          'Với sản phẩm "Đặt đan theo mẫu", tiệm sẽ móc mới thủ công trong 5–6 ngày và tặng kèm hộp quà.',
-          'Nếu muốn phối màu riêng hoặc ghi thiệp viết tay, bấm nút Chat trên trang sản phẩm để nhắn trực tiếp cho tiệm.',
+          'Chạm vào từng phân loại màu để xem ảnh thực tế & giá tương ứng, hoặc chọn "Combo 2 mẫu" để được giảm giá cặp tự động.',
+          'Chọn hình thức đóng gói: "Tự dùng / Tiêu chuẩn (0₫)" hoặc "🎁 Set Quà Tặng Đặc Biệt (+25.000₫)" kèm hộp quà & thiệp viết tay.',
+          'Áp dụng mã TIEMLEN10K (-10k đơn lẻ đầu từ 159k), Freeship 0₫ (đơn từ 299k) hoặc VIP20K (-20k đơn từ 399k).',
         ],
         actionLabel: 'Khám phá Sản phẩm',
         onAction: () => router.push('/'),
       },
       {
-        id: 'client-payment',
-        icon: CreditCard,
-        badge: 'Tự động 3–5s',
-        title: 'Thanh toán VietQR Tự động & COD',
-        summary:
-          'Quét mã QR hoặc mở thẳng ứng dụng ngân hàng tự điền sẵn thông tin.',
-        steps: [
-          'Chọn "Chuyển khoản ngân hàng (VietQR)" để quét mã hoặc mở App Ngân hàng tự điền sẵn Số tiền & Nội dung.',
-          'Hệ thống tự động xác nhận thanh toán thành công sau 3–5 giây mà không cần gửi ảnh chụp màn hình.',
-          'Hoặc chọn "Thanh toán khi nhận hàng (COD)" để kiểm tra hàng rồi mới thanh toán cho shipper.',
-        ],
-        actionLabel: 'Xem Giỏ hàng của tôi',
-        onAction: () => router.push('/cart'),
-      },
-      {
         id: 'client-shipping',
         icon: Truck,
-        badge: 'Freeship 300k',
-        title: 'Vận chuyển & Tra cứu Hành trình Đơn',
+        badge: 'Bước 2',
+        badgeBg: '#ECFDF5',
+        badgeColor: '#059669',
+        title: '2. Theo dõi tiến độ đan 5–6 ngày & Bản đồ SPX',
         summary:
-          'Theo dõi tiến độ đơn hàng và định vị kiện hàng trực tuyến.',
+          'Chỉ cần nhập 10 số điện thoại để xem tiến độ làm len và vị trí bưu cục SPX.',
         steps: [
-          'Giao tiêu chuẩn toàn quốc 15.000₫ (Freeship cho đơn từ 299.000₫) hoặc Giao trong ngày (TP.HCM) (~45k – 65k trả cước theo App).',
-          'Vào mục "Đơn hàng của tôi" để xem tiến độ 4 bước: Đã đặt đơn → Đang chuẩn bị → Đang vận chuyển → Giao thành công.',
-          'Bấm nút "Xem hành trình đơn hàng" để xem vị trí bưu kiện trên Viettel Post, GHTK, GHN, J&T hoặc SPX.',
+          'Trong 5–6 ngày đầu: Theo dõi từng công đoạn nghệ nhân móc len, khâu ráp và đóng gói tại xưởng.',
+          'Khi bàn giao SPX Express: Xem trực tiếp bản đồ lộ trình từ Kho Thủ Đức tới địa chỉ của bạn và từng trạm bưu cục SPX.',
+          'Không cần đăng nhập vẫn tra cứu nhanh được tại mục "Theo dõi đơn" chỉ bằng 10 số SĐT nhận hàng.',
         ],
         actionLabel: 'Tra cứu Đơn hàng',
         onAction: () => router.push('/orders'),
       },
       {
+        id: 'client-reward',
+        icon: Gift,
+        badge: 'Bước 3 • Quà 60k',
+        badgeBg: '#FFF7ED',
+        badgeColor: '#EA580C',
+        title: '3. Vào mục "Đánh giá" nhận Gói Quà 60.000₫ & Mã -15k',
+        summary:
+          'Mở mục "Đánh giá" (ngay sau mục Hoàn thành) để gửi ảnh màn hình nhận mã qua Chat.',
+        steps: [
+          'Mục 1 (Gói Quà 60.000₫): Đăng Video/Story khui hàng lên FB, IG hoặc TikTok kèm tên & link tiemcuonlen.shop → Nhận mã giảm 25.000₫ + Chọn tặng 01 SP 35.000₫ miễn phí (0₫).',
+          'Mục 2 (Mã -15.000₫): Follow Fanpage FB & Chia sẻ bài công khai → Nhận mã giảm 15.000₫ cho đơn tiếp theo.',
+        ],
+        actionLabel: 'Mở mục Đánh giá & Nhận quà',
+        onAction: () => router.push('/orders'),
+      },
+      {
         id: 'client-policy',
         icon: RotateCcw,
-        badge: 'Cam kết 100%',
-        title: 'Bảo hành & Đổi trả Đồ Thủ Công 7 ngày',
+        badge: 'Đảm bảo 100%',
+        badgeBg: '#F1F5F9',
+        badgeColor: '#334155',
+        title: '4. Đồng kiểm khi nhận hàng & Bảo hành 7 ngày',
         summary:
-          'An tâm mua sắm với cam kết chất lượng sợi Len Nhung Gấu, Len Nhung Đũa & Kẽm nhung loại 1.',
+          'Được mở hộp kiểm tra hàng trước khi thanh toán, hỗ trợ đổi mới 100% trong 7 ngày.',
         steps: [
-          'Mỗi sản phẩm đều được kiểm tra kỹ đường móc và đóng gói chống móp trước khi gửi đi.',
-          'Hỗ trợ đổi mới hoặc hoàn tiền 100% trong 7 ngày nếu sản phẩm bị lỗi vận chuyển hoặc sai phân loại đã đặt.',
-          'Mở khung Chat trực tuyến trên web để đội ngũ Tiệm Cuộn Len hỗ trợ bạn ngay lập tức.',
+          'Bạn được quyền Mở hộp kiểm tra đúng mẫu, đúng màu trước khi thanh toán tiền COD cho bưu tá.',
+          'Đổi mới hoặc hoàn tiền 100% trong 7 ngày nếu sản phẩm bị lỗi vận chuyển hoặc sai phân loại.',
         ],
         actionLabel: 'Chat với Tiệm ngay',
         onAction: () => openChat(),
@@ -340,7 +360,7 @@ export default function HelpScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
-        {/* Header */}
+        {/* Clean Compact Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <TouchableOpacity
@@ -349,59 +369,60 @@ export default function HelpScreen() {
                 else router.replace('/');
               }}
               style={styles.iconBtn}>
-              <ChevronLeft size={22} color={COLORS.darkText} />
+              <ChevronLeft size={21} color={COLORS.darkText} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={() => router.replace('/')}>
-              <Home size={19} color={COLORS.darkText} />
-            </TouchableOpacity>
+            {!isMobile && (
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => router.replace('/')}>
+                <Home size={18} color={COLORS.darkText} />
+              </TouchableOpacity>
+            )}
           </View>
-          <Text style={styles.headerTitle}>
-            {isAdmin ? 'Cẩm nang Quản trị' : 'Trung tâm Hỗ trợ'}
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {isAdmin ? 'Cẩm nang Vận hành' : 'Trung tâm Hỗ trợ'}
           </Text>
-          <View style={{ width: 84 }} />
+          <View style={{ width: isMobile ? 38 : 80 }} />
         </View>
 
-        {/* Hero Support Banner */}
+        {/* Clean Hero Support Card */}
         <View style={[styles.heroCard, isMobile && styles.heroCardMobile]}>
           <View style={styles.heroTopRow}>
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
               <Text style={styles.liveBadgeText}>
                 {isAdmin
-                  ? 'Hệ thống Vận hành Tiệm Cuộn Len'
-                  : 'Hỗ trợ trực tuyến • 08:00 – 22:00 hàng ngày'}
+                  ? 'Hệ thống Vận hành • Tiệm Cuộn Len'
+                  : 'Hỗ trợ trực tuyến • 08:00 – 22:00'}
               </Text>
             </View>
             <View style={styles.brandBadge}>
-              <Sparkles size={12} color="#6E5239" />
-              <Text style={styles.brandBadgeText}>100% Handmade</Text>
+              <Sparkles size={11.5} color="#EE4D2D" />
+              <Text style={styles.brandBadgeText}>Đồng kiểm 100%</Text>
             </View>
           </View>
 
           <Text style={[styles.heroTitle, isMobile && styles.heroTitleMobile]}>
             {isAdmin
-              ? 'Quản lý Kho, Đơn hàng & Chăm sóc Khách hàng đồng bộ'
-              : 'Tiệm Cuộn Len luôn sẵn sàng lắng nghe & hỗ trợ bạn 🧶'}
+              ? 'Quản lý Vận đơn SPX, Duyệt Quà 60k & Tư vấn Khách hàng'
+              : 'Cần phối màu len, viết thiệp hay tra cứu đơn SPX?'}
           </Text>
           <Text style={styles.heroSubtitle}>
             {isAdmin
-              ? 'Tra cứu nhanh quy trình đăng mẫu Studio, lên đơn Ship tự tính COD và phản hồi tin nhắn khách hàng theo thời gian thực.'
-              : 'Bạn cần tư vấn phối màu len, đặt đan mẫu riêng, viết thiệp quà tặng hay kiểm tra hành trình đơn hàng? Nhắn trực tiếp với tiệm ngay trên web nhé!'}
+              ? 'Quy trình chuẩn từ lúc cập nhật tiến độ đan 5–6 ngày, đẩy vận đơn Goship SPX tự động đến duyệt ảnh tặng Gói Quà 60.000₫ qua Chat.'
+              : 'Nhắn trực tiếp trên Web hoặc kết nối Zalo / Hotline 0775 111 750 để được Tiệm phản hồi và hỗ trợ ngay lập tức.'}
           </Text>
 
-          {/* Primary Action Buttons */}
           <View style={styles.heroActionsRow}>
             <TouchableOpacity
               style={styles.primaryChatBtn}
               onPress={() => openChat()}
               activeOpacity={0.85}>
-              <MessageCircle size={18} color="#FFFDF9" />
+              <MessageCircle size={17} color="#FFFFFF" />
               <Text style={styles.primaryChatBtnText}>
                 {isAdmin
-                  ? `Mở Hộp thư Khách hàng${unreadCount > 0 ? ` (${unreadCount})` : ''}`
-                  : 'Chat trực tiếp với Tiệm ngay'}
+                  ? `Mở Hộp thư Chat${unreadCount > 0 ? ` (${unreadCount})` : ''}`
+                  : 'Chat trực tiếp với Tiệm'}
               </Text>
             </TouchableOpacity>
 
@@ -409,36 +430,35 @@ export default function HelpScreen() {
               style={styles.secondaryHeroBtn}
               onPress={() => router.push('/orders')}
               activeOpacity={0.8}>
-              <ClipboardList size={17} color="#3D2B1F" />
+              <ClipboardList size={16} color="#1E293B" />
               <Text style={styles.secondaryHeroBtnText}>
-                {isAdmin ? 'Quản lý Đơn & Vận đơn' : 'Tra cứu Đơn hàng'}
+                {isAdmin ? 'Quản lý Đơn & SPX' : 'Tra cứu Đơn hàng'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Service Highlights Bar */}
           <View style={styles.highlightsBar}>
             <View style={styles.highlightPill}>
-              <Clock size={14} color="#5C4332" />
-              <Text style={styles.highlightText}>Phản hồi trong vài phút</Text>
+              <Clock size={13} color="#059669" />
+              <Text style={styles.highlightText}>Đan mới tỉ mỉ 5–6 ngày</Text>
             </View>
             <View style={styles.highlightPill}>
-              <ShieldCheck size={14} color="#2E7D32" />
-              <Text style={styles.highlightText}>Bảo hành đổi trả 7 ngày</Text>
+              <ShieldCheck size={13} color="#059669" />
+              <Text style={styles.highlightText}>Mở hộp kiểm tra hàng</Text>
             </View>
             <View style={styles.highlightPill}>
-              <Store size={14} color="#5C4332" />
-              <Text style={styles.highlightText}>Gói quà & thiệp miễn phí</Text>
+              <Gift size={13} color="#EE4D2D" />
+              <Text style={styles.highlightText}>Đánh giá nhận Quà 60k</Text>
             </View>
           </View>
         </View>
 
-        {/* Official Contact & Support Channels */}
+        {/* 4 Official Contact Channels (Updated Hotline & Zalo: 0775 111 750) */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Liên hệ & Hỗ trợ trực tiếp</Text>
+            <Text style={styles.sectionTitle}>Kênh liên hệ chính thức</Text>
             <Text style={styles.sectionSubtitle}>
-              Chạm để kết nối ngay qua Chat, Zalo, Điện thoại hoặc Email
+              Chạm để mở nhanh Chat, Zalo, Gọi điện hoặc sao chép thông tin
             </Text>
           </View>
 
@@ -453,98 +473,130 @@ export default function HelpScreen() {
               onPress={() => openChat()}
               activeOpacity={0.8}>
               <View
-                style={[styles.channelIconBox, { backgroundColor: '#EFE6DC' }]}>
-                <MessageCircle size={20} color="#3D2B1F" />
+                style={[styles.channelIconBox, { backgroundColor: '#FFF1EE' }]}>
+                <MessageCircle size={19} color="#EE4D2D" />
               </View>
               <View style={styles.channelInfo}>
                 <View style={styles.channelTitleRow}>
                   <Text style={styles.channelTitle}>Chat Trực Tuyến</Text>
-                  <View style={styles.recommendTag}>
-                    <Text style={styles.recommendTagText}>Trên Web</Text>
+                  <View
+                    style={[
+                      styles.recommendTag,
+                      { backgroundColor: '#FFF1EE' },
+                    ]}>
+                    <Text
+                      style={[styles.recommendTagText, { color: '#EE4D2D' }]}>
+                      Nhanh nhất
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.channelDesc} numberOfLines={1}>
-                  Nhắn tin & gửi mẫu trực tiếp cho Tiệm
+                  Gửi mẫu len & nhận mã quà ngay trên Web
                 </Text>
               </View>
-              <ArrowRight size={16} color="#7A5C44" />
+              <ArrowRight size={16} color="#64748B" />
             </TouchableOpacity>
 
-            {/* Channel 2: Zalo (0387 966 507) */}
+            {/* Channel 2: Zalo (0775 111 750) */}
             <TouchableOpacity
               style={[styles.channelCard, isMobile && styles.channelCardMobile]}
               onPress={() =>
                 handleOpenExternalLink(
-                  'https://zalo.me/0387966507',
-                  '0387966507',
+                  `https://zalo.me/${SHOP_HOTLINE_RAW}`,
+                  SHOP_HOTLINE_RAW,
                   'zalo'
                 )
               }
               activeOpacity={0.8}>
               <View
-                style={[styles.channelIconBox, { backgroundColor: '#EBF3FA' }]}>
-                <MessageCircle size={20} color="#0068FF" />
+                style={[styles.channelIconBox, { backgroundColor: '#EFF6FF' }]}>
+                <MessageCircle size={19} color="#0068FF" />
               </View>
               <View style={styles.channelInfo}>
                 <View style={styles.channelTitleRow}>
                   <Text style={styles.channelTitle}>Zalo Hỗ Trợ</Text>
-                  <View style={[styles.recommendTag, { backgroundColor: '#EBF3FA' }]}>
-                    <Text style={[styles.recommendTagText, { color: '#0068FF' }]}>
+                  <View
+                    style={[
+                      styles.recommendTag,
+                      { backgroundColor: '#EFF6FF' },
+                    ]}>
+                    <Text
+                      style={[styles.recommendTagText, { color: '#0068FF' }]}>
                       Zalo
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.channelValueText}>0387 966 507</Text>
+                <Text style={styles.channelValueText}>
+                  {SHOP_HOTLINE_DISPLAY}
+                </Text>
               </View>
               <TouchableOpacity
                 style={styles.copyMiniPill}
-                onPress={() => handleCopySupportCode('0387966507', 'zalo')}
+                onPress={() => handleCopySupportCode(SHOP_HOTLINE_RAW, 'zalo')}
                 activeOpacity={0.75}>
                 {copiedCode === 'zalo' ? (
                   <>
-                    <Check size={12} color="#2E7D32" />
-                    <Text style={[styles.copyMiniText, { color: '#2E7D32' }]}>
+                    <Check size={12} color="#059669" />
+                    <Text style={[styles.copyMiniText, { color: '#059669' }]}>
                       Đã chép
                     </Text>
                   </>
                 ) : (
                   <>
-                    <Copy size={12} color="#5C4332" />
-                    <Text style={styles.copyMiniText}>Chép SĐT</Text>
+                    <Copy size={12} color="#475569" />
+                    <Text style={styles.copyMiniText}>Chép số</Text>
                   </>
                 )}
               </TouchableOpacity>
             </TouchableOpacity>
 
-            {/* Channel 3: Phone Hotline (0387 966 507) */}
+            {/* Channel 3: Phone Hotline (0775 111 750) */}
             <TouchableOpacity
               style={[styles.channelCard, isMobile && styles.channelCardMobile]}
               onPress={() =>
-                handleOpenExternalLink('tel:0387966507', '0387966507', 'phone')
+                handleOpenExternalLink(
+                  `tel:${SHOP_HOTLINE_RAW}`,
+                  SHOP_HOTLINE_RAW,
+                  'phone'
+                )
               }
               activeOpacity={0.8}>
               <View
-                style={[styles.channelIconBox, { backgroundColor: '#EBF5EE' }]}>
-                <Phone size={20} color="#2E7D32" />
+                style={[styles.channelIconBox, { backgroundColor: '#ECFDF5' }]}>
+                <Phone size={19} color="#059669" />
               </View>
               <View style={styles.channelInfo}>
-                <Text style={styles.channelTitle}>Điện thoại / Hotline</Text>
-                <Text style={styles.channelValueText}>0387 966 507</Text>
+                <View style={styles.channelTitleRow}>
+                  <Text style={styles.channelTitle}>Điện thoại / Hotline</Text>
+                  <View
+                    style={[
+                      styles.recommendTag,
+                      { backgroundColor: '#ECFDF5' },
+                    ]}>
+                    <Text
+                      style={[styles.recommendTagText, { color: '#059669' }]}>
+                      24/7
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.channelValueText}>
+                  {SHOP_HOTLINE_DISPLAY}
+                </Text>
               </View>
               <TouchableOpacity
                 style={styles.copyMiniPill}
-                onPress={() => handleCopySupportCode('0387966507', 'phone')}
+                onPress={() => handleCopySupportCode(SHOP_HOTLINE_RAW, 'phone')}
                 activeOpacity={0.75}>
                 {copiedCode === 'phone' ? (
                   <>
-                    <Check size={12} color="#2E7D32" />
-                    <Text style={[styles.copyMiniText, { color: '#2E7D32' }]}>
+                    <Check size={12} color="#059669" />
+                    <Text style={[styles.copyMiniText, { color: '#059669' }]}>
                       Đã chép
                     </Text>
                   </>
                 ) : (
                   <>
-                    <Copy size={12} color="#5C4332" />
+                    <Copy size={12} color="#475569" />
                     <Text style={styles.copyMiniText}>Chép số</Text>
                   </>
                 )}
@@ -556,38 +608,36 @@ export default function HelpScreen() {
               style={[styles.channelCard, isMobile && styles.channelCardMobile]}
               onPress={() =>
                 handleOpenExternalLink(
-                  'mailto:tiemcuonlen@gmail.com?subject=Hỗ trợ từ Tiệm Cuộn Len',
-                  'tiemcuonlen@gmail.com',
+                  `mailto:${SHOP_EMAIL}?subject=Hỗ trợ từ Tiệm Cuộn Len`,
+                  SHOP_EMAIL,
                   'email'
                 )
               }
               activeOpacity={0.8}>
               <View
-                style={[styles.channelIconBox, { backgroundColor: '#F6EFE6' }]}>
-                <Mail size={20} color="#6E5239" />
+                style={[styles.channelIconBox, { backgroundColor: '#F8FAFC' }]}>
+                <Mail size={19} color="#334155" />
               </View>
               <View style={styles.channelInfo}>
                 <Text style={styles.channelTitle}>Email Hỗ Trợ</Text>
                 <Text style={styles.channelValueText} numberOfLines={1}>
-                  tiemcuonlen@gmail.com
+                  {SHOP_EMAIL}
                 </Text>
               </View>
               <TouchableOpacity
                 style={styles.copyMiniPill}
-                onPress={() =>
-                  handleCopySupportCode('tiemcuonlen@gmail.com', 'email')
-                }
+                onPress={() => handleCopySupportCode(SHOP_EMAIL, 'email')}
                 activeOpacity={0.75}>
                 {copiedCode === 'email' ? (
                   <>
-                    <Check size={12} color="#2E7D32" />
-                    <Text style={[styles.copyMiniText, { color: '#2E7D32' }]}>
+                    <Check size={12} color="#059669" />
+                    <Text style={[styles.copyMiniText, { color: '#059669' }]}>
                       Đã chép
                     </Text>
                   </>
                 ) : (
                   <>
-                    <Copy size={12} color="#5C4332" />
+                    <Copy size={12} color="#475569" />
                     <Text style={styles.copyMiniText}>Chép</Text>
                   </>
                 )}
@@ -596,14 +646,16 @@ export default function HelpScreen() {
           </View>
         </View>
 
-        {/* Interactive Step-by-Step Guides */}
+        {/* Step-by-Step Standard Workflow */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>
-              {isAdmin ? 'Quy trình vận hành chuẩn' : 'Cẩm nang mua sắm nhanh'}
+              {isAdmin
+                ? 'Quy trình vận hành 4 bước chuẩn'
+                : 'Quy trình đặt hàng & Nhận quà 60.000₫'}
             </Text>
             <Text style={styles.sectionSubtitle}>
-              Chạm vào từng mục để xem hướng dẫn chi tiết
+              Chạm vào từng bước để xem chi tiết và mở trang tương ứng
             </Text>
           </View>
 
@@ -624,22 +676,36 @@ export default function HelpScreen() {
                       setExpandedGuideId(expanded ? null : card.id)
                     }
                     activeOpacity={0.75}>
-                    <View style={styles.guideIconWrap}>
-                      <Icon size={20} color={COLORS.primary} />
+                    <View
+                      style={[
+                        styles.guideIconWrap,
+                        { backgroundColor: card.badgeBg },
+                      ]}>
+                      <Icon size={19} color={card.badgeColor} />
                     </View>
                     <View style={styles.guideHeaderContent}>
                       <View style={styles.guideTitleRow}>
                         <Text style={styles.guideTitle}>{card.title}</Text>
-                        <View style={styles.guideBadge}>
-                          <Text style={styles.guideBadgeText}>{card.badge}</Text>
+                        <View
+                          style={[
+                            styles.guideBadge,
+                            { backgroundColor: card.badgeBg },
+                          ]}>
+                          <Text
+                            style={[
+                              styles.guideBadgeText,
+                              { color: card.badgeColor },
+                            ]}>
+                            {card.badge}
+                          </Text>
                         </View>
                       </View>
                       <Text style={styles.guideSummary}>{card.summary}</Text>
                     </View>
                     {expanded ? (
-                      <ChevronUp size={18} color="#6E5239" />
+                      <ChevronUp size={18} color="#334155" />
                     ) : (
-                      <ChevronDown size={18} color="#9C8B7A" />
+                      <ChevronDown size={18} color="#94A3B8" />
                     )}
                   </TouchableOpacity>
 
@@ -657,11 +723,11 @@ export default function HelpScreen() {
                       <TouchableOpacity
                         style={styles.guideActionBtn}
                         onPress={card.onAction}
-                        activeOpacity={0.8}>
+                        activeOpacity={0.85}>
                         <Text style={styles.guideActionBtnText}>
                           {card.actionLabel}
                         </Text>
-                        <ArrowRight size={14} color="#FFFDF9" />
+                        <ArrowRight size={14} color="#FFFFFF" />
                       </TouchableOpacity>
                     </View>
                   )}
@@ -678,17 +744,16 @@ export default function HelpScreen() {
               Câu hỏi thường gặp ({filteredFaqs.length})
             </Text>
             <Text style={styles.sectionSubtitle}>
-              Giải đáp nhanh các thắc mắc phổ biến tại Tiệm Cuộn Len
+              Giải đáp nhanh về thời gian đan, bản đồ SPX, VietQR & Gói Quà 60k
             </Text>
           </View>
 
-          {/* Search Bar */}
           <View style={styles.searchWrap}>
-            <Search size={17} color="#8D7B68" />
+            <Search size={16} color="#64748B" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Nhập từ khoá cần tìm (VD: vận chuyển, VietQR, đổi trả...)"
-              placeholderTextColor="#9C8B7A"
+              placeholder="Tìm nhanh (VD: SPX, VietQR, quà 60k, đổi trả...)"
+              placeholderTextColor="#94A3B8"
               value={search}
               onChangeText={setSearch}
             />
@@ -696,12 +761,11 @@ export default function HelpScreen() {
               <TouchableOpacity
                 onPress={() => setSearch('')}
                 style={styles.clearSearchBtn}>
-                <X size={15} color="#7A6855" />
+                <X size={15} color="#64748B" />
               </TouchableOpacity>
             )}
           </View>
 
-          {/* Category Filter Chips */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -729,22 +793,21 @@ export default function HelpScreen() {
             })}
           </ScrollView>
 
-          {/* FAQ Accordion List */}
           <View style={styles.faqListCard}>
             {filteredFaqs.length === 0 ? (
               <View style={styles.emptyFaqBox}>
-                <HelpCircle size={32} color="#B8A99A" />
+                <HelpCircle size={30} color="#94A3B8" />
                 <Text style={styles.emptyFaqTitle}>
                   Không tìm thấy câu hỏi phù hợp
                 </Text>
                 <Text style={styles.emptyFaqSub}>
-                  Bạn có thể nhắn trực tiếp qua khung Chat để được tiệm giải đáp
-                  ngay nhé!
+                  Nhắn trực tiếp qua khung Chat hoặc Zalo {SHOP_HOTLINE_DISPLAY}{' '}
+                  để được Tiệm hỗ trợ ngay nhé!
                 </Text>
                 <TouchableOpacity
                   style={styles.emptyFaqChatBtn}
                   onPress={() => openChat()}>
-                  <MessageCircle size={15} color="#FFFDF9" />
+                  <MessageCircle size={15} color="#FFFFFF" />
                   <Text style={styles.emptyFaqChatBtnText}>
                     Hỏi trực tiếp qua Chat
                   </Text>
@@ -759,7 +822,7 @@ export default function HelpScreen() {
                     key={i}
                     style={[styles.faqItem, isLast && styles.faqItemLast]}
                     onPress={() => setExpandedFaqIndex(isExpanded ? null : i)}
-                    activeOpacity={0.7}>
+                    activeOpacity={0.75}>
                     <View style={styles.faqHeader}>
                       <View
                         style={[
@@ -767,8 +830,8 @@ export default function HelpScreen() {
                           isExpanded && styles.faqIconCircleActive,
                         ]}>
                         <HelpCircle
-                          size={15}
-                          color={isExpanded ? '#FFFDF9' : '#6E5239'}
+                          size={14}
+                          color={isExpanded ? '#FFFFFF' : '#475569'}
                         />
                       </View>
                       <Text
@@ -779,9 +842,9 @@ export default function HelpScreen() {
                         {faq.q}
                       </Text>
                       {isExpanded ? (
-                        <ChevronUp size={17} color="#6E5239" />
+                        <ChevronUp size={17} color="#0F172A" />
                       ) : (
-                        <ChevronDown size={17} color="#9C8B7A" />
+                        <ChevronDown size={17} color="#94A3B8" />
                       )}
                     </View>
                     {isExpanded && (
@@ -796,7 +859,7 @@ export default function HelpScreen() {
           </View>
         </View>
 
-        <View style={{ height: 50 }} />
+        <View style={{ height: 48 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -824,7 +887,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: SPACING.md,
+    paddingVertical: 12,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -835,30 +898,29 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#EADFD2',
-    ...SHADOWS.small,
+    borderColor: '#E2E8F0',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
-    color: COLORS.darkText,
+    color: '#0F172A',
   },
   heroCard: {
-    backgroundColor: '#EFE6DC',
-    borderRadius: 24,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
     borderWidth: 1,
-    borderColor: '#DFCBB5',
-    marginBottom: 20,
+    borderColor: '#E2E8F0',
+    marginBottom: 18,
     ...SHADOWS.small,
   },
   heroCardMobile: {
-    padding: 15,
-    borderRadius: 20,
+    padding: 14,
+    borderRadius: 16,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -866,144 +928,147 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFFDF9',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4.5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E3D5C5',
+    borderColor: '#E2E8F0',
   },
   liveDot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#10B981',
   },
   liveBadgeText: {
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#3D2B1F',
+    color: '#1E293B',
   },
   brandBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 253, 249, 0.75)',
+    backgroundColor: '#FFF1EE',
+    borderWidth: 1,
+    borderColor: '#FFD5CC',
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
   },
   brandBadgeText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#6E5239',
+    fontWeight: '800',
+    color: '#EE4D2D',
   },
   heroTitle: {
-    fontSize: 21,
+    fontSize: 19,
     fontWeight: '800',
-    color: '#2C1E14',
-    lineHeight: 28,
+    color: '#0F172A',
+    lineHeight: 26,
     marginBottom: 6,
   },
   heroTitleMobile: {
-    fontSize: 18,
-    lineHeight: 25,
+    fontSize: 16.5,
+    lineHeight: 23,
   },
   heroSubtitle: {
-    fontSize: 13.5,
-    color: '#5C4738',
-    lineHeight: 20,
-    marginBottom: 16,
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 19,
+    marginBottom: 14,
   },
   heroActionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 14,
   },
   primaryChatBtn: {
     flex: 1,
-    minWidth: 210,
+    minWidth: 185,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#3D2B1F',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    ...SHADOWS.small,
+    gap: 7,
+    backgroundColor: '#EE4D2D',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 11,
   },
   primaryChatBtnText: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '800',
-    color: '#FFFDF9',
+    color: '#FFFFFF',
   },
   secondaryHeroBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    backgroundColor: '#FFFDF9',
-    paddingVertical: 13,
-    paddingHorizontal: 15,
-    borderRadius: 14,
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 11,
     borderWidth: 1,
-    borderColor: '#D8C3AD',
+    borderColor: '#CBD5E1',
   },
   secondaryHeroBtnText: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#3D2B1F',
+    color: '#1E293B',
   },
   highlightsBar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    paddingTop: 12,
+    gap: 6,
+    paddingTop: 11,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(110, 82, 57, 0.14)',
+    borderTopColor: '#F1F5F9',
   },
   highlightPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(255, 253, 249, 0.65)',
-    paddingHorizontal: 9,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   highlightText: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#4A3728',
+    color: '#334155',
   },
   sectionBlock: {
-    marginBottom: 22,
+    marginBottom: 20,
   },
   sectionHeaderRow: {
-    marginBottom: 10,
+    marginBottom: 9,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    color: COLORS.darkText,
+    color: '#0F172A',
   },
   sectionSubtitle: {
-    fontSize: 12.5,
-    color: COLORS.mediumText,
+    fontSize: 12,
+    color: '#64748B',
     marginTop: 2,
   },
   channelsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 9,
   },
   channelsGridMobile: {
     flexDirection: 'column',
@@ -1014,21 +1079,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 11,
-    backgroundColor: '#FFFDF9',
-    padding: 13,
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8DEC8',
-    ...SHADOWS.small,
+    borderColor: '#E2E8F0',
   },
   channelCardMobile: {
     minWidth: 0,
     width: '100%',
   },
   channelIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1043,78 +1107,71 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   channelTitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '800',
-    color: COLORS.darkText,
+    color: '#0F172A',
   },
   recommendTag: {
-    backgroundColor: '#EBF5EE',
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingVertical: 1.5,
+    borderRadius: 5,
   },
   recommendTagText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#2E7D32',
   },
   channelDesc: {
     fontSize: 12,
-    color: COLORS.mediumText,
+    color: '#64748B',
     marginTop: 2,
-    lineHeight: 16,
   },
   channelValueText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#5C4332',
+    color: '#334155',
     marginTop: 2,
   },
   copyMiniPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F5EFE6',
-    paddingHorizontal: 8,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E5D8C8',
+    borderColor: '#E2E8F0',
   },
   copyMiniText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#5C4332',
+    color: '#475569',
   },
   guidesList: {
-    gap: 10,
+    gap: 9,
   },
   guideCard: {
-    backgroundColor: '#FFFDF9',
-    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8DEC8',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
-    ...SHADOWS.small,
   },
   guideCardExpanded: {
-    borderColor: '#C8B096',
+    borderColor: '#CBD5E1',
   },
   guideCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 14,
+    gap: 11,
+    padding: 13,
   },
   guideIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#F5EFE6',
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E6DDD0',
   },
   guideHeaderContent: {
     flex: 1,
@@ -1127,35 +1184,33 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   guideTitle: {
-    fontSize: 14.5,
+    fontSize: 13.5,
     fontWeight: '800',
-    color: COLORS.darkText,
+    color: '#0F172A',
   },
   guideBadge: {
-    backgroundColor: '#EFE6DC',
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 5,
   },
   guideBadgeText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: '#5C4332',
+    fontSize: 10,
+    fontWeight: '800',
   },
   guideSummary: {
-    fontSize: 12.5,
-    color: COLORS.mediumText,
-    marginTop: 3,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
     lineHeight: 17,
   },
   guideBody: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingHorizontal: 13,
+    paddingBottom: 13,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F0E8DC',
-    backgroundColor: '#FAF6F0',
-    gap: 9,
+    borderTopColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
+    gap: 8,
   },
   stepRow: {
     flexDirection: 'row',
@@ -1163,99 +1218,97 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   stepNumberCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#3D2B1F',
+    width: 19,
+    height: 19,
+    borderRadius: 9.5,
+    backgroundColor: '#1E293B',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
   stepNumberText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
-    color: '#FFFDF9',
+    color: '#FFFFFF',
   },
   stepText: {
     flex: 1,
-    fontSize: 13,
-    color: '#3D2B1F',
-    lineHeight: 19,
+    fontSize: 12.5,
+    color: '#334155',
+    lineHeight: 18,
   },
   guideActionBtn: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 14,
+    backgroundColor: '#2C1E16',
+    paddingHorizontal: 13,
     paddingVertical: 8,
-    borderRadius: 10,
-    marginTop: 4,
+    borderRadius: 9,
+    marginTop: 3,
   },
   guideActionBtnText: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '800',
-    color: '#FFFDF9',
+    color: '#FFFFFF',
   },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFDF9',
-    borderRadius: 14,
-    paddingHorizontal: 13,
-    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 9,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#E5D8C8',
-    ...SHADOWS.small,
+    borderColor: '#E2E8F0',
   },
   searchInput: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    color: COLORS.darkText,
-    paddingVertical: 11,
+    fontSize: 16,
+    color: '#0F172A',
+    paddingVertical: 10,
   },
   clearSearchBtn: {
     padding: 4,
   },
   categoryChipsRow: {
-    gap: 8,
-    paddingBottom: 12,
+    gap: 7,
+    paddingBottom: 10,
   },
   categoryChip: {
-    paddingHorizontal: 13,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6.5,
     borderRadius: 999,
-    backgroundColor: '#F5EFE6',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E3D5C5',
+    borderColor: '#E2E8F0',
   },
   categoryChipActive: {
-    backgroundColor: '#3D2B1F',
-    borderColor: '#3D2B1F',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   categoryChipText: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#5C4738',
+    color: '#475569',
   },
   categoryChipTextActive: {
-    color: '#FFFDF9',
+    color: '#FFFFFF',
   },
   faqListCard: {
-    backgroundColor: '#FFFDF9',
-    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8DEC8',
-    paddingHorizontal: 14,
-    ...SHADOWS.small,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 13,
   },
   faqItem: {
-    paddingVertical: 13,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E8DC',
+    borderBottomColor: '#F1F5F9',
   },
   faqItemLast: {
     borderBottomWidth: 0,
@@ -1263,59 +1316,59 @@ const styles = StyleSheet.create({
   faqHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 9,
   },
   faqIconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#F5EFE6',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   faqIconCircleActive: {
-    backgroundColor: '#6E5239',
+    backgroundColor: '#EE4D2D',
   },
   faqQuestion: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '700',
-    color: COLORS.darkText,
-    lineHeight: 20,
+    color: '#1E293B',
+    lineHeight: 19,
   },
   faqQuestionActive: {
-    color: '#3D2B1F',
+    color: '#0F172A',
     fontWeight: '800',
   },
   faqAnswerBox: {
     marginTop: 8,
-    marginLeft: 36,
-    backgroundColor: '#FAF6F0',
-    borderRadius: 12,
-    padding: 11,
+    marginLeft: 33,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
     borderWidth: 1,
-    borderColor: '#EDE2D3',
+    borderColor: '#E2E8F0',
   },
   faqAnswer: {
-    fontSize: 13,
-    color: '#4A3728',
-    lineHeight: 20,
+    fontSize: 12.5,
+    color: '#334155',
+    lineHeight: 19,
   },
   emptyFaqBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 32,
+    paddingVertical: 28,
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 7,
   },
   emptyFaqTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    color: COLORS.darkText,
+    color: '#0F172A',
   },
   emptyFaqSub: {
-    fontSize: 12.5,
-    color: COLORS.mediumText,
+    fontSize: 12,
+    color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -1323,15 +1376,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#3D2B1F',
+    backgroundColor: '#EE4D2D',
     paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 12,
-    marginTop: 6,
+    paddingVertical: 8.5,
+    borderRadius: 10,
+    marginTop: 4,
   },
   emptyFaqChatBtnText: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '800',
-    color: '#FFFDF9',
+    color: '#FFFFFF',
   },
 });

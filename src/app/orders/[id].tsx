@@ -248,7 +248,7 @@ export default function OrderDetailScreen() {
   const [showWarehouseEditor, setShowWarehouseEditor] = useState(false);
   const [warehouseDraft, setWarehouseDraft] = useState<AdminGoshipWarehouse>({
     senderName: 'Tiệm Cuộn Len',
-    senderPhone: '0387966507',
+    senderPhone: '0775111750',
     fromCity: 'Hồ Chí Minh',
     fromDistrict: 'Thành phố Thủ Đức',
     fromWard: 'Phường Long Thạnh Mỹ',
