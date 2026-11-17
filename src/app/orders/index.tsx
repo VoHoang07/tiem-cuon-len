@@ -200,7 +200,6 @@ export default function OrdersScreen() {
         if (!patch) return o;
         return {
           ...o,
-          status: patch.status || o.status,
           shippingAddress: {
             ...o.shippingAddress,
             ...patch.shippingAddress,
@@ -237,7 +236,7 @@ export default function OrdersScreen() {
       for (const s of res.syncedOrders) {
         if (s?.id) {
           nextMap[s.id] = s;
-          if (s.shippingAddress?.trackingCode) {
+          if (s.shippingAddress?.trackingCode || s.status) {
             hasNewTracking = true;
           }
         }
@@ -786,7 +785,15 @@ export default function OrdersScreen() {
               {isAdmin && nextStatus ? (
                 <TouchableOpacity
                   style={styles.advanceBtn}
-                  onPress={() => updateOrderStatus(item.id, nextStatus)}
+                  onPress={() => {
+                    setSyncedPatchesMap((prev) => {
+                      if (!prev[item.id]) return prev;
+                      const copy = { ...prev };
+                      delete copy[item.id];
+                      return copy;
+                    });
+                    void updateOrderStatus(item.id, nextStatus);
+                  }}
                   activeOpacity={0.8}>
                   <ArrowRightCircle size={15} color="#3D2B1F" />
                   <Text style={styles.advanceBtnText}>

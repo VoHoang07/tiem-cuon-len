@@ -98,6 +98,7 @@ SET search_path = public
 AS $$
   SELECT
     lower(coalesce(auth.jwt() ->> 'email', '')) IN (
+      'tiemcuonlen@gmail.com',
       'vohoang1327@gmail.com',
       'khanhly30072007@gmail.com'
     )

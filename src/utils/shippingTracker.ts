@@ -1,4 +1,4 @@
-import { supabase } from '@/services/supabase';
+import { ensureClientSupabaseAuthHeaders } from '@/services/supabase';
 import type { CraftingStageKey } from '@/types/address';
 import type { Order } from '@/types/order';
 import { formatVND } from '@/utils/formatCurrency';
@@ -547,7 +547,7 @@ export async function fetchLiveCarrierJourney(
 
 export interface SyncedOrderGoshipPayload {
   id: string;
-  status: Order['status'];
+  status?: Order['status'];
   shippingAddress: Partial<Order['shippingAddress']>;
 }
 
@@ -594,19 +594,7 @@ export async function syncActiveOrdersWithGoship(
 }
 
 async function getAdminBearerHeader(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest',
-  };
-  try {
-    const { data } = await supabase.auth.getSession();
-    if (data?.session?.access_token) {
-      headers.Authorization = `Bearer ${data.session.access_token}`;
-    }
-  } catch {
-    // ignore
-  }
-  return headers;
+  return ensureClientSupabaseAuthHeaders();
 }
 
 export interface AdminGoshipWarehouse {

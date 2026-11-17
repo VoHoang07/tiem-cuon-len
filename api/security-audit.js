@@ -574,20 +574,35 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           signedInUser.id &&
           (!signedInUser.user_metadata || signedInUser.user_metadata.role !== 'admin')
         ) {
-          await fetch(
-            `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(signedInUser.id)}`,
-            {
+          await Promise.all([
+            fetch(`${SUPABASE_URL}/auth/v1/user`, {
               method: 'PUT',
-              headers: adminHeaders,
+              headers: {
+                ...publicAuthHeaders,
+                Authorization: `Bearer ${firstSignIn.session.access_token}`,
+              },
               body: JSON.stringify({
-                email_confirm: true,
-                user_metadata: {
+                data: {
                   ...(signedInUser.user_metadata || {}),
                   role: 'admin',
                 },
               }),
-            }
-          ).catch(() => {});
+            }).catch(() => {}),
+            fetch(
+              `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(signedInUser.id)}`,
+              {
+                method: 'PUT',
+                headers: adminHeaders,
+                body: JSON.stringify({
+                  email_confirm: true,
+                  user_metadata: {
+                    ...(signedInUser.user_metadata || {}),
+                    role: 'admin',
+                  },
+                }),
+              }
+            ).catch(() => {}),
+          ]);
         }
         if (signedInUser && signedInUser.id) {
           await findAndRelinkLegacyCustomerServer(signedInUser.id);
@@ -680,6 +695,50 @@ module.exports = withGlobalErrorHandler('/api/security-audit', async function ha
           status: 'created',
           session: createdSignIn.session || null,
         });
+      }
+
+      // Fallback when `/auth/v1/admin/users` is unavailable (e.g. publishable key mode with `mailer_autoconfirm: true`)
+      if (createRes.status === 401 || createRes.status === 403) {
+        const publicSignUpRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+          method: 'POST',
+          headers: publicAuthHeaders,
+          body: JSON.stringify({
+            email,
+            password,
+            data: {
+              name: effectiveName,
+              full_name: effectiveName,
+              ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+              role: isAdminEmail ? 'admin' : 'customer',
+              avatar: 'capybara',
+              auth_provider: authProvider,
+            },
+          }),
+        });
+        if (publicSignUpRes.ok) {
+          const signUpJson = await publicSignUpRes.json().catch(() => ({}));
+          const createdSignIn = await signInViaGoTrueServer();
+          const finalSession =
+            createdSignIn.session ||
+            (signUpJson && signUpJson.access_token
+              ? {
+                  access_token: signUpJson.access_token,
+                  refresh_token: signUpJson.refresh_token,
+                  expires_in: signUpJson.expires_in,
+                  expires_at: signUpJson.expires_at,
+                  token_type: signUpJson.token_type || 'bearer',
+                  user: signUpJson.user,
+                }
+              : null);
+          if (finalSession && finalSession.user && finalSession.user.id) {
+            await findAndRelinkLegacyCustomerServer(finalSession.user.id);
+          }
+          return res.status(200).json({
+            success: true,
+            status: 'created',
+            session: finalSession,
+          });
+        }
       }
 
       const createErrJson = await createRes.json().catch(() => ({}));

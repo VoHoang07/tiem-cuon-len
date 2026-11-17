@@ -522,12 +522,14 @@ async function syncOrderWithGoshipAndSpxServer(order) {
           nextStatus
         );
         const promotedStatus =
-          mappedStatus !== nextStatus
-            ? mappedStatus
-            : trackingNumber &&
-                (nextStatus === 'Đang xử lý' || nextStatus === 'Đang chuẩn bị hàng')
-              ? 'Đang giao'
-              : nextStatus;
+          nextStatus === 'Hoàn thành' || nextStatus === 'Đã hủy'
+            ? nextStatus
+            : mappedStatus !== nextStatus
+              ? mappedStatus
+              : trackingNumber &&
+                  (nextStatus === 'Đang xử lý' || nextStatus === 'Đang chuẩn bị hàng')
+                ? 'Đang giao'
+                : nextStatus;
 
         const rawHist = Array.isArray(matchedShipment.history)
           ? matchedShipment.history
@@ -1003,7 +1005,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
           const synced = await syncOrderWithGoshipAndSpxServer(ord);
           syncedOrders.push({
             id: synced.id,
-            status: synced.status,
+            status: synced.status !== ord.status ? synced.status : undefined,
             shippingAddress: {
               shippingCarrier: synced.shippingAddress && synced.shippingAddress.shippingCarrier,
               trackingCode: synced.shippingAddress && synced.shippingAddress.trackingCode,

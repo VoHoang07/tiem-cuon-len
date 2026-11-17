@@ -1,5 +1,6 @@
 import {
     buildSupabasePublicHeaders,
+    ensureClientSupabaseAuthHeaders,
     supabase,
     supabaseAnonKey,
     supabaseUrl,
@@ -254,6 +255,11 @@ function purgeLocalSupabaseSessionTokens() {
         }
       }
       if (window.localStorage) {
+        try {
+          window.localStorage.removeItem(LAST_OAUTH_TOKEN_SESSION_KEY);
+        } catch {
+          // ignore
+        }
         const keysToRemove: string[] = [];
         for (let i = 0; i < window.localStorage.length; i++) {
           const k = window.localStorage.key(i);
@@ -461,10 +467,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const resolved = toAuthUser(session, localAvatar);
             setUser(resolved);
             saveCachedAuthUser(resolved);
+            if (
+              resolved?.role === 'admin' &&
+              session.user.user_metadata?.role !== 'admin'
+            ) {
+              void supabase.auth
+                .updateUser({ data: { role: 'admin' } })
+                .then(() => supabase.auth.refreshSession())
+                .catch(() => {});
+            }
           } else {
             const cachedUser = loadCachedAuthUser();
             if (cachedUser) {
               setUser(cachedUser);
+              void ensureClientSupabaseAuthHeaders();
             } else {
               setUser(null);
             }
@@ -1067,15 +1083,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const isAdminEmail = ADMIN_EMAILS.has(verifiedEmail);
 
         try {
+          const serializedOAuth = JSON.stringify({
+            provider,
+            token: accessToken.trim(),
+            savedAt: Date.now(),
+          });
           if (typeof window !== 'undefined' && window.sessionStorage) {
-            window.sessionStorage.setItem(
-              LAST_OAUTH_TOKEN_SESSION_KEY,
-              JSON.stringify({
-                provider,
-                token: accessToken.trim(),
-                savedAt: Date.now(),
-              })
-            );
+            window.sessionStorage.setItem(LAST_OAUTH_TOKEN_SESSION_KEY, serializedOAuth);
+          }
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(LAST_OAUTH_TOKEN_SESSION_KEY, serializedOAuth);
           }
         } catch {
           // ignore

@@ -1,5 +1,6 @@
 import {
     buildSupabasePublicHeaders,
+    ensureClientSupabaseAuthHeaders,
     supabase,
     supabaseAnonKey,
     supabaseUrl,
@@ -27,11 +28,10 @@ async function callOrdersGuardApi(body: Record<string, unknown>): Promise<{
 }> {
   if (typeof window === 'undefined') return { ok: false };
   try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) return { ok: false };
+    const authHeaders = await ensureClientSupabaseAuthHeaders();
+    if (!authHeaders.Authorization && !authHeaders['X-OAuth-Token']) {
+      return { ok: false };
+    }
 
     const controller =
       typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -40,11 +40,7 @@ async function callOrdersGuardApi(body: Record<string, unknown>): Promise<{
       const res = await fetch('/api/orders-guard', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest',
-        },
+        headers: authHeaders,
         body: JSON.stringify(body),
         signal: controller?.signal,
       });
@@ -656,20 +652,7 @@ async function pushRescuedOrdersToServer(
   // 1. Try Server-Side `/api/orders-guard` (`action: 'rescue_orders'`)
   if (typeof window !== 'undefined') {
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      };
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          headers.Authorization = `Bearer ${session.access_token}`;
-        }
-      } catch {
-        // ignore
-      }
+      const headers = await ensureClientSupabaseAuthHeaders();
       const res = await fetch('/api/orders-guard', {
         method: 'POST',
         credentials: 'same-origin',
@@ -742,6 +725,26 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
   const deletedOrderIdsRef = useRef<Set<string>>(loadDeletedOrderIds());
   const rescuedToServerIdsRef = useRef<Set<string>>(new Set());
+  const recentStatusOverridesRef = useRef<
+    Map<string, { status: OrderStatus; ts: number }>
+  >(new Map());
+
+  const applyRecentStatusOverrides = useCallback((list: Order[]): Order[] => {
+    const now = Date.now();
+    return list.map((o) => {
+      const ov = recentStatusOverridesRef.current.get(o.id);
+      if (!ov) return o;
+      if (now - ov.ts > 35000) {
+        recentStatusOverridesRef.current.delete(o.id);
+        return o;
+      }
+      if (o.status === ov.status) {
+        recentStatusOverridesRef.current.delete(o.id);
+        return o;
+      }
+      return { ...o, status: ov.status };
+    });
+  }, []);
 
   // Reset/reload cached orders when user or role changes
   useEffect(() => {
@@ -799,8 +802,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          const merged = [...remoteFiltered, ...missingOnServer].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          const merged = applyRecentStatusOverrides(
+            [...remoteFiltered, ...missingOnServer].sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            )
           );
 
           setOrders((prev) => {
@@ -881,8 +886,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             for (const p of prevInFlight) {
               if (!mergeMap.has(p.id)) mergeMap.set(p.id, p);
             }
-            const merged = Array.from(mergeMap.values()).sort(
-              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            const merged = applyRecentStatusOverrides(
+              Array.from(mergeMap.values()).sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              )
             );
             if (ordersSignature(merged) === ordersSignature(prev)) return prev;
             saveCachedOrders(merged, user.id);
@@ -1031,40 +1038,53 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     }, [user?.id]);
 
     const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
-    const validated = validateOrderShippingUpdateSchema({ orderId, status });
-    if (!validated.success || !validated.data) return;
+      const validated = validateOrderShippingUpdateSchema({ orderId, status });
+      if (!validated.success || !validated.data) return;
 
-    setOrders((prev) => {
-      const next = prev.map((o) => (o.id === orderId ? { ...o, status } : o));
-      saveCachedOrders(next, user?.id);
-      return next;
-    });
-    const isCustomerAllowedTransition =
-      status === 'Hoàn thành' || status === 'Đã hủy';
-    if (role !== 'admin' && !isCustomerAllowedTransition) return;
+      recentStatusOverridesRef.current.set(orderId, {
+        status,
+        ts: Date.now(),
+      });
 
-    const guardResult = await callOrdersGuardApi({
-      action: 'update_status',
-      orderId: validated.data.orderId,
-      status: validated.data.status,
-    });
-    if (guardResult.ok) return;
-
-    try {
-      const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
-      if (error && supabaseUrl && supabaseAnonKey) {
-        await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
-          method: 'PATCH',
-          headers: buildSupabasePublicHeaders(null, {
-            'Content-Type': 'application/json',
-            Prefer: 'return=minimal',
-          }),
-          body: JSON.stringify({ status }),
+      let targetOrderSnapshot: Order | null = null;
+      setOrders((prev) => {
+        const next = prev.map((o) => {
+          if (o.id !== orderId) return o;
+          const updated = { ...o, status };
+          targetOrderSnapshot = sanitizeOrderZeroBase64(updated);
+          return updated;
         });
+        saveCachedOrders(next, user?.id);
+        return next;
+      });
+      const isCustomerAllowedTransition =
+        status === 'Hoàn thành' || status === 'Đã hủy';
+      if (role !== 'admin' && !isCustomerAllowedTransition) return;
+
+      const guardResult = await callOrdersGuardApi({
+        action: 'update_status',
+        orderId: validated.data.orderId,
+        status: validated.data.status,
+        fallbackOrder: targetOrderSnapshot || undefined,
+      });
+      if (guardResult.ok) return;
+
+      try {
+        await ensureClientSupabaseAuthHeaders();
+        const { data: updatedRows, error } = await supabase
+          .from('orders')
+          .update({ status })
+          .eq('id', orderId)
+          .select('id,status');
+        if (!error && Array.isArray(updatedRows) && updatedRows.length > 0) {
+          return;
+        }
+        if (targetOrderSnapshot) {
+          await pushRescuedOrdersToServer([targetOrderSnapshot], true);
+        }
+      } catch {
+        // keep local update
       }
-    } catch {
-      // keep local update
-    }
     }, [user?.id, role]);
 
   const updateOrderShipping = useCallback(
@@ -1085,8 +1105,16 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       });
       if (!validated.success || !validated.data) return;
 
+      if (payload.status) {
+        recentStatusOverridesRef.current.set(orderId, {
+          status: payload.status,
+          ts: Date.now(),
+        });
+      }
+
       let updatedAddress: Order['shippingAddress'] | null = null;
       let updatedStatus: OrderStatus | undefined = payload.status;
+      let targetOrderSnapshot: Order | null = null;
 
       setOrders((prev) => {
         const next = prev.map((o) => {
@@ -1109,11 +1137,13 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           updatedAddress = nextAddr;
           const nextStat = payload.status ?? o.status;
           updatedStatus = nextStat;
-          return {
+          const updatedOrd: Order = {
             ...o,
             status: nextStat,
             shippingAddress: nextAddr,
           };
+          targetOrderSnapshot = sanitizeOrderZeroBase64(updatedOrd);
+          return updatedOrd;
         });
         saveCachedOrders(next, user?.id);
         return next;
@@ -1127,21 +1157,29 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         status: updatedStatus,
         shippingCarrier: validated.data.shippingCarrier,
         trackingCode: validated.data.trackingCode,
+        fallbackOrder: targetOrderSnapshot || undefined,
       });
       if (guardResult.ok) return;
 
       try {
+        await ensureClientSupabaseAuthHeaders();
         const updateRow: Record<string, unknown> = {
           shippingAddress: updatedAddress,
         };
         if (updatedStatus) {
           updateRow.status = updatedStatus;
         }
-        const { error } = await supabase
+        const { data: updatedRows, error } = await supabase
           .from('orders')
           .update(updateRow)
-          .eq('id', orderId);
-        if (error) console.error('[SUPABASE] Lỗi cập nhật vận đơn:', error.message);
+          .eq('id', orderId)
+          .select('id,status');
+        if (!error && Array.isArray(updatedRows) && updatedRows.length > 0) {
+          return;
+        }
+        if (targetOrderSnapshot) {
+          await pushRescuedOrdersToServer([targetOrderSnapshot], true);
+        }
       } catch {
         // keep optimistic local update
       }

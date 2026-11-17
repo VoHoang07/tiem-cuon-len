@@ -671,6 +671,7 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       'status',
       'shippingCarrier',
       'trackingCode',
+      'fallbackOrder',
     ]);
 
     const orderId = sanitizeTextServer(cleanUpdate.orderId, 80);
@@ -685,7 +686,27 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       }
     );
     const rows = orderRes.ok ? await orderRes.json() : [];
-    const existingOrder = Array.isArray(rows) ? rows[0] : null;
+    let existingOrder = Array.isArray(rows) ? rows[0] : null;
+    if (
+      !existingOrder &&
+      authUser.isAdmin &&
+      cleanUpdate.fallbackOrder &&
+      typeof cleanUpdate.fallbackOrder === 'object'
+    ) {
+      const fb = stripUnknownFieldsServer(cleanUpdate.fallbackOrder, [
+        'id',
+        'userId',
+        'items',
+        'total',
+        'status',
+        'paymentMethod',
+        'shippingAddress',
+        'createdAt',
+      ]);
+      if (fb.id === orderId && Array.isArray(fb.items) && fb.items.length > 0) {
+        existingOrder = fb;
+      }
+    }
     if (!existingOrder) {
       return res.status(404).json({ success: false, error: 'Không tìm thấy đơn hàng.' });
     }
@@ -699,7 +720,17 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
     }
 
     if (!authUser.isAdmin) {
-      const isOwner = String(existingOrder.userId) === authUser.id;
+      const existingEmail = String(
+        (existingOrder.shippingAddress && existingOrder.shippingAddress.email) || ''
+      )
+        .toLowerCase()
+        .trim();
+      const callerEmail = String(authUser.email || '')
+        .toLowerCase()
+        .trim();
+      const isOwner =
+        String(existingOrder.userId) === authUser.id ||
+        Boolean(callerEmail && existingEmail && callerEmail === existingEmail);
       const isCustomerCancelAllowed =
         isOwner &&
         nextStatus === 'Đã hủy' &&
@@ -752,14 +783,32 @@ module.exports = withGlobalErrorHandler('/api/orders-guard', async function hand
       };
     }
 
-    await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
-      method: 'PATCH',
-      headers: buildSupabaseServiceHeaders(authUser.accessToken, {
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      }),
-      body: JSON.stringify(updatePayload),
-    });
+    const patchRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`,
+      {
+        method: 'PATCH',
+        headers: buildSupabaseServiceHeaders(authUser.accessToken, {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        }),
+        body: JSON.stringify(updatePayload),
+      }
+    );
+    const patchedRows = patchRes.ok ? await patchRes.json().catch(() => []) : [];
+    if ((!Array.isArray(patchedRows) || patchedRows.length === 0) && authUser.isAdmin) {
+      // If row did not exist on server yet, upsert full order with updated status
+      await fetch(`${SUPABASE_URL}/rest/v1/orders?on_conflict=id`, {
+        method: 'POST',
+        headers: buildSupabaseServiceHeaders(authUser.accessToken, {
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        }),
+        body: JSON.stringify({
+          ...existingOrder,
+          ...updatePayload,
+        }),
+      }).catch(() => {});
+    }
 
     // Automatically notify the customer by Email when order is Shipped or Completed
     if (authUser.isAdmin) {

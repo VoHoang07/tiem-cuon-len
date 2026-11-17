@@ -222,7 +222,6 @@ export default function OrderDetailScreen() {
     }
     return {
       ...baseOrder,
-      status: syncedOrderPatch.status || baseOrder.status,
       shippingAddress: {
         ...baseOrder.shippingAddress,
         ...syncedOrderPatch.shippingAddress,
@@ -363,9 +362,10 @@ export default function OrderDetailScreen() {
           if (patch) {
             setSyncedOrderPatch(patch);
             if (
-              patch.shippingAddress?.trackingCode &&
-              patch.shippingAddress.trackingCode !==
-                order.shippingAddress?.trackingCode
+              patch.status ||
+              (patch.shippingAddress?.trackingCode &&
+                patch.shippingAddress.trackingCode !==
+                  order.shippingAddress?.trackingCode)
             ) {
               void refetchOrders();
             }
@@ -392,7 +392,6 @@ export default function OrderDetailScreen() {
     }
   }, [
     order?.id,
-    order?.status,
     order?.shippingAddress?.trackingCode,
     order?.shippingAddress?.shippingCarrier,
     syncedOrderPatch?.shippingAddress?.trackingCode,
@@ -617,6 +616,7 @@ export default function OrderDetailScreen() {
   };
 
   const handleSaveTracking = async (markAsShipping: boolean) => {
+    setSyncedOrderPatch(null);
     const nextStat: OrderStatus =
       markAsShipping && order.status !== 'Hoàn thành'
         ? 'Đang giao'
@@ -862,7 +862,10 @@ export default function OrderDetailScreen() {
                 {!isAdmin && !order.isMaskedGuestView && order.status === 'Đang giao' && (
                   <TouchableOpacity
                     style={styles.updateStatusBtn}
-                    onPress={() => updateOrderStatus(order.id, 'Hoàn thành')}>
+                    onPress={() => {
+                      setSyncedOrderPatch(null);
+                      void updateOrderStatus(order.id, 'Hoàn thành');
+                    }}>
                     <Text style={styles.updateStatusText}>
                       ✅ Đã nhận được hàng
                     </Text>
@@ -871,7 +874,10 @@ export default function OrderDetailScreen() {
                 {isAdmin && nextStatus && (
                   <TouchableOpacity
                     style={styles.updateStatusBtn}
-                    onPress={() => updateOrderStatus(order.id, nextStatus)}>
+                    onPress={() => {
+                      setSyncedOrderPatch(null);
+                      void updateOrderStatus(order.id, nextStatus);
+                    }}>
                     <Text style={styles.updateStatusText}>
                       {order.status === 'pending_payment'
                         ? 'Xác nhận tiền đã về (Duyệt tay)'
