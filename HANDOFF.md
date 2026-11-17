@@ -34,6 +34,15 @@
      1. Bổ sung đầy đủ icon `Gift` trong `src/app/orders/[id].tsx` (sửa lỗi trắng màn hình khi xem đơn `Hoàn thành`).
      2. Khóa chặt mọi đơn chuyển khoản `pending_payment`: hiển thị cảnh báo đỏ `⛔ CHƯA CHUYỂN KHOẢN`, ẩn nút Chép đơn Ship, loại khỏi CSV Goship và chặn tạo vận đơn SPX thu hộ `0₫` khi SePay chưa xác nhận tiền về.
 
+4. **Khôi Phục Đơn Hàng Cũ Đa UUID + Tab "Đánh Giá" Sau "Hoàn Thành" + Bảng Màu TMĐT Gọn Mắt (`commit 17984c0`, `d8173a7`, `8389864`):**
+   - **Tự động giải cứu đơn hàng cũ (`src/store/OrderContext.tsx`, `api/orders-guard.js`):** Quét toàn bộ kho lưu trữ trình duyệt (`tcl_orders_cache_v2_*`, `tcl_orders_permanent_vault_v1`, `tcl_guest_tracked_orders_v1`, `tcl_security_audit_logs_v1`) qua mọi UUID cũ và tự đẩy lên Supabase mới (`action: 'rescue_orders'`), kèm nút nhập file CSV/JSON cho Admin.
+   - **Tối giản khu vực Nhận thưởng & Tab "Đánh giá" riêng (`src/app/orders/index.tsx`, `src/app/orders/[id].tsx`):** Bỏ phần chấm sao/chạm từ khóa rườm rà trong thẻ nhận quà, dùng bảng màu TMĐT hiện đại (`#FFFFFF`, `#F8FAFC`, `#EE4D2D`, `#059669`), và tách riêng mục **"Đánh giá"** nằm ngay sau **"Hoàn thành"** trên cả thanh lọc `/orders` lẫn tiến trình 5 bước `/orders/[id]`.
+
+5. **Thẻ Chia Sẻ Sản Phẩm Động OpenGraph (`og:image`, `og:title`) + Đồng Bộ Email `tiemcuonlen@gmail.com` + Hotline `0775111750` + Sửa Lỗi Chuyển Trạng Thái Đơn Hàng (`commit 6597392`, `7a52419`, `71730a6`, `adb5e54`, `49490d3`):**
+   - **OpenGraph động theo từng sản phẩm & phân loại (`vercel.json`, `api/_securityCore.js`, `api/media-upload.js`, `src/app/product/[id].tsx`):** Khi chia sẻ link `/product/[id]?s=...` lên Facebook, Zalo, Messenger, bot MXH đọc đúng ảnh `1200x1200`, tên sản phẩm/phân loại và giá tiền thực tế thay vì ảnh logo chung của shop.
+   - **Đồng bộ Gmail & Hotline/Zalo chính thức (`tiemcuonlen@gmail.com` & `0775111750`):** Thêm `tiemcuonlen@gmail.com` làm email Quản trị viên & nhận thông báo đơn hàng chính; thiết kế lại trang `/help` gọn mắt theo đúng quy trình mới và bổ sung mục **Tuyên bố quyền sở hữu & quyền tác giả** tại `/privacy` để dán vào Fanpage Facebook.
+   - **Sửa triệt để lỗi chuyển trạng thái đơn hàng (`commit 49490d3`):** Ngăn `syncedPatchesMap` / `syncedOrderPatch` từ Goship ghi đè trạng thái vừa bấm chuyển, tự động duy trì Server Admin JWT (`ensureServerAdminJwt`) trong `api/_securityCore.js`, và tự động cầu nối GoTrue session (`ensureClientSupabaseAuthHeaders`) + khóa `recentStatusOverridesRef` trong `OrderContext.tsx`.
+
 ---
 
 ## 2. Kiến Trúc Tách Kho Ảnh Cloudflare R2 + Supabase Zero-Base64 (ĐÃ TRIỂN KHAI HOÀN TẤT)
