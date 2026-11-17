@@ -146,6 +146,7 @@ const VISITOR_KNOWN_IDENTITY_KEY = 'tcl_visitor_known_identity_v1';
 const SESSION_ID_STORAGE_KEY = 'tcl_active_session_id_v1';
 
 const KNOWN_ADMIN_EMAILS = new Set([
+  'tiemcuonlen@gmail.com',
   'vohoang1327@gmail.com',
   'khanhly30072007@gmail.com',
 ]);

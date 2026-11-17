@@ -17,7 +17,7 @@ const SHOP_JSON_LD = {
   description:
     'Tiệm Cuộn Len (tiemcuonlen.shop) — Cửa hàng trực tuyến chính thức chuyên bán sẵn và nhận đặt đan móc thủ công thú bông len, móc khóa len, bó hoa len, chậu hoa kẽm nhung và phụ kiện handmade cao cấp. Giao hàng toàn quốc & Giao trong ngày (TP.HCM).',
   telephone: '+84387966507',
-  email: 'vohoang1327@gmail.com',
+  email: 'tiemcuonlen@gmail.com',
   priceRange: '12.000₫ - 350.000₫',
   address: {
     '@type': 'PostalAddress',

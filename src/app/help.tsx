@@ -551,13 +551,13 @@ export default function HelpScreen() {
               </TouchableOpacity>
             </TouchableOpacity>
 
-            {/* Channel 4: Personal Gmail (vohoang1327@gmail.com) */}
+            {/* Channel 4: Official Shop Gmail (tiemcuonlen@gmail.com) */}
             <TouchableOpacity
               style={[styles.channelCard, isMobile && styles.channelCardMobile]}
               onPress={() =>
                 handleOpenExternalLink(
-                  'mailto:vohoang1327@gmail.com?subject=Hỗ trợ từ Tiệm Cuộn Len',
-                  'vohoang1327@gmail.com',
+                  'mailto:tiemcuonlen@gmail.com?subject=Hỗ trợ từ Tiệm Cuộn Len',
+                  'tiemcuonlen@gmail.com',
                   'email'
                 )
               }
@@ -569,13 +569,13 @@ export default function HelpScreen() {
               <View style={styles.channelInfo}>
                 <Text style={styles.channelTitle}>Email Hỗ Trợ</Text>
                 <Text style={styles.channelValueText} numberOfLines={1}>
-                  vohoang1327@gmail.com
+                  tiemcuonlen@gmail.com
                 </Text>
               </View>
               <TouchableOpacity
                 style={styles.copyMiniPill}
                 onPress={() =>
-                  handleCopySupportCode('vohoang1327@gmail.com', 'email')
+                  handleCopySupportCode('tiemcuonlen@gmail.com', 'email')
                 }
                 activeOpacity={0.75}>
                 {copiedCode === 'email' ? (

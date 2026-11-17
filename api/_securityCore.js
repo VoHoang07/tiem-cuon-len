@@ -49,10 +49,11 @@ const SERVER_EMAILJS_PUBLIC_KEY =
   process.env.EXPO_PUBLIC_EMAILJS_PUBLIC_KEY ||
   'kT2DQJicRXPdQjvb3';
 const SERVER_OWNER_NOTIFY_EMAIL =
-  process.env.OWNER_NOTIFY_EMAIL || 'vohoang1327@gmail.com';
+  process.env.OWNER_NOTIFY_EMAIL || 'tiemcuonlen@gmail.com';
 const SERVER_OWNER_NOTIFY_EMAILS = Array.from(
   new Set(
     [
+      'tiemcuonlen@gmail.com',
       'vohoang1327@gmail.com',
       'khanhly30072007@gmail.com',
       ...(process.env.OWNER_NOTIFY_EMAIL || '')
@@ -93,6 +94,7 @@ function verifyBlockedIpRecord(entry) {
 }
 
 const ADMIN_EMAILS = new Set([
+  'tiemcuonlen@gmail.com',
   'vohoang1327@gmail.com',
   'khanhly30072007@gmail.com',
 ]);
@@ -555,7 +557,11 @@ async function verifySupabaseUser(req) {
     const email = String(userData.email || '').toLowerCase().trim();
     const metaRole = userData.user_metadata && userData.user_metadata.role;
     const isAdmin =
-      ADMIN_EMAILS.has(email) && (metaRole === 'admin' || email === 'vohoang1327@gmail.com' || email === 'khanhly30072007@gmail.com');
+      ADMIN_EMAILS.has(email) &&
+      (metaRole === 'admin' ||
+        email === 'tiemcuonlen@gmail.com' ||
+        email === 'vohoang1327@gmail.com' ||
+        email === 'khanhly30072007@gmail.com');
 
     return {
       id: String(userData.id),

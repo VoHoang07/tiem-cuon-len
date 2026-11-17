@@ -21,6 +21,7 @@ const CACHED_AUTH_USER_KEY = 'tcl_cached_auth_user_v1';
 
 // Explicit allowlist of shop administrator emails to prevent client-side user_metadata role tampering
 const ADMIN_EMAILS = new Set([
+  'tiemcuonlen@gmail.com',
   'vohoang1327@gmail.com',
   'khanhly30072007@gmail.com',
 ]);
@@ -154,6 +155,7 @@ function toAuthUser(session: Session | null, localAvatar?: string | null): AuthU
   const isVerifiedAdmin =
     ADMIN_EMAILS.has(email) &&
     (meta.role === 'admin' ||
+      email === 'tiemcuonlen@gmail.com' ||
       email === 'vohoang1327@gmail.com' ||
       email === 'khanhly30072007@gmail.com');
   const provider = detectAuthProviderFromSession(session);

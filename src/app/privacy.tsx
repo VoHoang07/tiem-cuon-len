@@ -1593,7 +1593,7 @@ export default function PrivacyScreen() {
               Nếu bạn có câu hỏi về chính sách quyền riêng tư hoặc cần hỗ trợ đơn hàng,
               vui lòng liên hệ:{'\n'}
               Website: https://www.tiemcuonlen.shop{'\n'}
-              Email: vohoang1327@gmail.com
+              Email: tiemcuonlen@gmail.com
             </Text>
           </View>
 
