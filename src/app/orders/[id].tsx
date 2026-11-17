@@ -2790,7 +2790,7 @@ export default function OrderDetailScreen() {
                     padding: 10,
                     borderWidth: 1,
                     borderColor: '#F1F5F9',
-                    gap: 4,
+                    gap: 6,
                   }}>
                   <Text
                     style={{
@@ -2799,12 +2799,76 @@ export default function OrderDetailScreen() {
                       lineHeight: 18,
                     }}>
                     • <Text style={{ fontWeight: '700', color: '#0F172A' }}>Điều kiện:</Text>{' '}
-                    Đăng Story hoặc Bài viết video khui hàng lên Facebook, Instagram hoặc TikTok kèm tên Tiệm & gắn link{' '}
-                    <Text style={{ fontWeight: '700', color: '#EE4D2D' }}>
-                      tiemcuonlen.shop
-                    </Text>
-                    .
+                    Đăng Story hoặc Bài viết video khui hàng lên Facebook, Instagram hoặc TikTok kèm tên Tiệm & gắn link web chính thức:
                   </Text>
+
+                  {/* 1-Tap Copy Real Website Link Box */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: '#E2E8F0',
+                      borderRadius: 9,
+                      paddingHorizontal: 10,
+                      paddingVertical: 7,
+                    }}>
+                    <Text
+                      selectable
+                      style={{
+                        flex: 1,
+                        minWidth: 160,
+                        fontSize: 12.5,
+                        fontWeight: '800',
+                        color: '#EE4D2D',
+                      }}
+                      numberOfLines={1}>
+                      https://www.tiemcuonlen.shop
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleCopy(
+                          'https://www.tiemcuonlen.shop',
+                          'mission_web_url'
+                        )
+                      }
+                      activeOpacity={0.85}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 5,
+                        backgroundColor:
+                          copiedKey === 'mission_web_url' ? '#ECFDF5' : '#FFF1EE',
+                        borderWidth: 1,
+                        borderColor:
+                          copiedKey === 'mission_web_url' ? '#A7F3D0' : '#FFCCC2',
+                        paddingHorizontal: 10,
+                        paddingVertical: 5,
+                        borderRadius: 7,
+                      }}>
+                      {copiedKey === 'mission_web_url' ? (
+                        <Check size={13} color="#059669" />
+                      ) : (
+                        <Copy size={12.5} color="#EE4D2D" />
+                      )}
+                      <Text
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: '800',
+                          color:
+                            copiedKey === 'mission_web_url' ? '#059669' : '#EE4D2D',
+                        }}>
+                        {copiedKey === 'mission_web_url'
+                          ? 'Đã chép link!'
+                          : 'Chép link web'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <Text
                     style={{
                       fontSize: 12,
@@ -3092,7 +3156,7 @@ export default function OrderDetailScreen() {
                     padding: 10,
                     borderWidth: 1,
                     borderColor: '#F1F5F9',
-                    gap: 4,
+                    gap: 6,
                   }}>
                   <Text
                     style={{
@@ -3101,8 +3165,56 @@ export default function OrderDetailScreen() {
                       lineHeight: 18,
                     }}>
                     • <Text style={{ fontWeight: '700', color: '#0F172A' }}>Điều kiện:</Text>{' '}
-                    Theo dõi (Follow) Fanpage Facebook của Tiệm Cuộn Len và Chia sẻ (Share) bài viết ở chế độ Công khai.
+                    Theo dõi (Follow){' '}
+                    <Text
+                      onPress={() =>
+                        void Linking.openURL(
+                          'https://www.facebook.com/profile.php?id=61596528276081'
+                        )
+                      }
+                      style={{
+                        fontWeight: '800',
+                        color: '#1877F2',
+                        textDecorationLine: 'underline',
+                      }}>
+                      Fanpage Facebook Tiệm Cuộn Len
+                    </Text>{' '}
+                    và Chia sẻ (Share) bài viết ở chế độ Công khai.
                   </Text>
+
+                  {/* 1-Tap Open Official Facebook Fanpage Button */}
+                  <TouchableOpacity
+                    onPress={() =>
+                      void Linking.openURL(
+                        'https://www.facebook.com/profile.php?id=61596528276081'
+                      )
+                    }
+                    activeOpacity={0.85}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      backgroundColor: '#EFF6FF',
+                      borderWidth: 1,
+                      borderColor: '#BFDBFE',
+                      borderRadius: 9,
+                      paddingHorizontal: 10,
+                      paddingVertical: 7,
+                    }}>
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: '#1D4ED8',
+                      }}
+                      numberOfLines={1}>
+                      🌐 Mở Fanpage Tiệm Cuộn Len trên Facebook
+                    </Text>
+                    <ExternalLink size={13.5} color="#1D4ED8" />
+                  </TouchableOpacity>
+
                   <Text
                     style={{
                       fontSize: 12,
