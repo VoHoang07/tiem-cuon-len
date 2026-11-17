@@ -1588,12 +1588,27 @@ export default function PrivacyScreen() {
               cho bên thứ ba ngoài đơn vị vận chuyển phục vụ giao đơn hàng của bạn.
             </Text>
 
-            <Text style={styles.subheading}>3. Liên hệ</Text>
+            <Text style={styles.subheading}>
+              3. Tuyên bố quyền sở hữu & Bản quyền tác giả
+            </Text>
             <Text style={styles.paragraph}>
-              Nếu bạn có câu hỏi về chính sách quyền riêng tư hoặc cần hỗ trợ đơn hàng,
-              vui lòng liên hệ:{'\n'}
-              Website: https://www.tiemcuonlen.shop{'\n'}
-              Email: tiemcuonlen@gmail.com
+              - Toàn bộ tên thương hiệu, logo, hình ảnh chụp mẫu sản phẩm len thủ công,
+              hoa kẽm nhung, thiết kế giao diện và nội dung mô tả trên website{' '}
+              https://www.tiemcuonlen.shop và Fanpage chính thức đều thuộc quyền sở hữu
+              trí tuệ và bản quyền của Tiệm Cuộn Len.{'\n'}
+              - Nghiêm cấm mọi hành vi sao chép, cắt ghép hình ảnh sản phẩm hoặc giả mạo
+              thương hiệu Tiệm Cuộn Len dưới mọi hình thức khi chưa có sự đồng ý bằng
+              văn bản.
+            </Text>
+
+            <Text style={styles.subheading}>4. Thông tin liên hệ chính thức</Text>
+            <Text style={styles.paragraph}>
+              Nếu bạn có câu hỏi về chính sách quyền riêng tư, bản quyền hoặc cần hỗ trợ
+              đơn hàng, vui lòng liên hệ:{'\n'}
+              - Đơn vị chủ quản: Tiệm Cuộn Len — Quà Tặng Handmade{'\n'}
+              - Website chính thức: https://www.tiemcuonlen.shop{'\n'}
+              - Hotline / Zalo: 0775 111 750{'\n'}
+              - Email: tiemcuonlen@gmail.com
             </Text>
           </View>
 
