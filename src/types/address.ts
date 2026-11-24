@@ -36,6 +36,8 @@ export interface Address {
   goshipShipmentId?: string;
   goshipStatusText?: string;
   goshipHistory?: GoshipHistoryEvent[];
+  cancelledTrackingCodes?: string[];
+  pickupWarehouseLabel?: string;
   note?: string;
   promoCode?: string;
   discountAmount?: number;

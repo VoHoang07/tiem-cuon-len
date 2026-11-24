@@ -18,11 +18,14 @@ import {
 import { formatVND } from '@/utils/formatCurrency';
 import {
     ADMIN_BOOKING_PORTALS,
+    cancelAdminGoshipShipment,
     computeHandmadeCraftingSchedule,
     createAdminGoshipSpxShipment,
     exportOrdersToGoshipCsv,
     fetchAdminGoshipConfigStatus,
+    fetchAdminGoshipLocations,
     fetchLiveCarrierJourney,
+    fetchPublicWarehouseOrigin,
     formatShippingSlipForClipboard,
     getCachedGuestTrackedOrders,
     getCarrierTrackingUrl,
@@ -36,8 +39,10 @@ import {
     syncActiveOrdersWithGoship,
     updateAdminCraftingProgress,
     type AdminGoshipWarehouse,
+    type GoshipLocationItem,
     type GoshipRateOption,
     type LiveCarrierCheckpoint,
+    type PublicWarehouseOrigin,
     type SyncedOrderGoshipPayload,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
@@ -47,6 +52,7 @@ import {
     Camera,
     Check,
     CheckCircle2,
+    ChevronDown,
     ChevronLeft,
     Clock,
     Copy,
@@ -62,6 +68,7 @@ import {
     Settings,
     Share2,
     Star,
+    Trash2,
     Truck,
     User as UserIcon,
     Video,
@@ -252,14 +259,46 @@ export default function OrderDetailScreen() {
     fromDistrict: 'Thành phố Thủ Đức',
     fromWard: 'Phường Long Thạnh Mỹ',
     fromStreet: 'Vinhomes Grand Park',
+    fromCityCode: '',
+    fromDistrictCode: '',
+    fromWardCode: '',
   });
+  const [publicWarehouseOrigin, setPublicWarehouseOrigin] =
+    useState<PublicWarehouseOrigin | null>(null);
   const [savingWarehouse, setSavingWarehouse] = useState(false);
+  const [warehouseSaveBanner, setWarehouseSaveBanner] = useState<string | null>(null);
+  const [warehouseSaveError, setWarehouseSaveError] = useState<string | null>(null);
+
+  // Official Goship Location Selector state (Tỉnh/TP -> Quận/Huyện -> Phường/Xã)
+  const [goshipCities, setGoshipCities] = useState<GoshipLocationItem[]>([]);
+  const [goshipDistricts, setGoshipDistricts] = useState<GoshipLocationItem[]>([]);
+  const [goshipWards, setGoshipWards] = useState<GoshipLocationItem[]>([]);
+  const [loadingGoshipLoc, setLoadingGoshipLoc] = useState(false);
+  const [activeLocDropdown, setActiveLocDropdown] = useState<
+    'city' | 'district' | 'ward' | null
+  >(null);
+  const [locSearchQuery, setLocSearchQuery] = useState('');
 
   const [parcelWeightInput, setParcelWeightInput] = useState('250');
   const [quotingGoship, setQuotingGoship] = useState(false);
   const [goshipRates, setGoshipRates] = useState<GoshipRateOption[] | null>(null);
+  const [quoteResolvedFrom, setQuoteResolvedFrom] = useState<{
+    city: string;
+    district: string;
+    ward: string;
+    street?: string;
+  } | null>(null);
+  const [quoteResolvedTo, setQuoteResolvedTo] = useState<{
+    city: string;
+    district: string;
+    ward: string;
+  } | null>(null);
   const [selectedRateId, setSelectedRateId] = useState<string>('');
   const [creatingGoship, setCreatingGoship] = useState(false);
+  const [syncingGoshipForce, setSyncingGoshipForce] = useState(false);
+  const [cancellingGoship, setCancellingGoship] = useState(false);
+  const [confirmCancelWaybill, setConfirmCancelWaybill] = useState(false);
+  const [canForceUnlinkWaybill, setCanForceUnlinkWaybill] = useState(false);
   const [goshipActionError, setGoshipActionError] = useState<string | null>(null);
   const [goshipCreatedBanner, setGoshipCreatedBanner] = useState<string | null>(null);
 
@@ -350,65 +389,117 @@ export default function OrderDetailScreen() {
     };
   }, [id, Boolean(order)]);
 
-  const refreshLiveSpxJourney = useCallback(async () => {
-    if (!order?.id) return;
-    setLoadingCheckpoints(true);
-    try {
-      // 1. Auto-sync with Goship on server (pulls SPX tracking code by Order ID or Customer Phone & saves to DB)
-      if (order.status !== 'pending_payment' && order.status !== 'Đã hủy') {
-        const syncRes = await syncActiveOrdersWithGoship([order.id]);
-        if (syncRes.ok && syncRes.syncedOrders.length > 0) {
-          const patch = syncRes.syncedOrders[0];
-          if (patch) {
-            setSyncedOrderPatch(patch);
-            if (
-              patch.status ||
-              (patch.shippingAddress?.trackingCode &&
-                patch.shippingAddress.trackingCode !==
-                  order.shippingAddress?.trackingCode)
-            ) {
-              void refetchOrders();
+  const refreshLiveSpxJourney = useCallback(
+    async (forceRefresh = false) => {
+      if (!order?.id) return;
+      setLoadingCheckpoints(true);
+      if (forceRefresh) {
+        setSyncingGoshipForce(true);
+        setGoshipActionError(null);
+      }
+      try {
+        let resolvedTracking =
+          syncedOrderPatch?.shippingAddress?.trackingCode ??
+          order?.shippingAddress?.trackingCode ??
+          '';
+        let resolvedCarrier =
+          syncedOrderPatch?.shippingAddress?.shippingCarrier ||
+          order?.shippingAddress?.shippingCarrier ||
+          'SPX';
+
+        // 1. Auto-sync with Goship on server (pulls active SPX tracking code OR detects cancelled waybill to unlock!)
+        if (order.status !== 'pending_payment' && order.status !== 'Đã hủy') {
+          const syncRes = await syncActiveOrdersWithGoship([order.id], forceRefresh);
+          if (syncRes.ok && syncRes.syncedOrders.length > 0) {
+            const patch = syncRes.syncedOrders[0];
+            if (patch) {
+              if (patch.waybillReset) {
+                setSyncedOrderPatch(null);
+                setTrackingInput('');
+                setLiveCheckpoints([]);
+                resolvedTracking = '';
+                setConfirmCancelWaybill(false);
+                setCanForceUnlinkWaybill(false);
+                setGoshipCreatedBanner(
+                  '✅ Đã phát hiện vận đơn cũ bị huỷ trên Goship — Hệ thống đã tự gỡ mã & mở khoá để bạn chỉnh vị trí shop và tạo vận đơn mới!'
+                );
+                await refetchOrders();
+                return;
+              }
+
+              setSyncedOrderPatch(patch);
+              const nextTrack = patch.shippingAddress?.trackingCode ?? '';
+              resolvedTracking = nextTrack;
+              resolvedCarrier =
+                patch.shippingAddress?.shippingCarrier || resolvedCarrier;
+              if (
+                patch.status ||
+                patch.changed ||
+                nextTrack !== (order.shippingAddress?.trackingCode ?? '')
+              ) {
+                await refetchOrders();
+              } else if (forceRefresh) {
+                setGoshipCreatedBanner(
+                  nextTrack
+                    ? `🔄 Đã đồng bộ Goship: Vận đơn ${nextTrack} vẫn đang ghi nhận hoạt động trên Goship. Nếu bạn đã huỷ vận đơn này trên web shop.goship.io, hãy bấm nút "🗑️ Huỷ / Gỡ vận đơn" bên cạnh để mở khoá tạo lại.`
+                    : '🔄 Đã đồng bộ lại với Goship.'
+                );
+              }
             }
           }
         }
-      }
 
-      // 2. Fetch live station checkpoints from carrier if tracking code exists
-      const code =
-        syncedOrderPatch?.shippingAddress?.trackingCode ||
-        order?.shippingAddress?.trackingCode;
-      const carrier =
-        syncedOrderPatch?.shippingAddress?.shippingCarrier ||
-        order?.shippingAddress?.shippingCarrier ||
-        'SPX';
-      if (!code) {
-        setLiveCheckpoints([]);
-        return;
+        // 2. Fetch live station checkpoints from carrier if tracking code exists
+        if (!resolvedTracking) {
+          setLiveCheckpoints([]);
+          return;
+        }
+        const res = await fetchLiveCarrierJourney(resolvedTracking, resolvedCarrier);
+        setLiveCheckpoints(res.checkpoints);
+      } finally {
+        setLoadingCheckpoints(false);
+        if (forceRefresh) setSyncingGoshipForce(false);
       }
-      const res = await fetchLiveCarrierJourney(code, carrier);
-      setLiveCheckpoints(res.checkpoints);
-    } finally {
-      setLoadingCheckpoints(false);
-    }
-  }, [
-    order?.id,
-    order?.shippingAddress?.trackingCode,
-    order?.shippingAddress?.shippingCarrier,
-    syncedOrderPatch?.shippingAddress?.trackingCode,
-    syncedOrderPatch?.shippingAddress?.shippingCarrier,
-    refetchOrders,
-  ]);
+    },
+    [
+      order?.id,
+      order?.status,
+      order?.shippingAddress?.trackingCode,
+      order?.shippingAddress?.shippingCarrier,
+      syncedOrderPatch?.shippingAddress?.trackingCode,
+      syncedOrderPatch?.shippingAddress?.shippingCarrier,
+      refetchOrders,
+    ]
+  );
 
   useEffect(() => {
-    void refreshLiveSpxJourney();
+    void refreshLiveSpxJourney(false);
   }, [refreshLiveSpxJourney]);
+
+  useEffect(() => {
+    let active = true;
+    fetchPublicWarehouseOrigin().then((o) => {
+      if (active && o) setPublicWarehouseOrigin(o);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) return;
     fetchAdminGoshipConfigStatus().then((cfg) => {
       setHasGoshipToken(cfg.hasGoshipToken);
       if (cfg.webhookUrl) setGoshipWebhookUrl(cfg.webhookUrl);
-      if (cfg.warehouse) setWarehouseDraft(cfg.warehouse);
+      if (cfg.warehouse) {
+        setWarehouseDraft(cfg.warehouse);
+        setPublicWarehouseOrigin({
+          senderName: cfg.warehouse.senderName,
+          fromCity: cfg.warehouse.fromCity,
+          fromDistrict: cfg.warehouse.fromDistrict,
+          fromWard: cfg.warehouse.fromWard,
+        });
+      }
     });
   }, [isAdmin]);
 
@@ -481,6 +572,11 @@ export default function OrderDetailScreen() {
         order.shippingAddress?.shippedAt ||
         order.shippingAddress?.craftingUpdatedAt ||
         order.createdAt;
+      const warehouseLocText = publicWarehouseOrigin
+        ? [publicWarehouseOrigin.fromDistrict, publicWarehouseOrigin.fromCity]
+            .filter(Boolean)
+            .join(', ')
+        : 'TP. Hồ Chí Minh';
       if (order.status === 'Hoàn thành') {
         return [
           {
@@ -496,7 +592,7 @@ export default function OrderDetailScreen() {
             title: `Kiện hàng đã hoàn tất công đoạn đan (100%) & bàn giao cho ${
               order.shippingAddress?.shippingCarrier || 'SPX Express'
             }`,
-            location: 'Kho Tiệm Cuộn Len — TP. Hồ Chí Minh',
+            location: `Kho ${publicWarehouseOrigin?.senderName || 'Tiệm Cuộn Len'} — ${warehouseLocText}`,
             timestamp: shippedTs,
           },
         ];
@@ -516,7 +612,7 @@ export default function OrderDetailScreen() {
           milestone: 'Đã đóng gói hoàn tất',
           title:
             'Xưởng Tiệm Cuộn Len đã hoàn thiện đan mẫu 100%, kiểm tra form & đóng hộp quà',
-          location: 'Xưởng Tiệm Cuộn Len — TP. Hồ Chí Minh',
+          location: `Xưởng ${publicWarehouseOrigin?.senderName || 'Tiệm Cuộn Len'} — ${warehouseLocText}`,
           timestamp: order.createdAt,
         },
       ];
@@ -541,14 +637,151 @@ export default function OrderDetailScreen() {
     }
   };
 
+  const handleOpenGoshipLocPicker = async (
+    level: 'city' | 'district' | 'ward'
+  ) => {
+    if (activeLocDropdown === level) {
+      setActiveLocDropdown(null);
+      return;
+    }
+    setWarehouseSaveError(null);
+    setLocSearchQuery('');
+    setActiveLocDropdown(level);
+
+    if (!hasGoshipToken) return;
+
+    if (level === 'city') {
+      if (goshipCities.length > 0) return;
+      setLoadingGoshipLoc(true);
+      const res = await fetchAdminGoshipLocations('cities');
+      setLoadingGoshipLoc(false);
+      if (res.ok) setGoshipCities(res.items);
+      return;
+    }
+
+    if (level === 'district') {
+      let cityCode = warehouseDraft.fromCityCode || '';
+      if (!cityCode) {
+        setLoadingGoshipLoc(true);
+        const cRes =
+          goshipCities.length > 0
+            ? { ok: true, items: goshipCities }
+            : await fetchAdminGoshipLocations('cities');
+        if (cRes.ok) {
+          if (goshipCities.length === 0) setGoshipCities(cRes.items);
+          const norm = warehouseDraft.fromCity
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd');
+          const matchC = cRes.items.find((c) => {
+            const cn = c.name
+              .toLowerCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/đ/g, 'd');
+            return cn === norm || cn.includes(norm) || norm.includes(cn);
+          });
+          if (matchC) {
+            cityCode = matchC.id;
+            setWarehouseDraft((p) => ({ ...p, fromCityCode: matchC.id }));
+          }
+        }
+        setLoadingGoshipLoc(false);
+      }
+      if (!cityCode) {
+        setWarehouseSaveError(
+          'Vui lòng chọn Tỉnh / Thành phố trước để tải danh sách Quận / Huyện từ Goship.'
+        );
+        setActiveLocDropdown('city');
+        return;
+      }
+      setLoadingGoshipLoc(true);
+      const dRes = await fetchAdminGoshipLocations('districts', cityCode);
+      setLoadingGoshipLoc(false);
+      if (dRes.ok) setGoshipDistricts(dRes.items);
+      return;
+    }
+
+    if (level === 'ward') {
+      const distCode = warehouseDraft.fromDistrictCode || '';
+      if (!distCode) {
+        setWarehouseSaveError(
+          'Vui lòng chọn Quận / Huyện từ danh sách trước để tải danh sách Phường / Xã chuẩn Goship.'
+        );
+        setActiveLocDropdown('district');
+        return;
+      }
+      setLoadingGoshipLoc(true);
+      const wRes = await fetchAdminGoshipLocations('wards', distCode);
+      setLoadingGoshipLoc(false);
+      if (wRes.ok) setGoshipWards(wRes.items);
+    }
+  };
+
+  const handleSelectGoshipLocItem = (
+    level: 'city' | 'district' | 'ward',
+    item: GoshipLocationItem
+  ) => {
+    setActiveLocDropdown(null);
+    setLocSearchQuery('');
+    setWarehouseSaveError(null);
+    setWarehouseSaveBanner(null);
+    if (level === 'city') {
+      setGoshipDistricts([]);
+      setGoshipWards([]);
+      setWarehouseDraft((p) => ({
+        ...p,
+        fromCity: item.name,
+        fromCityCode: item.id,
+        fromDistrict: '',
+        fromDistrictCode: '',
+        fromWard: '',
+        fromWardCode: '',
+      }));
+    } else if (level === 'district') {
+      setGoshipWards([]);
+      setWarehouseDraft((p) => ({
+        ...p,
+        fromDistrict: item.name,
+        fromDistrictCode: item.id,
+        fromWard: '',
+        fromWardCode: '',
+      }));
+    } else {
+      setWarehouseDraft((p) => ({
+        ...p,
+        fromWard: item.name,
+        fromWardCode: item.id,
+      }));
+    }
+  };
+
   const handleSaveWarehouse = async () => {
+    setWarehouseSaveError(null);
+    setWarehouseSaveBanner(null);
     setSavingWarehouse(true);
     const res = await saveAdminGoshipWarehouse(warehouseDraft);
     setSavingWarehouse(false);
     if (res.ok) {
+      const savedWh = res.warehouse || warehouseDraft;
+      setWarehouseDraft(savedWh);
+      setPublicWarehouseOrigin({
+        senderName: savedWh.senderName,
+        fromCity: savedWh.fromCity,
+        fromDistrict: savedWh.fromDistrict,
+        fromWard: savedWh.fromWard,
+      });
+      setGoshipRates(null);
+      setQuoteResolvedFrom(null);
+      setActiveLocDropdown(null);
+      const verifiedNote = res.resolvedLocation
+        ? ` (Khớp Goship: ${res.resolvedLocation.ward}, ${res.resolvedLocation.district}, ${res.resolvedLocation.city})`
+        : '';
+      setWarehouseSaveBanner(`✅ Đã lưu địa chỉ kho lấy hàng mới${verifiedNote}!`);
       setShowWarehouseEditor(false);
     } else {
-      Alert.alert('Lỗi', res.error || 'Không thể lưu địa chỉ kho lấy hàng.');
+      setWarehouseSaveError(res.error || 'Không thể lưu địa chỉ kho lấy hàng.');
     }
   };
 
@@ -565,6 +798,9 @@ export default function OrderDetailScreen() {
       );
       return;
     }
+    if (res.warehouse) setWarehouseDraft(res.warehouse);
+    setQuoteResolvedFrom(res.resolvedFrom || null);
+    setQuoteResolvedTo(res.resolvedTo || null);
     setGoshipRates(res.rates);
     const spxFirst = res.rates.find((r) => r.isSpx) || res.rates[0];
     if (spxFirst) setSelectedRateId(spxFirst.id);
@@ -586,6 +822,9 @@ export default function OrderDetailScreen() {
       return;
     }
     setGoshipRates(null);
+    setQuoteResolvedFrom(null);
+    setConfirmCancelWaybill(false);
+    setCanForceUnlinkWaybill(false);
     if (res.trackingCode) setTrackingInput(res.trackingCode);
     if (res.shippingCarrier) setSelectedCarrier(res.shippingCarrier);
     setGoshipCreatedBanner(
@@ -594,6 +833,48 @@ export default function OrderDetailScreen() {
       } — Đã tự động gắn vào đơn khách & gửi Gmail thông báo!`
     );
     void refetchOrders();
+  };
+
+  const handleCancelOrUnlinkGoship = async (forceUnlink = false) => {
+    if (!forceUnlink && !confirmCancelWaybill) {
+      setConfirmCancelWaybill(true);
+      setGoshipActionError(null);
+      setTimeout(() => {
+        setConfirmCancelWaybill(false);
+      }, 6000);
+      return;
+    }
+
+    setConfirmCancelWaybill(false);
+    setGoshipActionError(null);
+    setGoshipCreatedBanner(null);
+    setCancellingGoship(true);
+    const res = await cancelAdminGoshipShipment({
+      orderId: order.id,
+      forceUnlink,
+    });
+    setCancellingGoship(false);
+
+    if (!res.ok) {
+      setGoshipActionError(res.error || 'Không thể huỷ / gỡ vận đơn lúc này.');
+      setCanForceUnlinkWaybill(Boolean(res.canForceUnlink));
+      return;
+    }
+
+    setSyncedOrderPatch(null);
+    setTrackingInput('');
+    setLiveCheckpoints([]);
+    setGoshipRates(null);
+    setQuoteResolvedFrom(null);
+    setCanForceUnlinkWaybill(false);
+    setGoshipCreatedBanner(
+      res.goshipDeleted
+        ? '✅ Đã huỷ vận đơn trên Goship & mở khoá đơn hàng! Bạn hãy kiểm tra vị trí shop rồi tạo lại vận đơn mới nhé.'
+        : res.goshipAlreadyCancelled
+          ? '✅ Xác nhận vận đơn đã huỷ trên Goship — Đã gỡ mã cũ khỏi web & mở khoá để bạn tạo vận đơn mới!'
+          : '✅ Đã gỡ mã vận đơn cũ khỏi web & mở khoá tạo đơn mới — Hãy kiểm tra địa chỉ kho lấy hàng trước khi lên đơn lại!'
+    );
+    await refetchOrders();
   };
 
   const nextStatus = ORDER_STATUS_NEXT[order.status];
@@ -616,6 +897,11 @@ export default function OrderDetailScreen() {
   };
 
   const handleSaveTracking = async (markAsShipping: boolean) => {
+    const cleanCode = trackingInput.trim();
+    if (!cleanCode && (savedTracking || order.shippingAddress?.goshipShipmentId)) {
+      void handleCancelOrUnlinkGoship(false);
+      return;
+    }
     setSyncedOrderPatch(null);
     const nextStat: OrderStatus =
       markAsShipping && order.status !== 'Hoàn thành'
@@ -624,7 +910,7 @@ export default function OrderDetailScreen() {
     await updateOrderShipping(order.id, {
       status: nextStat,
       shippingCarrier: selectedCarrier,
-      trackingCode: trackingInput.trim(),
+      trackingCode: cleanCode,
     });
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 2500);
@@ -1365,9 +1651,10 @@ export default function OrderDetailScreen() {
                       order={order}
                       checkpoints={combinedJourneyEvents}
                       loadingCheckpoints={loadingCheckpoints}
-                      onRefresh={() => void refreshLiveSpxJourney()}
+                      onRefresh={() => void refreshLiveSpxJourney(true)}
                       onCopyTracking={(code) => handleCopy(code, 'track_code')}
                       copiedTracking={copiedKey === 'track_code'}
+                      warehouseOrigin={publicWarehouseOrigin}
                     />
 
                     {/* Clean Vertical Station Timeline (Full-Width Text, Zero Column Squishing) */}
@@ -1765,6 +2052,9 @@ export default function OrderDetailScreen() {
                     <ShopeeDeliveryRouteMap
                       order={order}
                       checkpoints={combinedJourneyEvents}
+                      loadingCheckpoints={loadingCheckpoints}
+                      onRefresh={() => void refreshLiveSpxJourney(true)}
+                      warehouseOrigin={publicWarehouseOrigin}
                     />
                     <View
                       style={{
@@ -1941,27 +2231,108 @@ export default function OrderDetailScreen() {
                     </TouchableOpacity>
                   </View>
 
+                  {/* Always-visible Current Shop Pickup Address Summary Bar */}
+                  <View
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: '#BFDBFE',
+                      borderRadius: 10,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                    }}>
+                    <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: '800',
+                          color: '#1E40AF',
+                        }}>
+                        📍 Vị trí shop lấy hàng hiện tại ({warehouseDraft.senderName} • {warehouseDraft.senderPhone}):
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: '#0F172A',
+                          lineHeight: 17,
+                        }}>
+                        {[
+                          warehouseDraft.fromStreet,
+                          warehouseDraft.fromWard,
+                          warehouseDraft.fromDistrict,
+                          warehouseDraft.fromCity,
+                        ]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setWarehouseSaveError(null);
+                        setShowWarehouseEditor((v) => !v);
+                      }}
+                      activeOpacity={0.8}
+                      style={{
+                        backgroundColor: showWarehouseEditor ? '#1E3A8A' : '#EFF6FF',
+                        borderWidth: 1,
+                        borderColor: '#93C5FD',
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: '800',
+                          color: showWarehouseEditor ? '#FFFFFF' : '#1D4ED8',
+                        }}>
+                        {showWarehouseEditor ? 'Đóng sửa kho' : '✏️ Đổi vị trí shop'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {warehouseSaveBanner ? (
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color: '#15803D',
+                        lineHeight: 16,
+                      }}>
+                      {warehouseSaveBanner}
+                    </Text>
+                  ) : null}
+
                   {showWarehouseEditor && (
                     <View
                       style={{
                         backgroundColor: '#FFFFFF',
                         borderRadius: 10,
                         padding: 10,
-                        borderWidth: 1,
-                        borderColor: '#BFDBFE',
-                        gap: 7,
+                        borderWidth: 1.5,
+                        borderColor: '#60A5FA',
+                        gap: 8,
                       }}>
                       <Text
                         style={{
-                          fontSize: 11.5,
-                          fontWeight: '800',
+                          fontSize: 12,
+                          fontWeight: '900',
                           color: '#1E40AF',
                         }}>
-                        📍 Địa chỉ kho Shipper SPX tới lấy hàng của bạn:
+                        📍 Chỉnh sửa địa chỉ kho Shipper SPX tới lấy hàng (Tự đồng bộ Goship & Bản đồ):
                       </Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                         <TextInput
-                          style={[styles.trackingInput, { flex: 1, minWidth: 140 }]}
+                          style={[
+                            styles.trackingInput,
+                            { flex: 1, minWidth: 130, fontSize: 16 },
+                          ]}
                           value={warehouseDraft.senderName}
                           onChangeText={(t) =>
                             setWarehouseDraft((p) => ({ ...p, senderName: t }))
@@ -1969,48 +2340,288 @@ export default function OrderDetailScreen() {
                           placeholder="Tên shop gửi"
                         />
                         <TextInput
-                          style={[styles.trackingInput, { flex: 1, minWidth: 140 }]}
+                          style={[
+                            styles.trackingInput,
+                            { flex: 1, minWidth: 130, fontSize: 16 },
+                          ]}
                           value={warehouseDraft.senderPhone}
                           onChangeText={(t) =>
                             setWarehouseDraft((p) => ({ ...p, senderPhone: t }))
                           }
+                          keyboardType="phone-pad"
                           placeholder="SĐT người gửi"
                         />
                       </View>
+
+                      {/* Official Goship 3-Tier Location Selector (with manual input fallback) */}
+                      {hasGoshipToken && (
+                        <View style={{ gap: 6 }}>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '700',
+                              color: '#475569',
+                            }}>
+                            Chọn chuẩn địa giới Goship (tránh sai Quận/Phường khi gọi Shipper):
+                          </Text>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                            {(
+                              [
+                                {
+                                  key: 'city',
+                                  label: warehouseDraft.fromCity || 'Chọn Tỉnh / TP',
+                                  hasCode: Boolean(warehouseDraft.fromCityCode),
+                                },
+                                {
+                                  key: 'district',
+                                  label: warehouseDraft.fromDistrict || 'Chọn Quận / Huyện',
+                                  hasCode: Boolean(warehouseDraft.fromDistrictCode),
+                                },
+                                {
+                                  key: 'ward',
+                                  label: warehouseDraft.fromWard || 'Chọn Phường / Xã',
+                                  hasCode: Boolean(warehouseDraft.fromWardCode),
+                                },
+                              ] as const
+                            ).map((sel) => (
+                              <TouchableOpacity
+                                key={sel.key}
+                                onPress={() => void handleOpenGoshipLocPicker(sel.key)}
+                                activeOpacity={0.8}
+                                style={{
+                                  flex: 1,
+                                  minWidth: 125,
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: 4,
+                                  backgroundColor:
+                                    activeLocDropdown === sel.key ? '#EFF6FF' : '#F8FAFC',
+                                  borderWidth: 1,
+                                  borderColor:
+                                    activeLocDropdown === sel.key
+                                      ? '#2563EB'
+                                      : sel.hasCode
+                                        ? '#86EFAC'
+                                        : '#CBD5E1',
+                                  borderRadius: 9,
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 9,
+                                }}>
+                                <Text
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    fontSize: 12,
+                                    fontWeight: '700',
+                                    color: '#0F172A',
+                                  }}
+                                  numberOfLines={1}>
+                                  {sel.label}
+                                </Text>
+                                <ChevronDown size={14} color="#475569" />
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+
+                          {activeLocDropdown && (
+                            <View
+                              style={{
+                                backgroundColor: '#F8FAFC',
+                                borderWidth: 1,
+                                borderColor: '#93C5FD',
+                                borderRadius: 10,
+                                padding: 8,
+                                gap: 6,
+                              }}>
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                }}>
+                                <TextInput
+                                  style={[
+                                    styles.trackingInput,
+                                    { flex: 1, minWidth: 0, fontSize: 16, paddingVertical: 6 },
+                                  ]}
+                                  value={locSearchQuery}
+                                  onChangeText={setLocSearchQuery}
+                                  placeholder={
+                                    activeLocDropdown === 'city'
+                                      ? 'Tìm Tỉnh / Thành phố...'
+                                      : activeLocDropdown === 'district'
+                                        ? 'Tìm Quận / Huyện...'
+                                        : 'Tìm Phường / Xã...'
+                                  }
+                                  placeholderTextColor={COLORS.lightText}
+                                />
+                                <TouchableOpacity
+                                  onPress={() => setActiveLocDropdown(null)}
+                                  style={{
+                                    padding: 6,
+                                    borderRadius: 8,
+                                    backgroundColor: '#E2E8F0',
+                                  }}>
+                                  <X size={15} color="#334155" />
+                                </TouchableOpacity>
+                              </View>
+
+                              {loadingGoshipLoc ? (
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    paddingVertical: 8,
+                                  }}>
+                                  <ActivityIndicator size="small" color="#1D4ED8" />
+                                  <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
+                                    Đang tải danh sách từ Goship...
+                                  </Text>
+                                </View>
+                              ) : (
+                                <ScrollView
+                                  style={{ maxHeight: 180 }}
+                                  nestedScrollEnabled>
+                                  <View style={{ gap: 4 }}>
+                                    {(activeLocDropdown === 'city'
+                                      ? goshipCities
+                                      : activeLocDropdown === 'district'
+                                        ? goshipDistricts
+                                        : goshipWards
+                                    )
+                                      .filter((it) => {
+                                        const q = locSearchQuery
+                                          .trim()
+                                          .toLowerCase()
+                                          .normalize('NFD')
+                                          .replace(/[\u0300-\u036f]/g, '')
+                                          .replace(/đ/g, 'd');
+                                        if (!q) return true;
+                                        const n = it.name
+                                          .toLowerCase()
+                                          .normalize('NFD')
+                                          .replace(/[\u0300-\u036f]/g, '')
+                                          .replace(/đ/g, 'd');
+                                        return n.includes(q);
+                                      })
+                                      .slice(0, 60)
+                                      .map((it) => (
+                                        <TouchableOpacity
+                                          key={it.id}
+                                          onPress={() =>
+                                            handleSelectGoshipLocItem(
+                                              activeLocDropdown,
+                                              it
+                                            )
+                                          }
+                                          style={{
+                                            backgroundColor: '#FFFFFF',
+                                            borderWidth: 1,
+                                            borderColor: '#E2E8F0',
+                                            borderRadius: 8,
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 8,
+                                          }}>
+                                          <Text
+                                            style={{
+                                              fontSize: 12.5,
+                                              fontWeight: '700',
+                                              color: '#1E293B',
+                                            }}>
+                                            {it.name}
+                                          </Text>
+                                        </TouchableOpacity>
+                                      ))}
+                                  </View>
+                                </ScrollView>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      )}
+
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                         <TextInput
-                          style={[styles.trackingInput, { flex: 1, minWidth: 130 }]}
+                          style={[
+                            styles.trackingInput,
+                            { flex: 1, minWidth: 120, fontSize: 16 },
+                          ]}
                           value={warehouseDraft.fromCity}
                           onChangeText={(t) =>
-                            setWarehouseDraft((p) => ({ ...p, fromCity: t }))
+                            setWarehouseDraft((p) => ({
+                              ...p,
+                              fromCity: t,
+                              fromCityCode: '',
+                              fromDistrictCode: '',
+                              fromWardCode: '',
+                            }))
                           }
-                          placeholder="Tỉnh / Thành phố (VD: Hồ Chí Minh)"
+                          placeholder="Tỉnh / Thành phố (VD: Đà Nẵng)"
                         />
                         <TextInput
-                          style={[styles.trackingInput, { flex: 1, minWidth: 140 }]}
+                          style={[
+                            styles.trackingInput,
+                            { flex: 1, minWidth: 130, fontSize: 16 },
+                          ]}
                           value={warehouseDraft.fromDistrict}
                           onChangeText={(t) =>
-                            setWarehouseDraft((p) => ({ ...p, fromDistrict: t }))
+                            setWarehouseDraft((p) => ({
+                              ...p,
+                              fromDistrict: t,
+                              fromDistrictCode: '',
+                              fromWardCode: '',
+                            }))
                           }
-                          placeholder="Quận / Huyện (VD: Thành phố Thủ Đức)"
+                          placeholder="Quận / Huyện"
                         />
                         <TextInput
-                          style={[styles.trackingInput, { flex: 1, minWidth: 140 }]}
+                          style={[
+                            styles.trackingInput,
+                            { flex: 1, minWidth: 130, fontSize: 16 },
+                          ]}
                           value={warehouseDraft.fromWard}
                           onChangeText={(t) =>
-                            setWarehouseDraft((p) => ({ ...p, fromWard: t }))
+                            setWarehouseDraft((p) => ({
+                              ...p,
+                              fromWard: t,
+                              fromWardCode: '',
+                            }))
                           }
                           placeholder="Phường / Xã"
                         />
                       </View>
                       <TextInput
-                        style={styles.trackingInput}
+                        style={[styles.trackingInput, { fontSize: 16 }]}
                         value={warehouseDraft.fromStreet}
                         onChangeText={(t) =>
                           setWarehouseDraft((p) => ({ ...p, fromStreet: t }))
                         }
                         placeholder="Số nhà, tên đường / toà nhà lấy hàng"
                       />
+
+                      {warehouseSaveError ? (
+                        <View
+                          style={{
+                            backgroundColor: '#FEF2F2',
+                            borderWidth: 1,
+                            borderColor: '#FCA5A5',
+                            borderRadius: 8,
+                            padding: 8,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: '700',
+                              color: '#B91C1C',
+                              lineHeight: 16,
+                            }}>
+                            ⚠️ {warehouseSaveError}
+                          </Text>
+                        </View>
+                      ) : null}
+
                       <View
                         style={{
                           backgroundColor: '#F8FAFC',
@@ -2026,7 +2637,7 @@ export default function OrderDetailScreen() {
                             fontWeight: '700',
                             color: '#334155',
                           }}>
-                          🔗 Link Webhook tự nhận mã SPX từ Goship (dán vào mục Goship API Webhooks nếu bạn lên đơn trên web goship.io — nhớ điền ô Mã đơn đối tác là {order.id}):
+                          🔗 Link Webhook tự nhận & đồng bộ huỷ vận đơn từ Goship (dán vào mục Goship API Webhooks):
                         </Text>
                         <TouchableOpacity
                           onPress={() => handleCopy(goshipWebhookUrl, 'wh_url')}
@@ -2039,6 +2650,7 @@ export default function OrderDetailScreen() {
                           <Text
                             style={{
                               flex: 1,
+                              minWidth: 0,
                               fontSize: 11,
                               fontWeight: '800',
                               color: '#1D4ED8',
@@ -2061,18 +2673,26 @@ export default function OrderDetailScreen() {
                         disabled={savingWarehouse}
                         style={{
                           alignSelf: 'flex-start',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
                           backgroundColor: '#1D4ED8',
                           paddingHorizontal: 14,
-                          paddingVertical: 8,
+                          paddingVertical: 9,
                           borderRadius: 9,
                         }}>
+                        {savingWarehouse ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : null}
                         <Text
                           style={{
                             fontSize: 12,
                             fontWeight: '800',
                             color: '#FFFFFF',
                           }}>
-                          {savingWarehouse ? 'Đang lưu...' : '💾 Lưu địa chỉ kho lấy hàng'}
+                          {savingWarehouse
+                            ? 'Đang xác thực & lưu...'
+                            : '💾 Lưu & xác thực địa chỉ kho lấy hàng'}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -2096,7 +2716,7 @@ export default function OrderDetailScreen() {
                         ⛔ Đã tự động khóa tính năng Tạo vận đơn SPX vì khách CHƯA thanh toán chuyển khoản!
                       </Text>
                     </View>
-                  ) : savedTracking ? (
+                  ) : savedTracking || order.shippingAddress?.goshipShipmentId ? (
                     <View
                       style={{
                         backgroundColor: '#DCFCE7',
@@ -2104,15 +2724,132 @@ export default function OrderDetailScreen() {
                         borderColor: '#86EFAC',
                         borderRadius: 10,
                         padding: 10,
+                        gap: 8,
                       }}>
                       <Text
                         style={{
                           fontSize: 12,
                           fontWeight: '900',
                           color: '#166534',
+                          lineHeight: 18,
                         }}>
-                        ✅ Đơn hàng đã gắn mã vận đơn {savedCarrier || 'SPX'}: {savedTracking} (Đã khóa nút tạo tự động để chống tạo trùng 2 vận đơn).
+                        ✅ Đơn hàng đã gắn mã vận đơn {savedCarrier || 'SPX'}:{' '}
+                        {savedTracking || order.shippingAddress?.goshipShipmentId} (Đã khóa nút tạo tự động để chống tạo trùng 2 vận đơn).
                       </Text>
+
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          flexWrap: 'wrap',
+                          gap: 8,
+                        }}>
+                        <TouchableOpacity
+                          onPress={() => void refreshLiveSpxJourney(true)}
+                          disabled={syncingGoshipForce || cancellingGoship}
+                          activeOpacity={0.85}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 5,
+                            backgroundColor: '#FFFFFF',
+                            borderWidth: 1,
+                            borderColor: '#16A34A',
+                            paddingHorizontal: 10,
+                            paddingVertical: 7,
+                            borderRadius: 8,
+                          }}>
+                          {syncingGoshipForce ? (
+                            <ActivityIndicator size="small" color="#15803D" />
+                          ) : (
+                            <RefreshCw size={13} color="#15803D" />
+                          )}
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: '800',
+                              color: '#15803D',
+                            }}>
+                            {syncingGoshipForce
+                              ? 'Đang kiểm tra Goship...'
+                              : 'Đồng bộ trạng thái Goship'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => void handleCancelOrUnlinkGoship(false)}
+                          disabled={cancellingGoship || syncingGoshipForce}
+                          activeOpacity={0.85}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 5,
+                            backgroundColor: confirmCancelWaybill ? '#DC2626' : '#FEF2F2',
+                            borderWidth: 1,
+                            borderColor: confirmCancelWaybill ? '#B91C1C' : '#FCA5A5',
+                            paddingHorizontal: 10,
+                            paddingVertical: 7,
+                            borderRadius: 8,
+                          }}>
+                          {cancellingGoship ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={confirmCancelWaybill ? '#FFFFFF' : '#B91C1C'}
+                            />
+                          ) : (
+                            <Trash2
+                              size={13}
+                              color={confirmCancelWaybill ? '#FFFFFF' : '#B91C1C'}
+                            />
+                          )}
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: '800',
+                              color: confirmCancelWaybill ? '#FFFFFF' : '#B91C1C',
+                            }}>
+                            {cancellingGoship
+                              ? 'Đang huỷ / gỡ mã...'
+                              : confirmCancelWaybill
+                                ? `⚠️ Bấm lần nữa để xác nhận gỡ mã ${savedTracking || order.shippingAddress?.goshipShipmentId}`
+                                : 'Huỷ / Gỡ vận đơn để tạo lại'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {canForceUnlinkWaybill && (
+                        <TouchableOpacity
+                          onPress={() => void handleCancelOrUnlinkGoship(true)}
+                          disabled={cancellingGoship}
+                          activeOpacity={0.85}
+                          style={{
+                            alignSelf: 'flex-start',
+                            backgroundColor: '#7F1D1D',
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            borderRadius: 8,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: '800',
+                              color: '#FFFFFF',
+                            }}>
+                            🔓 Gỡ mã cũ khỏi web ngay (nếu bạn đã huỷ trực tiếp trên shop.goship.io)
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {goshipActionError ? (
+                        <Text
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: '700',
+                            color: '#B91C1C',
+                            lineHeight: 16,
+                          }}>
+                          ⚠️ {goshipActionError}
+                        </Text>
+                      ) : null}
                     </View>
                   ) : (
                     <>
@@ -2201,6 +2938,58 @@ export default function OrderDetailScreen() {
                             borderColor: '#60A5FA',
                             gap: 8,
                           }}>
+                          <View
+                            style={{
+                              backgroundColor: '#FFFBEB',
+                              borderWidth: 1,
+                              borderColor: '#FCD34D',
+                              borderRadius: 8,
+                              padding: 8,
+                              gap: 3,
+                            }}>
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '800',
+                                color: '#92400E',
+                              }}>
+                              📍 Kiểm tra lại địa chỉ lấy hàng (Goship):
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '700',
+                                color: '#3D2B1F',
+                              }}>
+                              • Kho lấy hàng:{' '}
+                              {[
+                                quoteResolvedFrom?.street || warehouseDraft.fromStreet,
+                                quoteResolvedFrom?.ward || warehouseDraft.fromWard,
+                                quoteResolvedFrom?.district || warehouseDraft.fromDistrict,
+                                quoteResolvedFrom?.city || warehouseDraft.fromCity,
+                              ]
+                                .filter(Boolean)
+                                .join(', ')}
+                            </Text>
+                            {quoteResolvedTo ? (
+                              <Text
+                                style={{
+                                  fontSize: 11.5,
+                                  fontWeight: '600',
+                                  color: '#475569',
+                                }}>
+                                • Giao tới:{' '}
+                                {[
+                                  quoteResolvedTo.ward,
+                                  quoteResolvedTo.district,
+                                  quoteResolvedTo.city,
+                                ]
+                                  .filter(Boolean)
+                                  .join(', ')}
+                              </Text>
+                            ) : null}
+                          </View>
+
                           <Text
                             style={{
                               fontSize: 12,

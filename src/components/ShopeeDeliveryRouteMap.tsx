@@ -1,5 +1,9 @@
 import type { Order } from '@/types/order';
-import type { LiveCarrierCheckpoint } from '@/utils/shippingTracker';
+import {
+    fetchPublicWarehouseOrigin,
+    type LiveCarrierCheckpoint,
+    type PublicWarehouseOrigin,
+} from '@/utils/shippingTracker';
 import {
     Check,
     CheckCircle2,
@@ -11,7 +15,7 @@ import {
     RefreshCw,
     Truck,
 } from 'lucide-react-native';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Linking,
@@ -27,10 +31,10 @@ interface GeoPoint {
   shortLabel: string;
 }
 
-const SENDER_WAREHOUSE_POINT: GeoPoint = {
+const DEFAULT_WAREHOUSE_POINT: GeoPoint = {
   lat: 10.8412,
   lon: 106.8371,
-  shortLabel: 'Kho Thủ Đức',
+  shortLabel: 'TP. Thủ Đức, TP.HCM',
 };
 
 const HCMC_DISTRICT_COORDS: Record<string, { lat: number; lon: number }> = {
@@ -73,24 +77,60 @@ const VIETNAM_PROVINCE_COORDS: Record<string, { lat: number; lon: number }> = {
   'tien giang': { lat: 10.36, lon: 106.36 },
   'ben tre': { lat: 10.2433, lon: 106.3755 },
   'vinh long': { lat: 10.2537, lon: 105.9722 },
+  'tra vinh': { lat: 9.9347, lon: 106.3453 },
+  'dong thap': { lat: 10.4938, lon: 105.6882 },
   'an giang': { lat: 10.3864, lon: 105.4352 },
   'kien giang': { lat: 10.0125, lon: 105.0809 },
+  'hau giang': { lat: 9.7579, lon: 105.6413 },
+  'soc trang': { lat: 9.6037, lon: 105.98 },
+  'bac lieu': { lat: 9.294, lon: 105.7216 },
+  'ca mau': { lat: 9.1768, lon: 105.1524 },
+  'tay ninh': { lat: 11.3352, lon: 106.1099 },
+  'binh phuoc': { lat: 11.7512, lon: 106.7235 },
   'lam dong': { lat: 11.9404, lon: 108.4583 },
   'da lat': { lat: 11.9404, lon: 108.4583 },
   'khanh hoa': { lat: 12.2388, lon: 109.1967 },
   'nha trang': { lat: 12.2388, lon: 109.1967 },
+  'ninh thuan': { lat: 11.5752, lon: 108.989 },
   'binh thuan': { lat: 10.9289, lon: 108.1021 },
+  'phu yen': { lat: 13.0955, lon: 109.3209 },
   'dak lak': { lat: 12.6667, lon: 108.05 },
+  'dak nong': { lat: 12.2646, lon: 107.6098 },
   'gia lai': { lat: 13.9833, lon: 108.0 },
+  'kon tum': { lat: 14.3497, lon: 108.0005 },
   'binh dinh': { lat: 13.782, lon: 109.2197 },
+  'quang ngai': { lat: 15.1214, lon: 108.8044 },
   'quang nam': { lat: 15.5736, lon: 108.474 },
   'thua thien hue': { lat: 16.4637, lon: 107.5909 },
+  hue: { lat: 16.4637, lon: 107.5909 },
+  'quang tri': { lat: 16.7403, lon: 107.1855 },
+  'quang binh': { lat: 17.4689, lon: 106.6223 },
+  'ha tinh': { lat: 18.3559, lon: 105.8877 },
   'nghe an': { lat: 18.6796, lon: 105.6813 },
   'thanh hoa': { lat: 19.8067, lon: 105.7852 },
+  'ninh binh': { lat: 20.2506, lon: 105.9745 },
+  'nam dinh': { lat: 20.4388, lon: 106.1621 },
+  'thai binh': { lat: 20.4463, lon: 106.3366 },
+  'ha nam': { lat: 20.5835, lon: 105.923 },
+  'hung yen': { lat: 20.6464, lon: 106.0511 },
   'quang ninh': { lat: 20.9599, lon: 107.0425 },
   'bac ninh': { lat: 21.1861, lon: 106.0763 },
+  'bac giang': { lat: 21.2819, lon: 106.1975 },
   'hai duong': { lat: 20.9373, lon: 106.3145 },
+  'vinh phuc': { lat: 21.3089, lon: 105.6049 },
+  'phu tho': { lat: 21.3227, lon: 105.4019 },
   'thai nguyen': { lat: 21.5942, lon: 105.8482 },
+  'hoa binh': { lat: 20.8172, lon: 105.3376 },
+  'lang son': { lat: 21.8537, lon: 106.7615 },
+  'lao cai': { lat: 22.4809, lon: 103.9755 },
+  'son la': { lat: 21.3256, lon: 103.9188 },
+  'yen bai': { lat: 21.7168, lon: 104.8986 },
+  'tuyen quang': { lat: 21.8236, lon: 105.2142 },
+  'ha giang': { lat: 22.8026, lon: 104.9784 },
+  'cao bang': { lat: 22.6666, lon: 106.2639 },
+  'bac kan': { lat: 22.147, lon: 105.8348 },
+  'dien bien': { lat: 21.386, lon: 103.023 },
+  'lai chau': { lat: 22.3864, lon: 103.4703 },
 };
 
 function normalizeAscii(str?: string): string {
@@ -104,26 +144,32 @@ function normalizeAscii(str?: string): string {
     .trim();
 }
 
-function resolveRecipientGeoPoint(order: Order): GeoPoint {
-  const addr = order.shippingAddress;
-  const distNorm = normalizeAscii(addr?.district);
-  const cityNorm = normalizeAscii(addr?.city);
-  const cleanDist = (addr?.district || '')
+function resolveAddressGeoPoint(
+  city?: string,
+  district?: string,
+  fallbackLabel = 'Điểm nhận'
+): GeoPoint {
+  const distNorm = normalizeAscii(district);
+  const cityNorm = normalizeAscii(city);
+  const cleanDist = (district || '')
     .replace(/^(Thành phố|Quận|Huyện|Thị xã)\s+/i, '')
     .trim();
-  const cleanCity = (addr?.city || '')
+  const cleanCity = (city || '')
     .replace(/^(Thành phố|Tỉnh|TP\.?)\s+/i, '')
     .trim();
   const shortLabel =
     cleanDist && cleanCity
-      ? `${addr?.district?.startsWith('Quận') ? addr.district : cleanDist}, ${
+      ? `${district?.startsWith('Quận') ? district : cleanDist}, ${
           cleanCity === 'Hồ Chí Minh' ? 'TP.HCM' : cleanCity
         }`
-      : cleanDist || cleanCity || 'Điểm nhận';
+      : cleanDist || cleanCity || fallbackLabel;
 
-  for (const [key, coords] of Object.entries(HCMC_DISTRICT_COORDS)) {
-    if (distNorm.includes(key)) {
-      return { ...coords, shortLabel };
+  const isHcmc = !cityNorm || cityNorm.includes('ho chi minh') || cityNorm.includes('hcm');
+  if (isHcmc) {
+    for (const [key, coords] of Object.entries(HCMC_DISTRICT_COORDS)) {
+      if (distNorm.includes(key)) {
+        return { ...coords, shortLabel };
+      }
     }
   }
   for (const [key, coords] of Object.entries(VIETNAM_PROVINCE_COORDS)) {
@@ -136,6 +182,35 @@ function resolveRecipientGeoPoint(order: Order): GeoPoint {
     lon: 106.6602,
     shortLabel,
   };
+}
+
+function resolveRecipientGeoPoint(order: Order): GeoPoint {
+  return resolveAddressGeoPoint(
+    order.shippingAddress?.city,
+    order.shippingAddress?.district,
+    'Điểm nhận'
+  );
+}
+
+function resolveWarehouseGeoPoint(
+  warehouseOrigin?: PublicWarehouseOrigin | null,
+  pickupWarehouseLabel?: string
+): GeoPoint {
+  if (warehouseOrigin && (warehouseOrigin.fromCity || warehouseOrigin.fromDistrict)) {
+    return resolveAddressGeoPoint(
+      warehouseOrigin.fromCity,
+      warehouseOrigin.fromDistrict,
+      'Kho Tiệm Cuộn Len'
+    );
+  }
+  if (pickupWarehouseLabel) {
+    const parts = pickupWarehouseLabel.split(',').map((s) => s.trim());
+    if (parts.length >= 2) {
+      return resolveAddressGeoPoint(parts[parts.length - 1], parts[0], pickupWarehouseLabel);
+    }
+    return resolveAddressGeoPoint(pickupWarehouseLabel, '', pickupWarehouseLabel);
+  }
+  return DEFAULT_WAREHOUSE_POINT;
 }
 
 function computeHaversineKm(a: GeoPoint, b: GeoPoint): number {
@@ -209,6 +284,7 @@ interface ShopeeDeliveryRouteMapProps {
   onRefresh?: () => void;
   onCopyTracking?: (code: string) => void;
   copiedTracking?: boolean;
+  warehouseOrigin?: PublicWarehouseOrigin | null;
 }
 
 export function ShopeeDeliveryRouteMap({
@@ -218,11 +294,36 @@ export function ShopeeDeliveryRouteMap({
   onRefresh,
   onCopyTracking,
   copiedTracking = false,
+  warehouseOrigin: propWarehouseOrigin,
 }: ShopeeDeliveryRouteMapProps) {
+  const [fetchedOrigin, setFetchedOrigin] = useState<PublicWarehouseOrigin | null>(null);
+
+  useEffect(() => {
+    if (propWarehouseOrigin) return;
+    let active = true;
+    fetchPublicWarehouseOrigin().then((o) => {
+      if (active && o) setFetchedOrigin(o);
+    });
+    return () => {
+      active = false;
+    };
+  }, [propWarehouseOrigin]);
+
+  const effectiveOrigin = propWarehouseOrigin || fetchedOrigin;
+
+  const originPoint = useMemo(
+    () =>
+      resolveWarehouseGeoPoint(
+        effectiveOrigin,
+        order.shippingAddress?.pickupWarehouseLabel
+      ),
+    [effectiveOrigin, order.shippingAddress?.pickupWarehouseLabel]
+  );
+
   const recipientPoint = useMemo(() => resolveRecipientGeoPoint(order), [order]);
   const roadDistanceKm = useMemo(
-    () => computeHaversineKm(SENDER_WAREHOUSE_POINT, recipientPoint),
-    [recipientPoint]
+    () => computeHaversineKm(originPoint, recipientPoint),
+    [originPoint, recipientPoint]
   );
   const progressPct = useMemo(
     () => computeDeliveryProgressPct(order, checkpoints),
@@ -241,7 +342,17 @@ export function ShopeeDeliveryRouteMap({
   }, [isCompleted, progressPct, roadDistanceKm]);
 
   const googleMapsRouteUrl = useMemo(() => {
-    const origin = encodeURIComponent('Vinhomes Grand Park, Thủ Đức, Hồ Chí Minh');
+    const originText =
+      effectiveOrigin && (effectiveOrigin.fromDistrict || effectiveOrigin.fromCity)
+        ? [
+            effectiveOrigin.fromWard,
+            effectiveOrigin.fromDistrict,
+            effectiveOrigin.fromCity,
+          ]
+            .filter(Boolean)
+            .join(', ')
+        : order.shippingAddress?.pickupWarehouseLabel || 'TP. Thủ Đức, Hồ Chí Minh';
+    const origin = encodeURIComponent(originText);
     const dest = encodeURIComponent(
       [
         order.shippingAddress?.ward,
@@ -253,6 +364,8 @@ export function ShopeeDeliveryRouteMap({
     );
     return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=driving`;
   }, [
+    effectiveOrigin,
+    order.shippingAddress?.pickupWarehouseLabel,
     order.shippingAddress?.ward,
     order.shippingAddress?.district,
     order.shippingAddress?.city,
@@ -397,8 +510,12 @@ export function ShopeeDeliveryRouteMap({
           {/* Endpoint Labels Row (Cleanly aligned underneath) */}
           <View style={styles.endpointLabelsRow}>
             <View style={styles.endpointLabelLeft}>
-              <Text style={styles.endpointTitle}>Kho Tiệm Cuộn Len</Text>
-              <Text style={styles.endpointSub}>TP. Thủ Đức, TP.HCM</Text>
+              <Text style={styles.endpointTitle} numberOfLines={1}>
+                Kho {effectiveOrigin?.senderName || 'Tiệm Cuộn Len'}
+              </Text>
+              <Text style={styles.endpointSub} numberOfLines={1}>
+                {originPoint.shortLabel}
+              </Text>
             </View>
 
             <View style={styles.endpointLabelRight}>

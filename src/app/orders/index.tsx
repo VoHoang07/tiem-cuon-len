@@ -11,12 +11,14 @@ import { formatVND } from '@/utils/formatCurrency';
 import {
     computeHandmadeCraftingSchedule,
     exportOrdersToGoshipCsv,
+    fetchPublicWarehouseOrigin,
     formatShippingSlipForClipboard,
     getCachedGuestTrackedOrders,
     getCarrierTrackingUrl,
     getCodCollectAmount,
     lookupPublicOrdersByPhoneOrCode,
     syncActiveOrdersWithGoship,
+    type PublicWarehouseOrigin,
     type SyncedOrderGoshipPayload,
 } from '@/utils/shippingTracker';
 import * as Clipboard from 'expo-clipboard';
@@ -134,6 +136,18 @@ export default function OrdersScreen() {
   const [syncedPatchesMap, setSyncedPatchesMap] = useState<
     Record<string, SyncedOrderGoshipPayload>
   >({});
+  const [warehouseOrigin, setWarehouseOrigin] =
+    useState<PublicWarehouseOrigin | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchPublicWarehouseOrigin().then((o) => {
+      if (active && o) setWarehouseOrigin(o);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const runGuestLookup = useCallback(async (rawQuery: string) => {
     const clean = rawQuery.trim();
@@ -231,18 +245,26 @@ export default function OrdersScreen() {
     const ids = activeOrderIdsSignature.split(',').filter(Boolean);
     syncActiveOrdersWithGoship(ids).then((res) => {
       if (!active || !res.ok || res.syncedOrders.length === 0) return;
-      let hasNewTracking = false;
+      let shouldRefetch = false;
       const nextMap: Record<string, SyncedOrderGoshipPayload> = {};
       for (const s of res.syncedOrders) {
         if (s?.id) {
-          nextMap[s.id] = s;
-          if (s.shippingAddress?.trackingCode || s.status) {
-            hasNewTracking = true;
+          if (!s.waybillReset) {
+            nextMap[s.id] = s;
+          }
+          if (s.waybillReset || s.changed || s.shippingAddress?.trackingCode || s.status) {
+            shouldRefetch = true;
           }
         }
       }
-      setSyncedPatchesMap((prev) => ({ ...prev, ...nextMap }));
-      if (hasNewTracking) {
+      setSyncedPatchesMap((prev) => {
+        const merged = { ...prev, ...nextMap };
+        for (const s of res.syncedOrders) {
+          if (s?.id && s.waybillReset) delete merged[s.id];
+        }
+        return merged;
+      });
+      if (shouldRefetch) {
         void refetchOrders();
       }
     });
@@ -544,8 +566,14 @@ export default function OrdersScreen() {
                           fontSize: 10.5,
                           fontWeight: '700',
                           color: '#64748B',
-                        }}>
-                        Kho Thủ Đức
+                          maxWidth: 110,
+                        }}
+                        numberOfLines={1}>
+                        {item.shippingAddress?.pickupWarehouseLabel
+                          ? `Kho ${item.shippingAddress.pickupWarehouseLabel.split(',')[0].replace(/^(Thành phố|TP\.?|Quận|Huyện|Thị xã)\s+/i, '').trim()}`
+                          : warehouseOrigin?.fromDistrict || warehouseOrigin?.fromCity
+                            ? `Kho ${(warehouseOrigin.fromDistrict || warehouseOrigin.fromCity).replace(/^(Thành phố|TP\.?|Quận|Huyện|Thị xã)\s+/i, '').trim()}`
+                            : 'Kho Tiệm'}
                       </Text>
                       <View
                         style={{

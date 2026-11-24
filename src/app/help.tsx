@@ -274,7 +274,7 @@ export default function HelpScreen() {
           'Chỉ cần nhập 10 số điện thoại để xem tiến độ làm len và vị trí bưu cục SPX.',
         steps: [
           'Trong 5–6 ngày đầu: Theo dõi từng công đoạn nghệ nhân móc len, khâu ráp và đóng gói tại xưởng.',
-          'Khi bàn giao SPX Express: Xem trực tiếp bản đồ lộ trình từ Kho Thủ Đức tới địa chỉ của bạn và từng trạm bưu cục SPX.',
+          'Khi bàn giao SPX Express: Xem trực tiếp bản đồ lộ trình từ kho Tiệm Cuộn Len tới địa chỉ của bạn và từng trạm bưu cục SPX.',
           'Không cần đăng nhập vẫn tra cứu nhanh được tại mục "Theo dõi đơn" chỉ bằng 10 số SĐT nhận hàng.',
         ],
         actionLabel: 'Tra cứu Đơn hàng',

@@ -284,7 +284,24 @@ async function callGoshipApi(path, method = 'GET', bodyObj = null) {
   }
 }
 
-async function resolveGoshipLocationCodes(cityName, districtName, wardName) {
+async function resolveGoshipLocationCodes(cityName, districtName, wardName, explicitCodes = null) {
+  if (
+    explicitCodes &&
+    explicitCodes.cityCode &&
+    explicitCodes.districtCode &&
+    explicitCodes.wardCode
+  ) {
+    return {
+      ok: true,
+      cityCode: String(explicitCodes.cityCode).trim(),
+      districtCode: String(explicitCodes.districtCode).trim(),
+      wardCode: String(explicitCodes.wardCode).trim(),
+      resolvedCityName: String(cityName || '').trim(),
+      resolvedDistrictName: String(districtName || '').trim(),
+      resolvedWardName: String(wardName || '').trim(),
+    };
+  }
+
   if (!cachedGoshipCities) {
     const cityRes = await callGoshipApi('/api/v2/cities', 'GET');
     if (!cityRes.ok || !Array.isArray(cityRes.data)) {
@@ -294,17 +311,26 @@ async function resolveGoshipLocationCodes(cityName, districtName, wardName) {
   }
 
   const normCity = normalizeViText(cityName);
+  if (!normCity) {
+    return {
+      ok: false,
+      error: 'Thiếu thông tin Tỉnh / Thành phố. Vui lòng cập nhật địa chỉ đầy đủ.',
+    };
+  }
+
   const matchedCity =
+    cachedGoshipCities.find((c) => normalizeViText(c.name) === normCity) ||
     cachedGoshipCities.find((c) => {
       const n = normalizeViText(c.name);
+      if (!n) return false;
       return (
-        n === normCity ||
         n.includes(normCity) ||
         normCity.includes(n) ||
         (normCity.includes('hcm') && n.includes('ho chi minh')) ||
         (normCity.includes('sai gon') && n.includes('ho chi minh'))
       );
-    }) || null;
+    }) ||
+    null;
 
   if (!matchedCity) {
     return {
@@ -325,39 +351,106 @@ async function resolveGoshipLocationCodes(cityName, districtName, wardName) {
   }
 
   const normDist = normalizeViText(districtName);
-  const matchedDist =
+  if (!normDist) {
+    return {
+      ok: false,
+      error: `Thiếu thông tin Quận / Huyện cho "${matchedCity.name}". Vui lòng chọn đúng Quận/Huyện.`,
+    };
+  }
+
+  const loadWardsForDistrict = async (dCode) => {
+    let wList = cachedGoshipWards.get(dCode);
+    if (!wList) {
+      const wardRes = await callGoshipApi(`/api/v2/districts/${dCode}/wards`, 'GET');
+      wList = wardRes.ok && Array.isArray(wardRes.data) ? wardRes.data : [];
+      cachedGoshipWards.set(dCode, wList);
+    }
+    return wList;
+  };
+
+  const findWardMatch = (wList, targetNormWard) => {
+    if (!targetNormWard || !Array.isArray(wList) || wList.length === 0) return null;
+    return (
+      wList.find((w) => normalizeViText(w.name) === targetNormWard) ||
+      wList.find((w) => {
+        const n = normalizeViText(w.name);
+        return Boolean(n && (n.includes(targetNormWard) || targetNormWard.includes(n)));
+      }) ||
+      null
+    );
+  };
+
+  const normWard = normalizeViText(wardName);
+  let matchedDist =
+    districts.find((d) => normalizeViText(d.name) === normDist) ||
     districts.find((d) => {
       const n = normalizeViText(d.name);
-      return n === normDist || n.includes(normDist) || normDist.includes(n);
-    }) || districts[0];
+      return Boolean(n && (n.includes(normDist) || normDist.includes(n)));
+    }) ||
+    null;
+
+  // Smart TP. Thủ Đức <-> Quận 2 / Quận 9 / Quận Thủ Đức disambiguation for HCMC
+  const isHcmc = normalizeViText(matchedCity.name).includes('ho chi minh');
+  const isThuDucFamily =
+    isHcmc && (normDist === 'thu duc' || normDist === '9' || normDist === '2');
+
+  if (isThuDucFamily && normWard) {
+    const siblingDistricts = districts.filter((d) => {
+      const n = normalizeViText(d.name);
+      return n === 'thu duc' || n === '9' || n === '2';
+    });
+    // Check matchedDist first, then sibling districts so Phường Long Thạnh Mỹ (Quận 9 cũ) resolves accurately
+    const orderedCandidates = [
+      ...(matchedDist ? [matchedDist] : []),
+      ...siblingDistricts.filter((d) => !matchedDist || String(d.id) !== String(matchedDist.id)),
+    ];
+    for (const cand of orderedCandidates) {
+      const candWards = await loadWardsForDistrict(String(cand.id));
+      const foundW = findWardMatch(candWards, normWard);
+      if (foundW) {
+        return {
+          ok: true,
+          cityCode,
+          districtCode: String(cand.id),
+          wardCode: String(foundW.id),
+          resolvedCityName: String(matchedCity.name || cityName),
+          resolvedDistrictName: String(cand.name || districtName),
+          resolvedWardName: String(foundW.name || wardName),
+        };
+      }
+    }
+  }
 
   if (!matchedDist) {
     return {
       ok: false,
-      error: `Không khớp được Quận/Huyện "${districtName}" trên Goship.`,
+      error: `Không khớp được Quận/Huyện "${districtName}" thuộc "${matchedCity.name}" trên Goship. Vui lòng chọn đúng từ danh sách địa giới.`,
     };
   }
 
   const districtCode = String(matchedDist.id);
-  let wards = cachedGoshipWards.get(districtCode);
-  if (!wards) {
-    const wardRes = await callGoshipApi(`/api/v2/districts/${districtCode}/wards`, 'GET');
-    wards = wardRes.ok && Array.isArray(wardRes.data) ? wardRes.data : [];
-    cachedGoshipWards.set(districtCode, wards);
+  const wards = await loadWardsForDistrict(districtCode);
+  let matchedWard = null;
+  if (normWard) {
+    matchedWard = findWardMatch(wards, normWard);
+    if (!matchedWard && wards.length > 0) {
+      return {
+        ok: false,
+        error: `Không khớp được Phường/Xã "${wardName}" thuộc "${matchedDist.name}, ${matchedCity.name}" trên Goship. Vui lòng kiểm tra lại Phường/Xã.`,
+      };
+    }
+  } else if (wards.length > 0) {
+    matchedWard = wards[0];
   }
-
-  const normWard = normalizeViText(wardName);
-  const matchedWard =
-    wards.find((w) => {
-      const n = normalizeViText(w.name);
-      return n === normWard || n.includes(normWard) || normWard.includes(n);
-    }) || wards[0];
 
   return {
     ok: true,
     cityCode,
     districtCode,
     wardCode: matchedWard ? String(matchedWard.id) : '',
+    resolvedCityName: String(matchedCity.name || cityName),
+    resolvedDistrictName: String(matchedDist.name || districtName),
+    resolvedWardName: matchedWard ? String(matchedWard.name || wardName) : '',
   };
 }
 
@@ -369,6 +462,9 @@ async function getSavedSenderWarehouse(authToken) {
     fromDistrict: process.env.GOSHIP_FROM_DISTRICT || 'Thành phố Thủ Đức',
     fromWard: process.env.GOSHIP_FROM_WARD || 'Phường Long Thạnh Mỹ',
     fromStreet: process.env.GOSHIP_FROM_STREET || 'Vinhomes Grand Park',
+    fromCityCode: '',
+    fromDistrictCode: '',
+    fromWardCode: '',
   };
 
   try {
@@ -389,6 +485,84 @@ async function getSavedSenderWarehouse(authToken) {
     // ignore
   }
   return defaults;
+}
+
+function isGoshipShipmentCancelled(shOrStatus, statusText = '', statusDesc = '') {
+  let code = NaN;
+  let combinedText = `${statusText || ''} ${statusDesc || ''}`;
+  if (shOrStatus && typeof shOrStatus === 'object') {
+    const sh = shOrStatus;
+    if (
+      sh.deleted_at ||
+      sh.cancel_at ||
+      sh.cancelled_at ||
+      sh.is_deleted === true ||
+      sh.is_canceled === true ||
+      sh.is_cancelled === true
+    ) {
+      return true;
+    }
+    code = Number(sh.status ?? sh.status_code);
+    combinedText = [
+      sh.status_text,
+      sh.status_desc,
+      sh.status_name,
+      sh.message,
+      statusText,
+      statusDesc,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  } else {
+    code = Number(shOrStatus);
+  }
+
+  // Goship API v2: 914 (Đơn lỗi / Đơn hủy), 1000 (Đơn hủy)
+  if (code === 914 || code === 1000) return true;
+
+  const norm = String(combinedText || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!norm) return false;
+  if (/\b(khong huy|chua huy)\b/.test(norm)) return false;
+  return /\b(da huy|huy don|don huy|huy van don|da xoa|cancel|canceled|cancelled)\b/.test(norm);
+}
+
+function buildUnlinkedShippingAddress(prevAddr = {}, extraCancelledCodes = []) {
+  const prevCancelled = Array.isArray(prevAddr.cancelledTrackingCodes)
+    ? prevAddr.cancelledTrackingCodes
+    : [];
+  const mergedSet = new Set(
+    [
+      ...prevCancelled,
+      prevAddr.trackingCode,
+      prevAddr.goshipShipmentId,
+      ...(Array.isArray(extraCancelledCodes) ? extraCancelledCodes : []),
+    ]
+      .map((c) => String(c || '').trim().toUpperCase())
+      .filter((c) => c.length >= 4)
+  );
+
+  return {
+    ...prevAddr,
+    shippingCarrier: '',
+    trackingCode: '',
+    goshipShipmentId: '',
+    goshipStatusText: '',
+    shippedAt: '',
+    goshipHistory: [],
+    craftingStage:
+      prevAddr.craftingStage === 'handed_to_spx'
+        ? 'packed_waiting_spx'
+        : prevAddr.craftingStage,
+    cancelledTrackingCodes: Array.from(mergedSet).slice(-20),
+  };
 }
 
 function mapGoshipStatusToOrderStatus(statusCode, currentStatus) {
@@ -413,10 +587,11 @@ function mapGoshipStatusToOrderStatus(statusCode, currentStatus) {
  * Fetches recent shipments from Goship (`/api/v2/shipments`) so orders created either via API
  * or directly on the `shop.goship.io` web dashboard are automatically matched by Order ID OR Customer Phone!
  */
-async function fetchRecentGoshipShipmentsServer() {
+async function fetchRecentGoshipShipmentsServer(forceRefresh = false) {
   if (!GOSHIP_ACCESS_TOKEN) return [];
   const now = Date.now();
   if (
+    !forceRefresh &&
     cachedGoshipShipments.list.length > 0 &&
     now - cachedGoshipShipments.at < GOSHIP_SHIPMENTS_CACHE_TTL_MS
   ) {
@@ -427,34 +602,136 @@ async function fetchRecentGoshipShipmentsServer() {
     cachedGoshipShipments = { at: now, list: res.data };
     return res.data;
   }
-  return [];
+  return forceRefresh ? [] : cachedGoshipShipments.list;
+}
+
+async function fetchGoshipShipmentByCodeOrIdServer(codeOrId) {
+  const clean = String(codeOrId || '').trim();
+  if (!GOSHIP_ACCESS_TOKEN || !clean) {
+    return { found: false, notFound: false, shipment: null };
+  }
+  const searchRes = await callGoshipApi(
+    `/api/v2/shipments/search?code=${encodeURIComponent(clean)}`,
+    'GET'
+  );
+  if (searchRes.ok && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+    const exact =
+      searchRes.data.find((s) => {
+        const ids = [s && s.id, s && s.code, s && s.carrier_code, s && s.tracking_number]
+          .map((v) => String(v || '').trim().toUpperCase());
+        return ids.includes(clean.toUpperCase());
+      }) || searchRes.data[0];
+    return { found: true, notFound: false, shipment: exact };
+  }
+  const byIdRes = await callGoshipApi(
+    `/api/v2/shipments/${encodeURIComponent(clean)}`,
+    'GET'
+  );
+  if (byIdRes.ok && byIdRes.data && typeof byIdRes.data === 'object') {
+    return { found: true, notFound: false, shipment: byIdRes.data };
+  }
+  if (byIdRes.status === 404) {
+    return { found: false, notFound: true, shipment: null };
+  }
+  return { found: false, notFound: false, shipment: null };
 }
 
 /**
  * Automatically matches an order with Goship shipments (by `order_id` or recipient `phone`),
- * saves the SPX tracking code + status to Supabase `public.orders`, and enriches with live SPX checkpoints.
+ * detects cancelled Goship waybills to unlock re-creation, saves active SPX tracking code + status to Supabase `public.orders`,
+ * and enriches with live SPX checkpoints.
  */
-async function syncOrderWithGoshipAndSpxServer(order) {
+async function syncOrderWithGoshipAndSpxServer(order, opts = {}) {
   if (!order || !order.id) return order;
   if (order.status === 'pending_payment' || order.status === 'Đã hủy') {
     return order;
   }
 
+  const forceRefresh = Boolean(opts && opts.forceRefresh);
   let addr = { ...(order.shippingAddress || {}) };
   let nextStatus = order.status;
   let shouldPersistToDb = false;
+  let waybillReset = false;
 
-  // 1. Auto-pull SPX tracking code & status from Goship if Goship token is configured
+  const cancelledSet = new Set(
+    (Array.isArray(addr.cancelledTrackingCodes) ? addr.cancelledTrackingCodes : [])
+      .map((c) => String(c || '').trim().toUpperCase())
+      .filter(Boolean)
+  );
+
+  // 1. Auto-sync with Goship if Goship token is configured
   if (GOSHIP_ACCESS_TOKEN) {
     try {
-      const shipments = await fetchRecentGoshipShipmentsServer();
+      const shipments = await fetchRecentGoshipShipmentsServer(forceRefresh);
       const orderIdUpper = String(order.id).trim().toUpperCase();
       const orderIdShort = orderIdUpper.replace(/^CUONLEN[-_]?/, '');
       const custPhone = normalizeVnPhone(addr.phone);
       const orderCreatedMs = new Date(order.createdAt || 0).getTime() || 0;
 
-      const matchedShipment = shipments.find((sh) => {
-        if (!sh || typeof sh !== 'object') return false;
+      const getShipmentCodesUpper = (sh) =>
+        [sh.id, sh.code, sh.carrier_code, sh.tracking_number]
+          .map((v) => String(v || '').trim().toUpperCase())
+          .filter(Boolean);
+
+      // 1A. If order already has a Goship shipment attached, verify whether it was cancelled/deleted on Goship!
+      const currentGoshipId = String(addr.goshipShipmentId || '').trim();
+      const currentTracking = String(addr.trackingCode || '').trim();
+      const hasGoshipLinked = Boolean(
+        currentGoshipId || currentTracking.toUpperCase().startsWith('GS')
+      );
+
+      if (hasGoshipLinked || currentTracking) {
+        const existingInList = shipments.find((sh) => {
+          if (!sh || typeof sh !== 'object') return false;
+          const codes = getShipmentCodesUpper(sh);
+          if (currentGoshipId && codes.includes(currentGoshipId.toUpperCase())) return true;
+          if (currentTracking && codes.includes(currentTracking.toUpperCase())) return true;
+          return false;
+        });
+
+        if (existingInList && isGoshipShipmentCancelled(existingInList)) {
+          addr = buildUnlinkedShippingAddress(addr, getShipmentCodesUpper(existingInList));
+          for (const c of addr.cancelledTrackingCodes || []) cancelledSet.add(c);
+          if (nextStatus === 'Đang giao') nextStatus = 'Đang chuẩn bị hàng';
+          shouldPersistToDb = true;
+          waybillReset = true;
+        } else if (!existingInList && hasGoshipLinked) {
+          // Not in recent active list — query Goship directly for exact shipment status (detects cancelled / 404 deleted)
+          const directLookup = await fetchGoshipShipmentByCodeOrIdServer(
+            currentGoshipId || currentTracking
+          );
+          if (
+            (directLookup.found && isGoshipShipmentCancelled(directLookup.shipment)) ||
+            directLookup.notFound
+          ) {
+            const extraCodes = directLookup.shipment
+              ? getShipmentCodesUpper(directLookup.shipment)
+              : [];
+            addr = buildUnlinkedShippingAddress(addr, extraCodes);
+            for (const c of addr.cancelledTrackingCodes || []) cancelledSet.add(c);
+            if (nextStatus === 'Đang giao') nextStatus = 'Đang chuẩn bị hàng';
+            shouldPersistToDb = true;
+            waybillReset = true;
+          }
+        }
+      }
+
+      // 1B. Filter to ACTIVE (non-cancelled & non-blacklisted) shipments, sorted newest-first
+      const activeShipments = shipments
+        .filter((sh) => {
+          if (!sh || typeof sh !== 'object') return false;
+          if (isGoshipShipmentCancelled(sh)) return false;
+          const codes = getShipmentCodesUpper(sh);
+          if (codes.some((c) => cancelledSet.has(c))) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const ta = Number(a.created_at || a.created_time || 0);
+          const tb = Number(b.created_at || b.created_time || 0);
+          return tb - ta;
+        });
+
+      const matchedShipment = activeShipments.find((sh) => {
         const shOrderId = String(sh.order_id || '').trim().toUpperCase();
         if (shOrderId && (shOrderId === orderIdUpper || shOrderId === orderIdShort)) {
           return true;
@@ -487,6 +764,7 @@ async function syncOrderWithGoshipAndSpxServer(order) {
       });
 
       if (matchedShipment) {
+        waybillReset = false;
         const goshipId = String(matchedShipment.id || '').trim();
         const trackingNumber = String(
           matchedShipment.carrier_code ||
@@ -681,6 +959,8 @@ async function syncOrderWithGoshipAndSpxServer(order) {
     ...order,
     status: nextStatus,
     shippingAddress: addr,
+    _waybillReset: waybillReset,
+    _changed: shouldPersistToDb,
   };
 }
 
@@ -802,6 +1082,42 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     const tsIso = cleanHook.update_time
       ? new Date(Number(cleanHook.update_time) * 1000).toISOString()
       : new Date().toISOString();
+
+    // If Goship webhook reports this waybill was cancelled/deleted -> automatically unlink & unlock order!
+    if (isGoshipShipmentCancelled(cleanHook.status, statusText, statusDesc)) {
+      const resetAddr = buildUnlinkedShippingAddress(prevAddr, [
+        gcode,
+        carrierTrackingCode,
+      ]);
+      const revertedStatus =
+        matchedOrder.status === 'Đang giao'
+          ? 'Đang chuẩn bị hàng'
+          : matchedOrder.status;
+
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(matchedOrder.id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            ...dbHeaders,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({
+            status: revertedStatus,
+            shippingAddress: resetAddr,
+          }),
+        }
+      );
+      cachedGoshipShipments = { at: 0, list: [] };
+      return res.status(200).json({
+        success: true,
+        matchedOrderId: matchedOrder.id,
+        cancelledWaybill: true,
+        trackingCode: '',
+        status: revertedStatus,
+      });
+    }
 
     const carrierDisplay =
       carrierShort === 'shopee' || carrierShort === 'spx'
@@ -953,6 +1269,107 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       return res.status(200).json({ success: true, checkpoints: [], source: 'portal_only' });
     }
 
+    // 2B-0. Public Privacy-Safe Warehouse Origin (City/District/Ward only — NO street or phone) for Route Map
+    if (action === 'public_warehouse_origin') {
+      const wh = await getSavedSenderWarehouse('');
+      return res.status(200).json({
+        success: true,
+        origin: {
+          senderName: wh.senderName || 'Tiệm Cuộn Len',
+          fromCity: wh.fromCity || 'Hồ Chí Minh',
+          fromDistrict: wh.fromDistrict || 'Thành phố Thủ Đức',
+          fromWard: wh.fromWard || '',
+        },
+      });
+    }
+
+    // 2B-1. Admin Official Goship Locations Selector (Cities -> Districts -> Wards)
+    if (action === 'goship_locations') {
+      const authUser = await verifySupabaseUser(req);
+      if (!authUser || !authUser.isAdmin) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+      }
+      const locType = sanitizeTextServer(query.type || 'cities', 20);
+      const parentId = sanitizeTextServer(query.parentId || '', 40).replace(/[^A-Za-z0-9_-]/g, '');
+
+      if (!GOSHIP_ACCESS_TOKEN) {
+        return res.status(200).json({
+          success: true,
+          hasGoshipToken: false,
+          items: [],
+        });
+      }
+
+      if (locType === 'cities') {
+        if (!cachedGoshipCities) {
+          const cityRes = await callGoshipApi('/api/v2/cities', 'GET');
+          if (!cityRes.ok || !Array.isArray(cityRes.data)) {
+            return res.status(400).json({
+              success: false,
+              error: cityRes.error || 'Không tải được danh sách Tỉnh/Thành từ Goship.',
+            });
+          }
+          cachedGoshipCities = cityRes.data;
+        }
+        return res.status(200).json({
+          success: true,
+          hasGoshipToken: true,
+          items: cachedGoshipCities.map((c) => ({
+            id: String(c.id),
+            name: String(c.name || ''),
+          })),
+        });
+      }
+
+      if (locType === 'districts' && parentId) {
+        let districts = cachedGoshipDistricts.get(parentId);
+        if (!districts) {
+          const distRes = await callGoshipApi(`/api/v2/cities/${encodeURIComponent(parentId)}/districts`, 'GET');
+          if (!distRes.ok || !Array.isArray(distRes.data)) {
+            return res.status(400).json({
+              success: false,
+              error: distRes.error || 'Không tải được danh sách Quận/Huyện từ Goship.',
+            });
+          }
+          districts = distRes.data;
+          cachedGoshipDistricts.set(parentId, districts);
+        }
+        return res.status(200).json({
+          success: true,
+          hasGoshipToken: true,
+          items: districts.map((d) => ({
+            id: String(d.id),
+            name: String(d.name || ''),
+          })),
+        });
+      }
+
+      if (locType === 'wards' && parentId) {
+        let wards = cachedGoshipWards.get(parentId);
+        if (!wards) {
+          const wardRes = await callGoshipApi(`/api/v2/districts/${encodeURIComponent(parentId)}/wards`, 'GET');
+          if (!wardRes.ok || !Array.isArray(wardRes.data)) {
+            return res.status(400).json({
+              success: false,
+              error: wardRes.error || 'Không tải được danh sách Phường/Xã từ Goship.',
+            });
+          }
+          wards = wardRes.data;
+          cachedGoshipWards.set(parentId, wards);
+        }
+        return res.status(200).json({
+          success: true,
+          hasGoshipToken: true,
+          items: wards.map((w) => ({
+            id: String(w.id),
+            name: String(w.name || ''),
+          })),
+        });
+      }
+
+      return res.status(400).json({ success: false, error: 'Thiếu tham số địa giới.' });
+    }
+
     // 2B. Admin Sender Warehouse Config Status
     if (action === 'goship_config_status') {
       const authUser = await verifySupabaseUser(req);
@@ -976,6 +1393,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
           error: 'Bạn thao tác quá nhanh, vui lòng đợi ít giây.',
         });
       }
+      const forceRefresh = String(query.force || '') === '1' || String(query.force || '') === 'true';
       const rawIds = sanitizeTextServer(query.orderIds || '', 600);
       const idList = rawIds
         .split(',')
@@ -1002,17 +1420,19 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       const syncedOrders = [];
       if (Array.isArray(rows)) {
         for (const ord of rows) {
-          const synced = await syncOrderWithGoshipAndSpxServer(ord);
+          const synced = await syncOrderWithGoshipAndSpxServer(ord, { forceRefresh });
           syncedOrders.push({
             id: synced.id,
             status: synced.status !== ord.status ? synced.status : undefined,
+            waybillReset: Boolean(synced._waybillReset),
+            changed: Boolean(synced._changed),
             shippingAddress: {
-              shippingCarrier: synced.shippingAddress && synced.shippingAddress.shippingCarrier,
-              trackingCode: synced.shippingAddress && synced.shippingAddress.trackingCode,
-              shippedAt: synced.shippingAddress && synced.shippingAddress.shippedAt,
+              shippingCarrier: (synced.shippingAddress && synced.shippingAddress.shippingCarrier) || '',
+              trackingCode: (synced.shippingAddress && synced.shippingAddress.trackingCode) || '',
+              shippedAt: (synced.shippingAddress && synced.shippingAddress.shippedAt) || '',
               craftingStage: synced.shippingAddress && synced.shippingAddress.craftingStage,
-              goshipShipmentId: synced.shippingAddress && synced.shippingAddress.goshipShipmentId,
-              goshipStatusText: synced.shippingAddress && synced.shippingAddress.goshipStatusText,
+              goshipShipmentId: (synced.shippingAddress && synced.shippingAddress.goshipShipmentId) || '',
+              goshipStatusText: (synced.shippingAddress && synced.shippingAddress.goshipStatusText) || '',
               goshipHistory:
                 (synced.shippingAddress && synced.shippingAddress.goshipHistory) || [],
             },
@@ -1118,7 +1538,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
   const action = sanitizeTextServer(rawBody.action || '', 40);
 
-  // 3A. Save Admin Sender Pickup Warehouse Config
+  // 3A. Save Admin Sender Pickup Warehouse Config (with strict validation & Goship verification)
   if (action === 'save_warehouse') {
     const cleanWh = stripUnknownFieldsServer(rawBody, [
       'senderName',
@@ -1127,16 +1547,66 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       'fromDistrict',
       'fromWard',
       'fromStreet',
+      'fromCityCode',
+      'fromDistrictCode',
+      'fromWardCode',
     ]);
     const whObj = {
-      senderName: sanitizeTextServer(cleanWh.senderName || 'Tiệm Cuộn Len', 80),
+      senderName: sanitizeTextServer(cleanWh.senderName || 'Tiệm Cuộn Len', 80).trim(),
       senderPhone: sanitizeTextServer(cleanWh.senderPhone || '', 20).replace(/[^0-9+]/g, ''),
-      fromCity: sanitizeTextServer(cleanWh.fromCity || 'Hồ Chí Minh', 80),
-      fromDistrict: sanitizeTextServer(cleanWh.fromDistrict || '', 80),
-      fromWard: sanitizeTextServer(cleanWh.fromWard || '', 80),
-      fromStreet: sanitizeTextServer(cleanWh.fromStreet || '', 180),
+      fromCity: sanitizeTextServer(cleanWh.fromCity || '', 80).trim(),
+      fromDistrict: sanitizeTextServer(cleanWh.fromDistrict || '', 80).trim(),
+      fromWard: sanitizeTextServer(cleanWh.fromWard || '', 80).trim(),
+      fromStreet: sanitizeTextServer(cleanWh.fromStreet || '', 180).trim(),
+      fromCityCode: sanitizeTextServer(cleanWh.fromCityCode || '', 40).trim(),
+      fromDistrictCode: sanitizeTextServer(cleanWh.fromDistrictCode || '', 40).trim(),
+      fromWardCode: sanitizeTextServer(cleanWh.fromWardCode || '', 40).trim(),
     };
-    await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
+
+    if (!whObj.senderPhone || whObj.senderPhone.length < 9) {
+      return res.status(400).json({
+        success: false,
+        error: 'Vui lòng nhập SĐT người gửi hợp lệ (10 số).',
+      });
+    }
+    if (!whObj.fromCity || !whObj.fromDistrict || !whObj.fromWard || !whObj.fromStreet) {
+      return res.status(400).json({
+        success: false,
+        error: 'Vui lòng nhập đầy đủ Tỉnh/TP, Quận/Huyện, Phường/Xã và Số nhà/Đường lấy hàng.',
+      });
+    }
+
+    let resolvedLocation = null;
+    if (GOSHIP_ACCESS_TOKEN) {
+      const locCheck = await resolveGoshipLocationCodes(
+        whObj.fromCity,
+        whObj.fromDistrict,
+        whObj.fromWard,
+        whObj.fromCityCode && whObj.fromDistrictCode && whObj.fromWardCode
+          ? {
+              cityCode: whObj.fromCityCode,
+              districtCode: whObj.fromDistrictCode,
+              wardCode: whObj.fromWardCode,
+            }
+          : null
+      );
+      if (!locCheck.ok) {
+        return res.status(400).json({
+          success: false,
+          error: `Địa chỉ kho chưa khớp với Goship: ${locCheck.error}`,
+        });
+      }
+      whObj.fromCityCode = locCheck.cityCode;
+      whObj.fromDistrictCode = locCheck.districtCode;
+      whObj.fromWardCode = locCheck.wardCode;
+      resolvedLocation = {
+        city: locCheck.resolvedCityName || whObj.fromCity,
+        district: locCheck.resolvedDistrictName || whObj.fromDistrict,
+        ward: locCheck.resolvedWardName || whObj.fromWard,
+      };
+    }
+
+    const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/addresses?on_conflict=id`, {
       method: 'POST',
       headers: buildSupabaseServiceHeaders(authUser.accessToken, {
         'Content-Type': 'application/json',
@@ -1154,7 +1624,17 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
         isDefault: false,
       }),
     });
-    return res.status(200).json({ success: true, warehouse: whObj });
+    if (!upsertRes.ok) {
+      return res.status(500).json({
+        success: false,
+        error: `Không lưu được địa chỉ kho lên cơ sở dữ liệu (HTTP ${upsertRes.status}). Vui lòng thử lại.`,
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      warehouse: whObj,
+      resolvedLocation,
+    });
   }
 
   // 3B. Admin 1-Tap Update Handmade Crafting Progress (Reassures customer during 5–6 day wait!)
@@ -1246,7 +1726,14 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     const fromLoc = await resolveGoshipLocationCodes(
       warehouse.fromCity,
       warehouse.fromDistrict,
-      warehouse.fromWard
+      warehouse.fromWard,
+      warehouse.fromCityCode && warehouse.fromDistrictCode && warehouse.fromWardCode
+        ? {
+            cityCode: warehouse.fromCityCode,
+            districtCode: warehouse.fromDistrictCode,
+            wardCode: warehouse.fromWardCode,
+          }
+        : null
     );
     if (!fromLoc.ok) {
       return res.status(400).json({ success: false, error: `Kho gửi: ${fromLoc.error}` });
@@ -1325,6 +1812,17 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       codAmount,
       weightGrams,
       warehouse,
+      resolvedFrom: {
+        city: fromLoc.resolvedCityName || warehouse.fromCity,
+        district: fromLoc.resolvedDistrictName || warehouse.fromDistrict,
+        ward: fromLoc.resolvedWardName || warehouse.fromWard,
+        street: warehouse.fromStreet,
+      },
+      resolvedTo: {
+        city: toLoc.resolvedCityName || toAddr.city || '',
+        district: toLoc.resolvedDistrictName || toAddr.district || '',
+        ward: toLoc.resolvedWardName || toAddr.ward || '',
+      },
       rates: sortedRates,
     });
   }
@@ -1375,7 +1873,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
         success: false,
         error: `Đơn hàng này đã có mã vận đơn (${
           order.shippingAddress.trackingCode || order.shippingAddress.goshipShipmentId
-        }) rồi — Hệ thống tự khóa để không tạo trùng 2 đơn ship!`,
+        }) rồi — Nếu bạn đã huỷ vận đơn cũ trên Goship, hãy bấm "Huỷ / Gỡ vận đơn" trước rồi mới tạo lại!`,
       });
     }
 
@@ -1383,7 +1881,14 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
     const fromLoc = await resolveGoshipLocationCodes(
       warehouse.fromCity,
       warehouse.fromDistrict,
-      warehouse.fromWard
+      warehouse.fromWard,
+      warehouse.fromCityCode && warehouse.fromDistrictCode && warehouse.fromWardCode
+        ? {
+            cityCode: warehouse.fromCityCode,
+            districtCode: warehouse.fromDistrictCode,
+            wardCode: warehouse.fromWardCode,
+          }
+        : null
     );
     const toAddr = order.shippingAddress || {};
     const toLoc = await resolveGoshipLocationCodes(
@@ -1475,6 +1980,13 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
         : sanitizeTextServer(rawCreated.carrier || 'SPX', 40);
 
     const nowIso = new Date().toISOString();
+    const pickupWarehouseLabel = [
+      fromLoc.resolvedDistrictName || warehouse.fromDistrict,
+      fromLoc.resolvedCityName || warehouse.fromCity,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
     const updatedAddr = {
       ...toAddr,
       shippingCarrier: carrierDisplay,
@@ -1483,6 +1995,7 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       goshipStatusText: 'Chờ Shipper SPX qua lấy hàng',
       shippedAt: nowIso,
       craftingStage: 'handed_to_spx',
+      pickupWarehouseLabel: pickupWarehouseLabel || undefined,
       goshipHistory: [
         {
           status: 901,
@@ -1508,6 +2021,8 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       }
     );
 
+    cachedGoshipShipments = { at: 0, list: [] };
+
     await sendCustomerOrderLifecycleEmailServer(
       { ...order, status: 'Đang giao', shippingAddress: updatedAddr },
       'shipped'
@@ -1520,6 +2035,117 @@ module.exports = withGlobalErrorHandler('/api/shipping-tracker', async function 
       trackingCode: trackingNumber,
       shippingCarrier: carrierDisplay,
       shippingAddress: updatedAddr,
+    });
+  }
+
+  // 3E. Admin Cancel / Unlink Goship Shipment & Unlock Order for Re-Creation
+  if (action === 'goship_cancel_shipment') {
+    const cleanCancel = stripUnknownFieldsServer(rawBody, ['orderId', 'forceUnlink']);
+    const orderId = sanitizeTextServer(cleanCancel.orderId || '', 80);
+    const forceUnlink = Boolean(cleanCancel.forceUnlink);
+    if (!orderId) {
+      return res.status(400).json({ success: false, error: 'Thiếu mã đơn hàng.' });
+    }
+
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=*&limit=1`,
+      {
+        headers: buildSupabaseServiceHeaders(authUser.accessToken),
+      }
+    );
+    const rows = r.ok ? await r.json() : [];
+    const order = Array.isArray(rows) ? rows[0] : null;
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Không tìm thấy đơn hàng.' });
+    }
+
+    const prevAddr = order.shippingAddress || {};
+    const prevTracking = String(prevAddr.trackingCode || '').trim();
+    const prevGoshipId = String(prevAddr.goshipShipmentId || '').trim();
+    const goshipTargetId =
+      prevGoshipId ||
+      (prevTracking.toUpperCase().startsWith('GS') ? prevTracking : '');
+
+    let goshipDeleted = false;
+    let goshipAlreadyCancelled = false;
+
+    if (GOSHIP_ACCESS_TOKEN && goshipTargetId && !forceUnlink) {
+      const delRes = await callGoshipApi(
+        `/api/v2/shipments/${encodeURIComponent(goshipTargetId)}`,
+        'DELETE'
+      );
+      if (delRes.ok) {
+        goshipDeleted = true;
+      } else {
+        const errNorm = String(delRes.error || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/đ/g, 'd');
+        const looksAlreadyGone =
+          delRes.status === 404 ||
+          /\b(huy|cancel|canceled|cancelled|not found|khong tim thay|khong ton tai|da xoa)\b/.test(
+            errNorm
+          );
+        if (looksAlreadyGone) {
+          goshipAlreadyCancelled = true;
+        } else {
+          // Double-check live status on Goship in case it was already cancelled on shop.goship.io
+          const liveCheck = await fetchGoshipShipmentByCodeOrIdServer(goshipTargetId);
+          if (
+            (liveCheck.found && isGoshipShipmentCancelled(liveCheck.shipment)) ||
+            liveCheck.notFound
+          ) {
+            goshipAlreadyCancelled = true;
+          } else {
+            return res.status(400).json({
+              success: false,
+              canForceUnlink: true,
+              error: `Goship báo chưa huỷ được tự động (${delRes.error || 'Lỗi không xác định'}). Nếu bạn đã huỷ trực tiếp trên shop.goship.io, hãy bấm "Gỡ mã khỏi web" để mở khoá tạo đơn mới.`,
+            });
+          }
+        }
+      }
+    }
+
+    const updatedAddr = buildUnlinkedShippingAddress(prevAddr, [
+      prevGoshipId,
+      prevTracking,
+    ]);
+    const nextStatus =
+      order.status === 'Đang giao' ? 'Đang chuẩn bị hàng' : order.status;
+
+    const patchRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}`,
+      {
+        method: 'PATCH',
+        headers: buildSupabaseServiceHeaders(authUser.accessToken, {
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        }),
+        body: JSON.stringify({
+          status: nextStatus,
+          shippingAddress: updatedAddr,
+        }),
+      }
+    );
+
+    if (!patchRes.ok) {
+      return res.status(500).json({
+        success: false,
+        error: `Không cập nhật được trạng thái gỡ vận đơn lên máy chủ (HTTP ${patchRes.status}).`,
+      });
+    }
+
+    cachedGoshipShipments = { at: 0, list: [] };
+
+    return res.status(200).json({
+      success: true,
+      orderId: order.id,
+      status: nextStatus,
+      shippingAddress: updatedAddr,
+      goshipDeleted,
+      goshipAlreadyCancelled,
     });
   }
 

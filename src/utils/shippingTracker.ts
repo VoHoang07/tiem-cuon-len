@@ -548,15 +548,18 @@ export async function fetchLiveCarrierJourney(
 export interface SyncedOrderGoshipPayload {
   id: string;
   status?: Order['status'];
+  waybillReset?: boolean;
+  changed?: boolean;
   shippingAddress: Partial<Order['shippingAddress']>;
 }
 
 /**
  * Automatically polls `/api/shipping-tracker?action=sync_orders` so logged-in customers and Admin
- * automatically receive SPX tracking codes & live station checkpoints from Goship without manual input!
+ * automatically receive SPX tracking codes & live station checkpoints (or detect cancelled waybills) from Goship!
  */
 export async function syncActiveOrdersWithGoship(
-  orderIds: string[]
+  orderIds: string[],
+  forceRefresh = false
 ): Promise<{
   ok: boolean;
   hasGoshipToken: boolean;
@@ -572,7 +575,7 @@ export async function syncActiveOrdersWithGoship(
     const res = await fetch(
       `/api/shipping-tracker?action=sync_orders&orderIds=${encodeURIComponent(
         cleanIds.join(',')
-      )}&_t=${Date.now()}`,
+      )}${forceRefresh ? '&force=1' : ''}&_t=${Date.now()}`,
       {
         method: 'GET',
         cache: 'no-store',
@@ -593,6 +596,54 @@ export async function syncActiveOrdersWithGoship(
   }
 }
 
+export interface PublicWarehouseOrigin {
+  senderName: string;
+  fromCity: string;
+  fromDistrict: string;
+  fromWard: string;
+}
+
+let cachedPublicWarehouseOrigin: PublicWarehouseOrigin | null = null;
+let cachedPublicWarehouseAt = 0;
+
+export function clearCachedPublicWarehouseOrigin() {
+  cachedPublicWarehouseOrigin = null;
+  cachedPublicWarehouseAt = 0;
+}
+
+export async function fetchPublicWarehouseOrigin(
+  force = false
+): Promise<PublicWarehouseOrigin | null> {
+  if (typeof window === 'undefined') return cachedPublicWarehouseOrigin;
+  if (
+    !force &&
+    cachedPublicWarehouseOrigin &&
+    Date.now() - cachedPublicWarehouseAt < 5 * 60 * 1000
+  ) {
+    return cachedPublicWarehouseOrigin;
+  }
+  try {
+    const res = await fetch(
+      `/api/shipping-tracker?action=public_warehouse_origin&_t=${Date.now()}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      }
+    );
+    if (!res.ok) return cachedPublicWarehouseOrigin;
+    const json = await res.json();
+    if (json?.success && json.origin) {
+      cachedPublicWarehouseOrigin = json.origin as PublicWarehouseOrigin;
+      cachedPublicWarehouseAt = Date.now();
+      return cachedPublicWarehouseOrigin;
+    }
+  } catch {
+    // ignore
+  }
+  return cachedPublicWarehouseOrigin;
+}
+
 async function getAdminBearerHeader(): Promise<Record<string, string>> {
   return ensureClientSupabaseAuthHeaders();
 }
@@ -604,6 +655,14 @@ export interface AdminGoshipWarehouse {
   fromDistrict: string;
   fromWard: string;
   fromStreet: string;
+  fromCityCode?: string;
+  fromDistrictCode?: string;
+  fromWardCode?: string;
+}
+
+export interface GoshipLocationItem {
+  id: string;
+  name: string;
 }
 
 export interface GoshipRateOption {
@@ -614,6 +673,36 @@ export interface GoshipRateOption {
   expected: string;
   totalFee: number;
   isSpx: boolean;
+}
+
+export async function fetchAdminGoshipLocations(
+  type: 'cities' | 'districts' | 'wards',
+  parentId?: string
+): Promise<{ ok: boolean; items: GoshipLocationItem[]; error?: string }> {
+  if (typeof window === 'undefined') return { ok: false, items: [] };
+  try {
+    const headers = await getAdminBearerHeader();
+    const qs = new URLSearchParams({
+      action: 'goship_locations',
+      type,
+      ...(parentId ? { parentId } : {}),
+    });
+    const res = await fetch(`/api/shipping-tracker?${qs.toString()}`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers,
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      return { ok: false, items: [], error: json?.error };
+    }
+    return {
+      ok: true,
+      items: Array.isArray(json.items) ? (json.items as GoshipLocationItem[]) : [],
+    };
+  } catch {
+    return { ok: false, items: [], error: 'Không tải được danh sách địa giới Goship.' };
+  }
 }
 
 export async function fetchAdminGoshipConfigStatus(): Promise<{
@@ -650,7 +739,12 @@ export async function fetchAdminGoshipConfigStatus(): Promise<{
 
 export async function saveAdminGoshipWarehouse(
   wh: AdminGoshipWarehouse
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{
+  ok: boolean;
+  warehouse?: AdminGoshipWarehouse;
+  resolvedLocation?: { city: string; district: string; ward: string } | null;
+  error?: string;
+}> {
   try {
     const headers = await getAdminBearerHeader();
     const res = await fetch('/api/shipping-tracker', {
@@ -665,7 +759,12 @@ export async function saveAdminGoshipWarehouse(
     if (!res.ok || !json?.success) {
       return { ok: false, error: json?.error || 'Không thể lưu kho lấy hàng.' };
     }
-    return { ok: true };
+    clearCachedPublicWarehouseOrigin();
+    return {
+      ok: true,
+      warehouse: json.warehouse as AdminGoshipWarehouse | undefined,
+      resolvedLocation: json.resolvedLocation || null,
+    };
   } catch {
     return { ok: false, error: 'Lỗi mạng khi lưu kho lấy hàng.' };
   }
@@ -704,6 +803,9 @@ export async function quoteAdminGoshipRates(
 ): Promise<{
   ok: boolean;
   codAmount?: number;
+  warehouse?: AdminGoshipWarehouse;
+  resolvedFrom?: { city: string; district: string; ward: string; street?: string };
+  resolvedTo?: { city: string; district: string; ward: string };
   rates?: GoshipRateOption[];
   error?: string;
 }> {
@@ -725,6 +827,9 @@ export async function quoteAdminGoshipRates(
     return {
       ok: true,
       codAmount: Number(json.codAmount || 0),
+      warehouse: json.warehouse as AdminGoshipWarehouse | undefined,
+      resolvedFrom: json.resolvedFrom,
+      resolvedTo: json.resolvedTo,
       rates: Array.isArray(json.rates) ? json.rates : [],
     };
   } catch {
@@ -767,5 +872,46 @@ export async function createAdminGoshipSpxShipment(params: {
     };
   } catch {
     return { ok: false, error: 'Lỗi kết nối khi tạo vận đơn Goship.' };
+  }
+}
+
+export async function cancelAdminGoshipShipment(params: {
+  orderId: string;
+  forceUnlink?: boolean;
+}): Promise<{
+  ok: boolean;
+  status?: Order['status'];
+  goshipDeleted?: boolean;
+  goshipAlreadyCancelled?: boolean;
+  canForceUnlink?: boolean;
+  error?: string;
+}> {
+  try {
+    const headers = await getAdminBearerHeader();
+    const res = await fetch('/api/shipping-tracker', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        action: 'goship_cancel_shipment',
+        orderId: params.orderId,
+        forceUnlink: Boolean(params.forceUnlink),
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      return {
+        ok: false,
+        canForceUnlink: Boolean(json?.canForceUnlink),
+        error: json?.error || 'Không thể huỷ / gỡ vận đơn lúc này.',
+      };
+    }
+    return {
+      ok: true,
+      status: json.status as Order['status'] | undefined,
+      goshipDeleted: Boolean(json.goshipDeleted),
+      goshipAlreadyCancelled: Boolean(json.goshipAlreadyCancelled),
+    };
+  } catch {
+    return { ok: false, error: 'Lỗi kết nối khi huỷ / gỡ vận đơn Goship.' };
   }
 }
