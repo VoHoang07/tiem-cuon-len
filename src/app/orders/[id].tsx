@@ -54,6 +54,7 @@ import {
     CheckCircle2,
     ChevronDown,
     ChevronLeft,
+    ChevronUp,
     Clock,
     Copy,
     ExternalLink,
@@ -67,6 +68,7 @@ import {
     RefreshCw,
     Settings,
     Share2,
+    ShieldCheck,
     Star,
     Trash2,
     Truck,
@@ -252,13 +254,14 @@ export default function OrderDetailScreen() {
     'https://www.tiemcuonlen.shop/api/shipping-tracker?webhook=goship'
   );
   const [showWarehouseEditor, setShowWarehouseEditor] = useState(false);
+  const [showManualTools, setShowManualTools] = useState(false);
   const [warehouseDraft, setWarehouseDraft] = useState<AdminGoshipWarehouse>({
     senderName: 'Tiệm Cuộn Len',
     senderPhone: '0775111750',
     fromCity: 'Hồ Chí Minh',
-    fromDistrict: 'Thành phố Thủ Đức',
-    fromWard: 'Phường Long Thạnh Mỹ',
-    fromStreet: 'Vinhomes Grand Park',
+    fromDistrict: 'Quận 8',
+    fromWard: 'Phường 6',
+    fromStreet: '2117A/5B Phạm Thế Hiển',
     fromCityCode: '',
     fromDistrictCode: '',
     fromWardCode: '',
@@ -441,8 +444,8 @@ export default function OrderDetailScreen() {
               } else if (forceRefresh) {
                 setGoshipCreatedBanner(
                   nextTrack
-                    ? `🔄 Đã đồng bộ Goship: Vận đơn ${nextTrack} vẫn đang ghi nhận hoạt động trên Goship. Nếu bạn đã huỷ vận đơn này trên web shop.goship.io, hãy bấm nút "🗑️ Huỷ / Gỡ vận đơn" bên cạnh để mở khoá tạo lại.`
-                    : '🔄 Đã đồng bộ lại với Goship.'
+                    ? `Goship vẫn ghi nhận mã ${nextTrack} đang hoạt động. Nếu bạn đã huỷ trực tiếp trên Goship, bấm "Huỷ / Gỡ mã" để mở khoá.`
+                    : 'Đã đồng bộ lại với Goship.'
                 );
               }
             }
@@ -1421,18 +1424,194 @@ export default function OrderDetailScreen() {
             )}
           </View>
 
-          {/* 2. Role-Adaptive Shipping & Waybill Section (Hidden when viewing the dedicated "Đánh giá" tab) */}
+          {/* 2. Unified Ordered Items & Payment Summary (Immediately scannable below Timeline!) */}
+          {(order.status !== 'Hoàn thành' ||
+            order.isMaskedGuestView ||
+            activeCompletedTab === 'detail') && (
+          <View style={[styles.section, isMobile && styles.sectionMobile]}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginBottom: 8,
+              }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: '800',
+                  color: '#3D2B1F',
+                }}>
+                Sản phẩm trong đơn ({order.items.reduce((s, i) => s + i.quantity, 0)} món)
+              </Text>
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: '600',
+                  color: '#8A7363',
+                }}>
+                {new Date(order.createdAt).toLocaleDateString('vi-VN', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </Text>
+            </View>
+
+            {order.items.map((item) => {
+              const baseId = String(
+                item.product.baseProductId || item.product.id || ''
+              ).split('__')[0];
+              const liveCatalogProd = products.find((p) => p.id === baseId);
+              const resolvedThumb =
+                item.product.image || liveCatalogProd?.image || null;
+
+              return (
+                <View key={item.product.id} style={styles.itemBlockWrap}>
+                  <View style={styles.itemRow}>
+                    <TouchableOpacity
+                      style={styles.itemIcon}
+                      onPress={() => router.push(`/product/${baseId}`)}>
+                      {resolvedThumb ? (
+                        <Image
+                          source={
+                            typeof resolvedThumb === 'string'
+                              ? { uri: resolvedThumb }
+                              : (resolvedThumb as any)
+                          }
+                          style={styles.itemProductImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Package size={20} color={COLORS.primary} />
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName} numberOfLines={2}>
+                        {item.product.name}
+                      </Text>
+                      <Text style={styles.itemMeta}>
+                        SL: {item.quantity} × {formatVND(item.price)}
+                      </Text>
+                      {Boolean(item.product.giftCardNote) && (
+                        <View
+                          style={{
+                            marginTop: 5,
+                            backgroundColor: '#FAF5EE',
+                            borderWidth: 1,
+                            borderColor: '#EADFD2',
+                            borderRadius: 8,
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                          }}>
+                          <Text
+                            style={{
+                              fontSize: 11.5,
+                              color: '#5C4033',
+                              fontWeight: '600',
+                            }}>
+                            Lời nhắn thiệp: &ldquo;{item.product.giftCardNote}&rdquo;
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Text style={styles.itemTotal}>
+                        {formatVND(item.price * item.quantity)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+
+            {order.shippingAddress?.bonusGiftProductName ? (
+              <View
+                style={{
+                  marginTop: 8,
+                  backgroundColor: '#FFF5F2',
+                  borderWidth: 1,
+                  borderColor: '#FFD6CC',
+                  borderRadius: 10,
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}>
+                <Text
+                  style={{
+                    flex: 1,
+                    fontSize: 12,
+                    fontWeight: '700',
+                    color: '#C2410C',
+                  }}>
+                  Quà tặng kèm ({order.shippingAddress.promoCode || 'Ưu đãi'}): +01 {order.shippingAddress.bonusGiftProductName}
+                </Text>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#15803D' }}>
+                  0₫
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={[styles.totalDivider, { marginTop: 12 }]} />
+
+            <View style={{ gap: 5 }}>
+              <View style={styles.metaLineRow}>
+                <Text style={styles.sectionTitle}>Thanh toán</Text>
+                <Text style={styles.sectionValue}>{order.paymentMethod}</Text>
+              </View>
+              {order.shippingAddress?.promoCode &&
+                Number(order.shippingAddress?.discountAmount) > 0 && (
+                  <View style={styles.metaLineRow}>
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        { color: '#15803D', fontWeight: '700' },
+                      ]}>
+                      Mã giảm giá ({order.shippingAddress.promoCode})
+                    </Text>
+                    <Text
+                      style={[
+                        styles.sectionValue,
+                        { color: '#15803D', fontWeight: '800' },
+                      ]}>
+                      -{formatVND(Number(order.shippingAddress.discountAmount))}
+                    </Text>
+                  </View>
+                )}
+              {order.shippingAddress?.shippingFee !== undefined && (
+                <View style={styles.metaLineRow}>
+                  <Text style={styles.sectionTitle}>Phí vận chuyển</Text>
+                  <Text style={styles.sectionValue}>
+                    {order.shippingAddress.shippingFee === 0
+                      ? 'Miễn phí (0₫)'
+                      : formatVND(order.shippingAddress.shippingFee)}
+                  </Text>
+                </View>
+              )}
+              <View style={[styles.totalRow, { marginTop: 4 }]}>
+                <Text style={styles.totalLabel}>Tổng thanh toán</Text>
+                <Text style={styles.totalValue}>{formatVND(order.total)}</Text>
+              </View>
+            </View>
+          </View>
+          )}
+
+          {/* 3. Role-Adaptive Shipping & Waybill Section (Hidden when viewing the dedicated "Đánh giá" tab) */}
           {(order.status !== 'Hoàn thành' ||
             order.isMaskedGuestView ||
             activeCompletedTab === 'detail') && (
           <View style={[styles.section, isMobile && styles.sectionMobile]}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionHeaderLeft}>
-                <Truck size={18} color="#3D2B1F" />
+                <Truck size={17} color="#3D2B1F" />
                 <Text style={styles.sectionHeaderMainTitle}>
-                  {isAdmin
-                    ? 'Vận đơn & Công cụ lên đơn Ship'
-                    : 'Thông tin vận chuyển & Theo dõi đơn'}
+                  {isAdmin ? 'Giao hàng & Vận đơn' : 'Thông tin vận chuyển'}
                 </Text>
               </View>
               {order.shippingAddress?.shippingMethod ? (
@@ -1444,67 +1623,141 @@ export default function OrderDetailScreen() {
               ) : null}
             </View>
 
-            {/* Recipient Address + COD Summary */}
-            <View style={styles.recipientBox}>
-              {isAdmin && (
+            {/* Clean Compact Recipient Info + COD Badge */}
+            <View
+              style={{
+                backgroundColor: '#FAF7F2',
+                borderWidth: 1,
+                borderColor: '#ECE3D6',
+                borderRadius: 12,
+                padding: 12,
+                gap: 8,
+              }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                }}>
                 <View
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     gap: 6,
-                    backgroundColor:
-                      order.shippingAddress?.isVerifiedAccount ||
-                      order.shippingAddress?.email
-                        ? '#ECFDF5'
-                        : '#FFFBEB',
-                    borderWidth: 1,
-                    borderColor:
-                      order.shippingAddress?.isVerifiedAccount ||
-                      order.shippingAddress?.email
-                        ? '#6EE7B7'
-                        : '#FCD34D',
-                    borderRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    marginBottom: 4,
+                    flex: 1,
+                    minWidth: 150,
                   }}>
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      fontWeight: '800',
-                      color:
-                        order.shippingAddress?.isVerifiedAccount ||
-                        order.shippingAddress?.email
-                          ? '#065F46'
-                          : '#92400E',
-                    }}>
-                    {order.shippingAddress?.isVerifiedAccount ||
-                    order.shippingAddress?.email
-                      ? `🛡️ Xác thực chống Scam: ✅ Acc Thật Đã Xác Thực (${
-                          order.shippingAddress?.email ||
-                          order.shippingAddress?.customerAuthProvider ||
-                          'Google / Gmail'
-                        })`
-                      : '⚠️ Xác thực chống Scam: Khách vãng lai chưa liên kết Google/FB (Nên gọi xác nhận SĐT trước khi gửi)'}
+                  <UserIcon size={14} color="#6E5239" />
+                  <Text style={styles.recipientName}>
+                    {order.shippingAddress?.fullName || 'Khách hàng'}
                   </Text>
+                  {isAdmin && (
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        backgroundColor:
+                          order.shippingAddress?.isVerifiedAccount ||
+                          order.shippingAddress?.email
+                            ? '#ECFDF5'
+                            : '#FFFBEB',
+                        borderWidth: 1,
+                        borderColor:
+                          order.shippingAddress?.isVerifiedAccount ||
+                          order.shippingAddress?.email
+                            ? '#A7F3D0'
+                            : '#FDE68A',
+                        borderRadius: 999,
+                        paddingHorizontal: 7,
+                        paddingVertical: 2,
+                      }}>
+                      <ShieldCheck
+                        size={11}
+                        color={
+                          order.shippingAddress?.isVerifiedAccount ||
+                          order.shippingAddress?.email
+                            ? '#15803D'
+                            : '#B45309'
+                        }
+                      />
+                      <Text
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: '700',
+                          color:
+                            order.shippingAddress?.isVerifiedAccount ||
+                            order.shippingAddress?.email
+                              ? '#166534'
+                              : '#92400E',
+                        }}>
+                        {order.shippingAddress?.isVerifiedAccount ||
+                        order.shippingAddress?.email
+                          ? 'Đã xác thực'
+                          : 'Khách vãng lai'}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              )}
-              <View style={styles.recipientRow}>
-                <UserIcon size={14} color="#6E5239" />
-                <Text style={styles.recipientName}>
-                  {order.shippingAddress?.fullName || 'Khách hàng'}
-                </Text>
+
+                {isAdmin && (
+                  <View
+                    style={{
+                      backgroundColor:
+                        order.status === 'pending_payment'
+                          ? '#FEF2F2'
+                          : codAmount > 0
+                            ? '#FFFFFF'
+                            : '#ECFDF5',
+                      borderWidth: 1,
+                      borderColor:
+                        order.status === 'pending_payment'
+                          ? '#FCA5A5'
+                          : codAmount > 0
+                            ? '#DFD3C3'
+                            : '#A7F3D0',
+                      borderRadius: 8,
+                      paddingHorizontal: 9,
+                      paddingVertical: 4,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: '800',
+                        color:
+                          order.status === 'pending_payment'
+                            ? '#B91C1C'
+                            : codAmount > 0
+                              ? '#3D2B1F'
+                              : '#166534',
+                      }}>
+                      {order.status === 'pending_payment'
+                        ? `Chưa chuyển khoản (${formatVND(order.total)})`
+                        : codAmount > 0
+                          ? `Thu COD: ${formatVND(codAmount)}`
+                          : 'Đã chuyển khoản (COD 0₫)'}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {order.shippingAddress?.phone ? (
                 <View style={styles.recipientRowBetween}>
                   <View style={styles.recipientRow}>
-                    <Phone size={14} color="#6E5239" />
+                    <Phone size={13.5} color="#7A6555" />
                     <Text style={styles.recipientSub}>
                       {order.shippingAddress.phone}
                     </Text>
+                    {isAdmin && order.shippingAddress?.email ? (
+                      <Text
+                        style={{ fontSize: 11.5, color: '#8A7363' }}
+                        numberOfLines={1}>
+                        • {order.shippingAddress.email}
+                      </Text>
+                    ) : null}
                   </View>
                   {isAdmin && (
                     <TouchableOpacity
@@ -1513,12 +1766,12 @@ export default function OrderDetailScreen() {
                         handleCopy(order.shippingAddress.phone, 'phone')
                       }>
                       {copiedKey === 'phone' ? (
-                        <Check size={12} color="#2E7D32" />
+                        <Check size={12} color="#15803D" />
                       ) : (
                         <Copy size={12} color="#5C4332" />
                       )}
                       <Text style={styles.miniCopyText}>
-                        {copiedKey === 'phone' ? 'Đã chép SĐT' : 'Chép SĐT'}
+                        {copiedKey === 'phone' ? 'Đã chép' : 'Chép SĐT'}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -1526,8 +1779,8 @@ export default function OrderDetailScreen() {
               ) : null}
 
               <View style={styles.recipientRowBetween}>
-                <View style={[styles.recipientRow, { flex: 1 }]}>
-                  <MapPin size={14} color="#6E5239" style={{ marginTop: 2 }} />
+                <View style={[styles.recipientRow, { flex: 1, minWidth: 0 }]}>
+                  <MapPin size={13.5} color="#7A6555" style={{ marginTop: 2 }} />
                   <Text style={[styles.recipientSub, { flex: 1 }]}>
                     {fullAddress}
                   </Text>
@@ -1537,52 +1790,16 @@ export default function OrderDetailScreen() {
                     style={styles.miniCopyBtn}
                     onPress={() => handleCopy(fullAddress, 'addr')}>
                     {copiedKey === 'addr' ? (
-                      <Check size={12} color="#2E7D32" />
+                      <Check size={12} color="#15803D" />
                     ) : (
                       <Copy size={12} color="#5C4332" />
                     )}
                     <Text style={styles.miniCopyText}>
-                      {copiedKey === 'addr' ? 'Đã chép ĐC' : 'Chép ĐC'}
+                      {copiedKey === 'addr' ? 'Đã chép' : 'Chép ĐC'}
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
-
-              {/* COD Collection Alert Box (Admin only) */}
-              {isAdmin && (
-                <View
-                  style={[
-                    styles.codAlertBox,
-                    codAmount === 0 &&
-                      order.status !== 'pending_payment' &&
-                      styles.codAlertBoxPaid,
-                    order.status === 'pending_payment' && {
-                      backgroundColor: '#FEF2F2',
-                      borderColor: '#EF4444',
-                      borderWidth: 1.5,
-                    },
-                  ]}>
-                  <Text
-                    style={[
-                      styles.codAlertTitle,
-                      codAmount === 0 &&
-                        order.status !== 'pending_payment' &&
-                        styles.codAlertTitlePaid,
-                      order.status === 'pending_payment' && {
-                        color: '#B91C1C',
-                        fontWeight: '900',
-                      },
-                    ]}>
-                    {order.status === 'pending_payment'
-                      ? `⛔ CẢNH BÁO: KHÁCH CHƯA CHUYỂN KHOẢN (${formatVND(
-                          order.total
-                        )}) — KHÔNG LÊN ĐƠN SHIP THU HỘ 0₫!`
-                      : codAmount > 0
-                        ? `💰 Số tiền Shipper thu khi giao (COD): ${formatVND(codAmount)}`
-                        : '✅ Khách ĐÃ CHUYỂN KHOẢN thành công: Thu hộ COD = 0₫ (Không thu tiền khi giao)'}
-                  </Text>
-                </View>
-              )}
             </View>
 
             {/* CLIENT VIEW: Live SPX Checkpoints OR Reassuring 5–6 Day Handmade Crafting Progress */}
@@ -2013,85 +2230,37 @@ export default function OrderDetailScreen() {
               </View>
             )}
 
-            {/* ADMIN VIEW: 1-Click Copy Slip + Carrier Portal Links + Waybill Input */}
+            {/* ADMIN VIEW: Clean Route Map / Crafting + Unified Goship Card + Collapsible Manual Tools */}
             {isAdmin && (
-              <View style={styles.adminShippingToolkit}>
-                {order.shippingAddress?.bonusGiftProductName && (
-                  <View
-                    style={{
-                      backgroundColor: '#FFF1EE',
-                      borderWidth: 1,
-                      borderColor: '#FFCCC2',
-                      borderRadius: 12,
-                      paddingHorizontal: 12,
-                      paddingVertical: 10,
-                      gap: 3,
-                    }}>
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '800',
-                        color: '#EE4D2D',
-                      }}>
-                      🎁 LƯU Ý ĐÓNG GÓI QUÀ TẶNG KÈM ({order.shippingAddress.promoCode}):
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12.5,
-                        fontWeight: '700',
-                        color: '#0F172A',
-                      }}>
-                      👉 Bỏ thêm vào hộp: +01 {order.shippingAddress.bonusGiftProductName} (Quà 35k • Miễn phí 0₫)
-                    </Text>
-                  </View>
-                )}
-
-                {/* Step A0: Admin 1-Tap Handmade Crafting Progress Updater (Only shown BEFORE shipping!) */}
+              <View style={{ marginTop: 12, gap: 12 }}>
+                {/* Route Map (when shipping) OR Compact Crafting Stage Updater (before shipping) */}
                 {isShippingStage ? (
-                  <View style={{ gap: 8 }}>
-                    <ShopeeDeliveryRouteMap
-                      order={order}
-                      checkpoints={combinedJourneyEvents}
-                      loadingCheckpoints={loadingCheckpoints}
-                      onRefresh={() => void refreshLiveSpxJourney(true)}
-                      warehouseOrigin={publicWarehouseOrigin}
-                    />
-                    <View
-                      style={{
-                        backgroundColor: '#ECFDF5',
-                        borderWidth: 1,
-                        borderColor: '#6EE7B7',
-                        borderRadius: 11,
-                        paddingHorizontal: 12,
-                        paddingVertical: 9,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '800',
-                          color: '#065F46',
-                        }}>
-                        ✅ Giai đoạn 1 (Xưởng đan thủ công): Đã hoàn tất 100% — Đơn hàng đang ở Giai đoạn 2 (Giao hàng SPX Express).
-                      </Text>
-                    </View>
-                  </View>
+                  <ShopeeDeliveryRouteMap
+                    order={order}
+                    checkpoints={combinedJourneyEvents}
+                    loadingCheckpoints={loadingCheckpoints}
+                    onRefresh={() => void refreshLiveSpxJourney(true)}
+                    onCopyTracking={(code) => handleCopy(code, 'track_code')}
+                    copiedTracking={copiedKey === 'track_code'}
+                    warehouseOrigin={publicWarehouseOrigin}
+                  />
                 ) : (
                   <View
                     style={{
-                      backgroundColor: '#FFFDF7',
-                      borderWidth: 1.5,
-                      borderColor: '#FDE68A',
+                      backgroundColor: '#FAF7F2',
+                      borderWidth: 1,
+                      borderColor: '#ECE3D6',
                       borderRadius: 12,
-                      padding: 11,
-                      gap: 8,
+                      padding: 12,
+                      gap: 9,
                     }}>
                     <Text
                       style={{
                         fontSize: 12.5,
-                        fontWeight: '900',
-                        color: '#92400E',
+                        fontWeight: '800',
+                        color: '#3D2B1F',
                       }}>
-                      🧶 Giai đoạn 1 (Trong 5–6 ngày đang đan — CHƯA gọi Shipper): Cập nhật tiến độ cho khách yên tâm
+                      Tiến độ đan thủ công (hiển thị cho khách)
                     </Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                       {HANDMADE_CRAFTING_STAGES.map((st) => {
@@ -2103,9 +2272,9 @@ export default function OrderDetailScreen() {
                             onPress={() => void handleAdminUpdateCrafting(st.key)}
                             activeOpacity={0.8}
                             style={{
-                              backgroundColor: isCurr ? '#B45309' : '#FFFFFF',
+                              backgroundColor: isCurr ? '#3D2B1F' : '#FFFFFF',
                               borderWidth: 1,
-                              borderColor: isCurr ? '#B45309' : '#FCD34D',
+                              borderColor: isCurr ? '#3D2B1F' : '#DFD3C3',
                               borderRadius: 999,
                               paddingHorizontal: 10,
                               paddingVertical: 5,
@@ -2113,8 +2282,8 @@ export default function OrderDetailScreen() {
                             <Text
                               style={{
                                 fontSize: 11.5,
-                                fontWeight: '800',
-                                color: isCurr ? '#FFFFFF' : '#78350F',
+                                fontWeight: '700',
+                                color: isCurr ? '#FFFDF9' : '#5C4332',
                               }}>
                               {savingCraftStage === st.key
                                 ? 'Đang lưu...'
@@ -2140,7 +2309,7 @@ export default function OrderDetailScreen() {
                           fontSize: 16,
                           color: '#3D2B1F',
                         }}
-                        placeholder="Ghi chú tiến độ ngắn cho khách (VD: Đã móc xong 2 bé Twinkle, chiều mai đóng hộp)..."
+                        placeholder="Ghi chú ngắn cho khách (tuỳ chọn)..."
                         placeholderTextColor={COLORS.lightText}
                         value={craftingNoteInput}
                         onChangeText={setCraftingNoteInput}
@@ -2152,7 +2321,7 @@ export default function OrderDetailScreen() {
                           )
                         }
                         style={{
-                          backgroundColor: '#78350F',
+                          backgroundColor: '#3D2B1F',
                           paddingHorizontal: 12,
                           paddingVertical: 8,
                           borderRadius: 9,
@@ -2160,11 +2329,11 @@ export default function OrderDetailScreen() {
                         }}>
                         <Text
                           style={{
-                            fontSize: 11.5,
-                            fontWeight: '800',
-                            color: '#FFFFFF',
+                            fontSize: 12,
+                            fontWeight: '700',
+                            color: '#FFFDF9',
                           }}>
-                          Lưu ghi chú
+                          Lưu
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -2172,97 +2341,49 @@ export default function OrderDetailScreen() {
                       <Text
                         style={{
                           fontSize: 11.5,
-                          fontWeight: '800',
+                          fontWeight: '700',
                           color: '#15803D',
                         }}>
-                        ✅ Đã cập nhật tiến độ xưởng đan lên màn hình theo dõi của khách!
+                        Đã cập nhật tiến độ cho khách.
                       </Text>
                     )}
                   </View>
                 )}
 
-                {/* Step A1: Manual 2-Step Goship SPX Shipment Creator (ONLY fires when Admin clicks after finishing crocheting!) */}
+                {/* Unified Calm Goship SPX Panel (Warm Boutique Neutral, Zero Nested Clutter) */}
                 <View
                   style={{
-                    backgroundColor: '#EFF6FF',
-                    borderWidth: 1.5,
-                    borderColor: '#93C5FD',
+                    backgroundColor: '#FAF7F2',
+                    borderWidth: 1,
+                    borderColor: '#E6DDD0',
                     borderRadius: 12,
                     padding: 12,
-                    gap: 9,
+                    gap: 10,
                   }}>
                   <View
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: 6,
-                    }}>
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '900',
-                        color: '#1E3A8A',
-                        flex: 1,
-                      }}>
-                      🚀 Giai đoạn 2 (CHỈ BẤM KHI ĐÃ ĐAN & ĐÓNG HỘP XONG): Lên đơn SPX qua Goship
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => setShowWarehouseEditor((v) => !v)}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 4,
-                        backgroundColor: '#DBEAFE',
-                        paddingHorizontal: 9,
-                        paddingVertical: 4,
-                        borderRadius: 999,
-                      }}>
-                      <Settings size={12} color="#1D4ED8" />
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          fontWeight: '800',
-                          color: '#1D4ED8',
-                        }}>
-                        Kho lấy hàng & Webhook
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Always-visible Current Shop Pickup Address Summary Bar */}
-                  <View
-                    style={{
-                      backgroundColor: '#FFFFFF',
-                      borderWidth: 1,
-                      borderColor: '#BFDBFE',
-                      borderRadius: 10,
-                      paddingHorizontal: 10,
-                      paddingVertical: 8,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
                       gap: 8,
                     }}>
-                    <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                       <Text
                         style={{
-                          fontSize: 11,
+                          fontSize: 13,
                           fontWeight: '800',
-                          color: '#1E40AF',
+                          color: '#3D2B1F',
                         }}>
-                        📍 Vị trí shop lấy hàng hiện tại ({warehouseDraft.senderName} • {warehouseDraft.senderPhone}):
+                        Vận đơn SPX (Goship)
                       </Text>
                       <Text
                         style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: '#0F172A',
-                          lineHeight: 17,
-                        }}>
-                        {[
+                          fontSize: 11.5,
+                          color: '#6E5A4B',
+                          lineHeight: 16,
+                        }}
+                        numberOfLines={2}>
+                        Kho: {[
                           warehouseDraft.fromStreet,
                           warehouseDraft.fromWard,
                           warehouseDraft.fromDistrict,
@@ -2279,34 +2400,60 @@ export default function OrderDetailScreen() {
                       }}
                       activeOpacity={0.8}
                       style={{
-                        backgroundColor: showWarehouseEditor ? '#1E3A8A' : '#EFF6FF',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        backgroundColor: showWarehouseEditor ? '#3D2B1F' : '#FFFFFF',
                         borderWidth: 1,
-                        borderColor: '#93C5FD',
+                        borderColor: showWarehouseEditor ? '#3D2B1F' : '#DFD3C3',
                         paddingHorizontal: 10,
                         paddingVertical: 6,
                         borderRadius: 8,
                       }}>
+                      <Settings
+                        size={12}
+                        color={showWarehouseEditor ? '#FFFDF9' : '#5C4332'}
+                      />
                       <Text
                         style={{
                           fontSize: 11.5,
-                          fontWeight: '800',
-                          color: showWarehouseEditor ? '#FFFFFF' : '#1D4ED8',
+                          fontWeight: '700',
+                          color: showWarehouseEditor ? '#FFFDF9' : '#3D2B1F',
                         }}>
-                        {showWarehouseEditor ? 'Đóng sửa kho' : '✏️ Đổi vị trí shop'}
+                        {showWarehouseEditor ? 'Đóng' : 'Sửa kho'}
                       </Text>
                     </TouchableOpacity>
                   </View>
 
                   {warehouseSaveBanner ? (
-                    <Text
+                    <View
                       style={{
-                        fontSize: 11.5,
-                        fontWeight: '800',
-                        color: '#15803D',
-                        lineHeight: 16,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        backgroundColor: '#ECFDF5',
+                        borderWidth: 1,
+                        borderColor: '#A7F3D0',
+                        borderRadius: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
                       }}>
-                      {warehouseSaveBanner}
-                    </Text>
+                      <Text
+                        style={{
+                          flex: 1,
+                          fontSize: 11.5,
+                          fontWeight: '700',
+                          color: '#166534',
+                        }}>
+                        {warehouseSaveBanner}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => setWarehouseSaveBanner(null)}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <X size={13} color="#166534" />
+                      </TouchableOpacity>
+                    </View>
                   ) : null}
 
                   {showWarehouseEditor && (
@@ -2315,18 +2462,10 @@ export default function OrderDetailScreen() {
                         backgroundColor: '#FFFFFF',
                         borderRadius: 10,
                         padding: 10,
-                        borderWidth: 1.5,
-                        borderColor: '#60A5FA',
+                        borderWidth: 1,
+                        borderColor: '#E2D6C8',
                         gap: 8,
                       }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '900',
-                          color: '#1E40AF',
-                        }}>
-                        📍 Chỉnh sửa địa chỉ kho Shipper SPX tới lấy hàng (Tự đồng bộ Goship & Bản đồ):
-                      </Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                         <TextInput
                           style={[
@@ -2353,17 +2492,8 @@ export default function OrderDetailScreen() {
                         />
                       </View>
 
-                      {/* Official Goship 3-Tier Location Selector (with manual input fallback) */}
                       {hasGoshipToken && (
                         <View style={{ gap: 6 }}>
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              fontWeight: '700',
-                              color: '#475569',
-                            }}>
-                            Chọn chuẩn địa giới Goship (tránh sai Quận/Phường khi gọi Shipper):
-                          </Text>
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                             {(
                               [
@@ -2390,23 +2520,23 @@ export default function OrderDetailScreen() {
                                 activeOpacity={0.8}
                                 style={{
                                   flex: 1,
-                                  minWidth: 125,
+                                  minWidth: 120,
                                   flexDirection: 'row',
                                   alignItems: 'center',
                                   justifyContent: 'space-between',
                                   gap: 4,
                                   backgroundColor:
-                                    activeLocDropdown === sel.key ? '#EFF6FF' : '#F8FAFC',
+                                    activeLocDropdown === sel.key ? '#FAF5EE' : '#FFFFFF',
                                   borderWidth: 1,
                                   borderColor:
                                     activeLocDropdown === sel.key
-                                      ? '#2563EB'
+                                      ? '#3D2B1F'
                                       : sel.hasCode
                                         ? '#86EFAC'
-                                        : '#CBD5E1',
+                                        : '#DFD3C3',
                                   borderRadius: 9,
                                   paddingHorizontal: 10,
-                                  paddingVertical: 9,
+                                  paddingVertical: 8,
                                 }}>
                                 <Text
                                   style={{
@@ -2414,12 +2544,12 @@ export default function OrderDetailScreen() {
                                     minWidth: 0,
                                     fontSize: 12,
                                     fontWeight: '700',
-                                    color: '#0F172A',
+                                    color: '#3D2B1F',
                                   }}
                                   numberOfLines={1}>
                                   {sel.label}
                                 </Text>
-                                <ChevronDown size={14} color="#475569" />
+                                <ChevronDown size={13} color="#6E5A4B" />
                               </TouchableOpacity>
                             ))}
                           </View>
@@ -2427,9 +2557,9 @@ export default function OrderDetailScreen() {
                           {activeLocDropdown && (
                             <View
                               style={{
-                                backgroundColor: '#F8FAFC',
+                                backgroundColor: '#FAF7F2',
                                 borderWidth: 1,
-                                borderColor: '#93C5FD',
+                                borderColor: '#DFD3C3',
                                 borderRadius: 10,
                                 padding: 8,
                                 gap: 6,
@@ -2461,9 +2591,9 @@ export default function OrderDetailScreen() {
                                   style={{
                                     padding: 6,
                                     borderRadius: 8,
-                                    backgroundColor: '#E2E8F0',
+                                    backgroundColor: '#ECE3D6',
                                   }}>
-                                  <X size={15} color="#334155" />
+                                  <X size={14} color="#3D2B1F" />
                                 </TouchableOpacity>
                               </View>
 
@@ -2473,16 +2603,16 @@ export default function OrderDetailScreen() {
                                     flexDirection: 'row',
                                     alignItems: 'center',
                                     gap: 8,
-                                    paddingVertical: 8,
+                                    paddingVertical: 6,
                                   }}>
-                                  <ActivityIndicator size="small" color="#1D4ED8" />
-                                  <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
-                                    Đang tải danh sách từ Goship...
+                                  <ActivityIndicator size="small" color="#3D2B1F" />
+                                  <Text style={{ fontSize: 12, color: '#6E5A4B' }}>
+                                    Đang tải danh sách Goship...
                                   </Text>
                                 </View>
                               ) : (
                                 <ScrollView
-                                  style={{ maxHeight: 180 }}
+                                  style={{ maxHeight: 170 }}
                                   nestedScrollEnabled>
                                   <View style={{ gap: 4 }}>
                                     {(activeLocDropdown === 'city'
@@ -2519,7 +2649,7 @@ export default function OrderDetailScreen() {
                                           style={{
                                             backgroundColor: '#FFFFFF',
                                             borderWidth: 1,
-                                            borderColor: '#E2E8F0',
+                                            borderColor: '#ECE3D6',
                                             borderRadius: 8,
                                             paddingHorizontal: 10,
                                             paddingVertical: 8,
@@ -2527,8 +2657,8 @@ export default function OrderDetailScreen() {
                                           <Text
                                             style={{
                                               fontSize: 12.5,
-                                              fontWeight: '700',
-                                              color: '#1E293B',
+                                              fontWeight: '600',
+                                              color: '#3D2B1F',
                                             }}>
                                             {it.name}
                                           </Text>
@@ -2542,159 +2672,138 @@ export default function OrderDetailScreen() {
                         </View>
                       )}
 
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                        <TextInput
-                          style={[
-                            styles.trackingInput,
-                            { flex: 1, minWidth: 120, fontSize: 16 },
-                          ]}
-                          value={warehouseDraft.fromCity}
-                          onChangeText={(t) =>
-                            setWarehouseDraft((p) => ({
-                              ...p,
-                              fromCity: t,
-                              fromCityCode: '',
-                              fromDistrictCode: '',
-                              fromWardCode: '',
-                            }))
-                          }
-                          placeholder="Tỉnh / Thành phố (VD: Đà Nẵng)"
-                        />
-                        <TextInput
-                          style={[
-                            styles.trackingInput,
-                            { flex: 1, minWidth: 130, fontSize: 16 },
-                          ]}
-                          value={warehouseDraft.fromDistrict}
-                          onChangeText={(t) =>
-                            setWarehouseDraft((p) => ({
-                              ...p,
-                              fromDistrict: t,
-                              fromDistrictCode: '',
-                              fromWardCode: '',
-                            }))
-                          }
-                          placeholder="Quận / Huyện"
-                        />
-                        <TextInput
-                          style={[
-                            styles.trackingInput,
-                            { flex: 1, minWidth: 130, fontSize: 16 },
-                          ]}
-                          value={warehouseDraft.fromWard}
-                          onChangeText={(t) =>
-                            setWarehouseDraft((p) => ({
-                              ...p,
-                              fromWard: t,
-                              fromWardCode: '',
-                            }))
-                          }
-                          placeholder="Phường / Xã"
-                        />
-                      </View>
+                      {!hasGoshipToken && (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                          <TextInput
+                            style={[
+                              styles.trackingInput,
+                              { flex: 1, minWidth: 120, fontSize: 16 },
+                            ]}
+                            value={warehouseDraft.fromCity}
+                            onChangeText={(t) =>
+                              setWarehouseDraft((p) => ({
+                                ...p,
+                                fromCity: t,
+                                fromCityCode: '',
+                                fromDistrictCode: '',
+                                fromWardCode: '',
+                              }))
+                            }
+                            placeholder="Tỉnh / Thành phố"
+                          />
+                          <TextInput
+                            style={[
+                              styles.trackingInput,
+                              { flex: 1, minWidth: 130, fontSize: 16 },
+                            ]}
+                            value={warehouseDraft.fromDistrict}
+                            onChangeText={(t) =>
+                              setWarehouseDraft((p) => ({
+                                ...p,
+                                fromDistrict: t,
+                                fromDistrictCode: '',
+                                fromWardCode: '',
+                              }))
+                            }
+                            placeholder="Quận / Huyện"
+                          />
+                          <TextInput
+                            style={[
+                              styles.trackingInput,
+                              { flex: 1, minWidth: 130, fontSize: 16 },
+                            ]}
+                            value={warehouseDraft.fromWard}
+                            onChangeText={(t) =>
+                              setWarehouseDraft((p) => ({
+                                ...p,
+                                fromWard: t,
+                                fromWardCode: '',
+                              }))
+                            }
+                            placeholder="Phường / Xã"
+                          />
+                        </View>
+                      )}
+
                       <TextInput
                         style={[styles.trackingInput, { fontSize: 16 }]}
                         value={warehouseDraft.fromStreet}
                         onChangeText={(t) =>
                           setWarehouseDraft((p) => ({ ...p, fromStreet: t }))
                         }
-                        placeholder="Số nhà, tên đường / toà nhà lấy hàng"
+                        placeholder="Số nhà, tên đường lấy hàng"
                       />
 
                       {warehouseSaveError ? (
-                        <View
+                        <Text
                           style={{
-                            backgroundColor: '#FEF2F2',
-                            borderWidth: 1,
-                            borderColor: '#FCA5A5',
-                            borderRadius: 8,
-                            padding: 8,
+                            fontSize: 11.5,
+                            fontWeight: '700',
+                            color: '#B91C1C',
+                            lineHeight: 16,
                           }}>
-                          <Text
-                            style={{
-                              fontSize: 11.5,
-                              fontWeight: '700',
-                              color: '#B91C1C',
-                              lineHeight: 16,
-                            }}>
-                            ⚠️ {warehouseSaveError}
-                          </Text>
-                        </View>
+                          {warehouseSaveError}
+                        </Text>
                       ) : null}
 
                       <View
                         style={{
-                          backgroundColor: '#F8FAFC',
-                          borderRadius: 8,
-                          padding: 8,
-                          borderWidth: 1,
-                          borderColor: '#E2E8F0',
-                          gap: 4,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 8,
+                          paddingTop: 2,
                         }}>
-                        <Text
+                        <TouchableOpacity
+                          onPress={() => void handleSaveWarehouse()}
+                          disabled={savingWarehouse}
                           style={{
-                            fontSize: 11,
-                            fontWeight: '700',
-                            color: '#334155',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
+                            backgroundColor: '#3D2B1F',
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: 9,
                           }}>
-                          🔗 Link Webhook tự nhận & đồng bộ huỷ vận đơn từ Goship (dán vào mục Goship API Webhooks):
-                        </Text>
+                          {savingWarehouse ? (
+                            <ActivityIndicator size="small" color="#FFFDF9" />
+                          ) : null}
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '800',
+                              color: '#FFFDF9',
+                            }}>
+                            {savingWarehouse ? 'Đang lưu...' : 'Lưu địa chỉ kho'}
+                          </Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                           onPress={() => handleCopy(goshipWebhookUrl, 'wh_url')}
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 6,
+                            gap: 4,
+                            paddingHorizontal: 9,
+                            paddingVertical: 6,
+                            borderRadius: 8,
+                            backgroundColor: '#FAF7F2',
+                            borderWidth: 1,
+                            borderColor: '#E6DDD0',
                           }}>
-                          <Text
-                            style={{
-                              flex: 1,
-                              minWidth: 0,
-                              fontSize: 11,
-                              fontWeight: '800',
-                              color: '#1D4ED8',
-                            }}
-                            numberOfLines={1}>
-                            {goshipWebhookUrl}
-                          </Text>
+                          <Copy size={11} color="#5C4332" />
                           <Text
                             style={{
                               fontSize: 11,
-                              fontWeight: '800',
-                              color: '#15803D',
+                              fontWeight: '700',
+                              color: copiedKey === 'wh_url' ? '#15803D' : '#5C4332',
                             }}>
-                            {copiedKey === 'wh_url' ? '✅ Đã chép' : 'Chép link'}
+                            {copiedKey === 'wh_url' ? 'Đã chép Webhook' : 'Chép link Webhook'}
                           </Text>
                         </TouchableOpacity>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => void handleSaveWarehouse()}
-                        disabled={savingWarehouse}
-                        style={{
-                          alignSelf: 'flex-start',
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 6,
-                          backgroundColor: '#1D4ED8',
-                          paddingHorizontal: 14,
-                          paddingVertical: 9,
-                          borderRadius: 9,
-                        }}>
-                        {savingWarehouse ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : null}
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '800',
-                            color: '#FFFFFF',
-                          }}>
-                          {savingWarehouse
-                            ? 'Đang xác thực & lưu...'
-                            : '💾 Lưu & xác thực địa chỉ kho lấy hàng'}
-                        </Text>
-                      </TouchableOpacity>
                     </View>
                   )}
 
@@ -2703,117 +2812,141 @@ export default function OrderDetailScreen() {
                       style={{
                         backgroundColor: '#FEF2F2',
                         borderWidth: 1,
-                        borderColor: '#FCA5A5',
-                        borderRadius: 10,
+                        borderColor: '#FECACA',
+                        borderRadius: 9,
                         padding: 10,
                       }}>
                       <Text
                         style={{
                           fontSize: 12,
-                          fontWeight: '900',
+                          fontWeight: '700',
                           color: '#991B1B',
                         }}>
-                        ⛔ Đã tự động khóa tính năng Tạo vận đơn SPX vì khách CHƯA thanh toán chuyển khoản!
+                        Đã khóa tạo vận đơn vì khách chưa chuyển khoản thanh toán.
                       </Text>
                     </View>
                   ) : savedTracking || order.shippingAddress?.goshipShipmentId ? (
                     <View
                       style={{
-                        backgroundColor: '#DCFCE7',
+                        backgroundColor: '#FFFFFF',
                         borderWidth: 1,
-                        borderColor: '#86EFAC',
+                        borderColor: '#E6DDD0',
                         borderRadius: 10,
                         padding: 10,
                         gap: 8,
                       }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '900',
-                          color: '#166534',
-                          lineHeight: 18,
-                        }}>
-                        ✅ Đơn hàng đã gắn mã vận đơn {savedCarrier || 'SPX'}:{' '}
-                        {savedTracking || order.shippingAddress?.goshipShipmentId} (Đã khóa nút tạo tự động để chống tạo trùng 2 vận đơn).
-                      </Text>
-
                       <View
                         style={{
                           flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
                           flexWrap: 'wrap',
                           gap: 8,
                         }}>
-                        <TouchableOpacity
-                          onPress={() => void refreshLiveSpxJourney(true)}
-                          disabled={syncingGoshipForce || cancellingGoship}
-                          activeOpacity={0.85}
+                        <View
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            gap: 5,
-                            backgroundColor: '#FFFFFF',
-                            borderWidth: 1,
-                            borderColor: '#16A34A',
-                            paddingHorizontal: 10,
-                            paddingVertical: 7,
-                            borderRadius: 8,
+                            gap: 7,
+                            flex: 1,
+                            minWidth: 150,
                           }}>
-                          {syncingGoshipForce ? (
-                            <ActivityIndicator size="small" color="#15803D" />
-                          ) : (
-                            <RefreshCw size={13} color="#15803D" />
-                          )}
+                          <View
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: '#16A34A',
+                            }}
+                          />
                           <Text
                             style={{
-                              fontSize: 11.5,
+                              fontSize: 12.5,
                               fontWeight: '800',
-                              color: '#15803D',
-                            }}>
-                            {syncingGoshipForce
-                              ? 'Đang kiểm tra Goship...'
-                              : 'Đồng bộ trạng thái Goship'}
+                              color: '#1E293B',
+                            }}
+                            numberOfLines={1}>
+                            {savedCarrier || 'SPX'} • {savedTracking || order.shippingAddress?.goshipShipmentId}
                           </Text>
-                        </TouchableOpacity>
+                        </View>
 
-                        <TouchableOpacity
-                          onPress={() => void handleCancelOrUnlinkGoship(false)}
-                          disabled={cancellingGoship || syncingGoshipForce}
-                          activeOpacity={0.85}
+                        <View
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            gap: 5,
-                            backgroundColor: confirmCancelWaybill ? '#DC2626' : '#FEF2F2',
-                            borderWidth: 1,
-                            borderColor: confirmCancelWaybill ? '#B91C1C' : '#FCA5A5',
-                            paddingHorizontal: 10,
-                            paddingVertical: 7,
-                            borderRadius: 8,
+                            flexWrap: 'wrap',
+                            gap: 6,
                           }}>
-                          {cancellingGoship ? (
-                            <ActivityIndicator
-                              size="small"
-                              color={confirmCancelWaybill ? '#FFFFFF' : '#B91C1C'}
-                            />
-                          ) : (
-                            <Trash2
-                              size={13}
-                              color={confirmCancelWaybill ? '#FFFFFF' : '#B91C1C'}
-                            />
-                          )}
-                          <Text
+                          <TouchableOpacity
+                            onPress={() => void refreshLiveSpxJourney(true)}
+                            disabled={syncingGoshipForce || cancellingGoship}
+                            activeOpacity={0.85}
                             style={{
-                              fontSize: 11.5,
-                              fontWeight: '800',
-                              color: confirmCancelWaybill ? '#FFFFFF' : '#B91C1C',
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 4,
+                              backgroundColor: '#FAF7F2',
+                              borderWidth: 1,
+                              borderColor: '#DFD3C3',
+                              paddingHorizontal: 9,
+                              paddingVertical: 6,
+                              borderRadius: 8,
                             }}>
-                            {cancellingGoship
-                              ? 'Đang huỷ / gỡ mã...'
-                              : confirmCancelWaybill
-                                ? `⚠️ Bấm lần nữa để xác nhận gỡ mã ${savedTracking || order.shippingAddress?.goshipShipmentId}`
-                                : 'Huỷ / Gỡ vận đơn để tạo lại'}
-                          </Text>
-                        </TouchableOpacity>
+                            {syncingGoshipForce ? (
+                              <ActivityIndicator size="small" color="#3D2B1F" />
+                            ) : (
+                              <RefreshCw size={12} color="#3D2B1F" />
+                            )}
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '700',
+                                color: '#3D2B1F',
+                              }}>
+                              {syncingGoshipForce ? 'Đang đồng bộ...' : 'Đồng bộ'}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => void handleCancelOrUnlinkGoship(false)}
+                            disabled={cancellingGoship || syncingGoshipForce}
+                            activeOpacity={0.85}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 4,
+                              backgroundColor: confirmCancelWaybill ? '#DC2626' : '#FFFFFF',
+                              borderWidth: 1,
+                              borderColor: confirmCancelWaybill ? '#B91C1C' : '#FECACA',
+                              paddingHorizontal: 9,
+                              paddingVertical: 6,
+                              borderRadius: 8,
+                            }}>
+                            {cancellingGoship ? (
+                              <ActivityIndicator
+                                size="small"
+                                color={confirmCancelWaybill ? '#FFFFFF' : '#B91C1C'}
+                              />
+                            ) : (
+                              <Trash2
+                                size={12}
+                                color={confirmCancelWaybill ? '#FFFFFF' : '#B91C1C'}
+                              />
+                            )}
+                            <Text
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: '700',
+                                color: confirmCancelWaybill ? '#FFFFFF' : '#B91C1C',
+                              }}>
+                              {cancellingGoship
+                                ? 'Đang gỡ...'
+                                : confirmCancelWaybill
+                                  ? 'Bấm lại để xác nhận gỡ'
+                                  : 'Huỷ / Gỡ mã'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
 
                       {canForceUnlinkWaybill && (
@@ -2823,18 +2956,18 @@ export default function OrderDetailScreen() {
                           activeOpacity={0.85}
                           style={{
                             alignSelf: 'flex-start',
-                            backgroundColor: '#7F1D1D',
-                            paddingHorizontal: 12,
-                            paddingVertical: 8,
+                            backgroundColor: '#991B1B',
+                            paddingHorizontal: 11,
+                            paddingVertical: 7,
                             borderRadius: 8,
                           }}>
                           <Text
                             style={{
                               fontSize: 11.5,
-                              fontWeight: '800',
+                              fontWeight: '700',
                               color: '#FFFFFF',
                             }}>
-                            🔓 Gỡ mã cũ khỏi web ngay (nếu bạn đã huỷ trực tiếp trên shop.goship.io)
+                            Gỡ mã khỏi web (đã huỷ trực tiếp trên Goship)
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -2843,11 +2976,11 @@ export default function OrderDetailScreen() {
                         <Text
                           style={{
                             fontSize: 11.5,
-                            fontWeight: '700',
+                            fontWeight: '600',
                             color: '#B91C1C',
                             lineHeight: 16,
                           }}>
-                          ⚠️ {goshipActionError}
+                          {goshipActionError}
                         </Text>
                       ) : null}
                     </View>
@@ -2867,31 +3000,32 @@ export default function OrderDetailScreen() {
                             gap: 6,
                             backgroundColor: '#FFFFFF',
                             borderWidth: 1,
-                            borderColor: '#BFDBFE',
+                            borderColor: '#DFD3C3',
                             borderRadius: 9,
                             paddingHorizontal: 10,
-                            paddingVertical: 6,
+                            paddingVertical: 5,
                           }}>
                           <Text
                             style={{
                               fontSize: 12,
-                              fontWeight: '700',
-                              color: '#1E3A8A',
+                              fontWeight: '600',
+                              color: '#6E5A4B',
                             }}>
-                            Cân nặng (gram):
+                            Khối lượng
                           </Text>
                           <TextInput
                             style={{
-                              width: 64,
+                              width: 56,
                               fontSize: 16,
                               fontWeight: '800',
-                              color: '#1E3A8A',
+                              color: '#3D2B1F',
                               textAlign: 'center',
                             }}
                             keyboardType="numeric"
                             value={parcelWeightInput}
                             onChangeText={setParcelWeightInput}
                           />
+                          <Text style={{ fontSize: 12, color: '#6E5A4B' }}>g</Text>
                         </View>
 
                         <TouchableOpacity
@@ -2900,30 +3034,30 @@ export default function OrderDetailScreen() {
                           activeOpacity={0.85}
                           style={{
                             flex: 1,
-                            minWidth: 210,
+                            minWidth: 190,
                             flexDirection: 'row',
                             alignItems: 'center',
                             justifyContent: 'center',
                             gap: 6,
-                            backgroundColor: '#1D4ED8',
+                            backgroundColor: '#3D2B1F',
                             paddingHorizontal: 14,
                             paddingVertical: 10,
                             borderRadius: 10,
                           }}>
                           {quotingGoship ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
+                            <ActivityIndicator size="small" color="#FFFDF9" />
                           ) : (
-                            <Truck size={15} color="#FFFFFF" />
+                            <Truck size={15} color="#FFFDF9" />
                           )}
                           <Text
                             style={{
                               fontSize: 12.5,
-                              fontWeight: '900',
-                              color: '#FFFFFF',
+                              fontWeight: '800',
+                              color: '#FFFDF9',
                             }}>
                             {hasGoshipToken
-                              ? '1️⃣ Xem cước SPX & Chuẩn bị gọi Shipper'
-                              : '⚡ Tạo đơn SPX 1 chạm (Cần gắn GOSHIP_ACCESS_TOKEN)'}
+                              ? 'Xem cước & Lên đơn SPX'
+                              : 'Tạo đơn SPX (Chưa cấu hình Token)'}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -2932,72 +3066,31 @@ export default function OrderDetailScreen() {
                         <View
                           style={{
                             backgroundColor: '#FFFFFF',
-                            borderRadius: 11,
+                            borderRadius: 10,
                             padding: 10,
-                            borderWidth: 1.5,
-                            borderColor: '#60A5FA',
+                            borderWidth: 1,
+                            borderColor: '#DFD3C3',
                             gap: 8,
                           }}>
-                          <View
-                            style={{
-                              backgroundColor: '#FFFBEB',
-                              borderWidth: 1,
-                              borderColor: '#FCD34D',
-                              borderRadius: 8,
-                              padding: 8,
-                              gap: 3,
-                            }}>
-                            <Text
-                              style={{
-                                fontSize: 11.5,
-                                fontWeight: '800',
-                                color: '#92400E',
-                              }}>
-                              📍 Kiểm tra lại địa chỉ lấy hàng (Goship):
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 11.5,
-                                fontWeight: '700',
-                                color: '#3D2B1F',
-                              }}>
-                              • Kho lấy hàng:{' '}
-                              {[
-                                quoteResolvedFrom?.street || warehouseDraft.fromStreet,
-                                quoteResolvedFrom?.ward || warehouseDraft.fromWard,
-                                quoteResolvedFrom?.district || warehouseDraft.fromDistrict,
-                                quoteResolvedFrom?.city || warehouseDraft.fromCity,
-                              ]
-                                .filter(Boolean)
-                                .join(', ')}
-                            </Text>
-                            {quoteResolvedTo ? (
-                              <Text
-                                style={{
-                                  fontSize: 11.5,
-                                  fontWeight: '600',
-                                  color: '#475569',
-                                }}>
-                                • Giao tới:{' '}
-                                {[
-                                  quoteResolvedTo.ward,
-                                  quoteResolvedTo.district,
-                                  quoteResolvedTo.city,
-                                ]
-                                  .filter(Boolean)
-                                  .join(', ')}
-                              </Text>
-                            ) : null}
-                          </View>
-
                           <Text
                             style={{
-                              fontSize: 12,
-                              fontWeight: '900',
-                              color: '#1E3A8A',
+                              fontSize: 11.5,
+                              color: '#6E5A4B',
+                              lineHeight: 16,
                             }}>
-                            2️⃣ Kiểm tra gói cước (Mặc định ưu tiên SPX Express) & Bấm xác nhận gọi Shipper:
+                            <Text style={{ fontWeight: '800', color: '#3D2B1F' }}>
+                              Lấy tại:{' '}
+                            </Text>
+                            {[
+                              quoteResolvedFrom?.street || warehouseDraft.fromStreet,
+                              quoteResolvedFrom?.ward || warehouseDraft.fromWard,
+                              quoteResolvedFrom?.district || warehouseDraft.fromDistrict,
+                              quoteResolvedFrom?.city || warehouseDraft.fromCity,
+                            ]
+                              .filter(Boolean)
+                              .join(', ')}
                           </Text>
+
                           {goshipRates.slice(0, 5).map((rt) => {
                             const active = selectedRateId === rt.id;
                             return (
@@ -3012,32 +3105,31 @@ export default function OrderDetailScreen() {
                                   padding: 9,
                                   borderRadius: 9,
                                   borderWidth: active ? 1.5 : 1,
-                                  borderColor: active ? '#1D4ED8' : '#E2E8F0',
-                                  backgroundColor: active ? '#EFF6FF' : '#F8FAFC',
+                                  borderColor: active ? '#3D2B1F' : '#ECE3D6',
+                                  backgroundColor: active ? '#FAF5EE' : '#FFFFFF',
                                 }}>
                                 <View style={{ flex: 1, minWidth: 0 }}>
                                   <Text
                                     style={{
                                       fontSize: 12.5,
-                                      fontWeight: '900',
-                                      color: '#1E293B',
+                                      fontWeight: '800',
+                                      color: '#3D2B1F',
                                     }}>
-                                    {rt.isSpx ? '⭐ ' : ''}
                                     {rt.carrierName} — {rt.service}
                                   </Text>
                                   <Text
                                     style={{
                                       fontSize: 11,
-                                      color: '#64748B',
+                                      color: '#7A6555',
                                     }}>
-                                    {rt.expected} • Thu hộ COD: {formatVND(codAmount)}
+                                    {rt.expected} • COD: {formatVND(codAmount)}
                                   </Text>
                                 </View>
                                 <Text
                                   style={{
                                     fontSize: 13,
                                     fontWeight: '900',
-                                    color: '#1D4ED8',
+                                    color: '#3D2B1F',
                                   }}>
                                   {formatVND(rt.totalFee)}
                                 </Text>
@@ -3051,9 +3143,9 @@ export default function OrderDetailScreen() {
                             activeOpacity={0.85}
                             style={{
                               backgroundColor: '#15803D',
-                              paddingVertical: 11,
+                              paddingVertical: 10,
                               paddingHorizontal: 14,
-                              borderRadius: 10,
+                              borderRadius: 9,
                               alignItems: 'center',
                               justifyContent: 'center',
                               flexDirection: 'row',
@@ -3062,15 +3154,15 @@ export default function OrderDetailScreen() {
                             {creatingGoship ? (
                               <ActivityIndicator size="small" color="#FFFFFF" />
                             ) : (
-                              <CheckCircle2 size={16} color="#FFFFFF" />
+                              <CheckCircle2 size={15} color="#FFFFFF" />
                             )}
                             <Text
                               style={{
-                                fontSize: 13,
-                                fontWeight: '900',
+                                fontSize: 12.5,
+                                fontWeight: '800',
                                 color: '#FFFFFF',
                               }}>
-                              ✅ Xác nhận đẩy đơn lên Goship & Tự gắn mã SPX cho khách
+                              Xác nhận lên đơn & Gắn mã cho khách
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -3080,300 +3172,264 @@ export default function OrderDetailScreen() {
                         <Text
                           style={{
                             fontSize: 11.5,
-                            fontWeight: '700',
+                            fontWeight: '600',
                             color: '#B91C1C',
                             lineHeight: 16,
                           }}>
-                          ⚠️ {goshipActionError}
+                          {goshipActionError}
                         </Text>
                       ) : null}
                     </>
                   )}
 
                   {goshipCreatedBanner ? (
-                    <Text
+                    <View
                       style={{
-                        fontSize: 12,
-                        fontWeight: '800',
-                        color: '#15803D',
-                        lineHeight: 17,
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        backgroundColor: '#FFFFFF',
+                        borderWidth: 1,
+                        borderColor: '#DFD3C3',
+                        borderRadius: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
                       }}>
-                      {goshipCreatedBanner}
-                    </Text>
+                      <Text
+                        style={{
+                          flex: 1,
+                          fontSize: 11.5,
+                          fontWeight: '600',
+                          color: '#3D2B1F',
+                          lineHeight: 16,
+                        }}>
+                        {goshipCreatedBanner}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => setGoshipCreatedBanner(null)}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <X size={13} color="#7A6555" />
+                      </TouchableOpacity>
+                    </View>
                   ) : null}
                 </View>
 
-                {/* Step A: 1-Click Copy Full Slip for Goship / SPX */}
-                <TouchableOpacity
-                  style={[
-                    styles.copyFullSlipBtn,
-                    copiedKey === 'full_slip' && styles.copyFullSlipBtnDone,
-                  ]}
-                  onPress={() =>
-                    handleCopy(formatShippingSlipForClipboard(order), 'full_slip')
-                  }
-                  activeOpacity={0.85}>
-                  {copiedKey === 'full_slip' ? (
-                    <CheckCircle2 size={17} color="#2E7D32" />
-                  ) : (
-                    <Copy size={16} color="#FAF5EE" />
-                  )}
-                  <Text
-                    style={[
-                      styles.copyFullSlipText,
-                      copiedKey === 'full_slip' && { color: '#2E7D32' },
-                    ]}>
-                    {copiedKey === 'full_slip'
-                      ? 'Đã chép phiếu giao hàng! Dán vào Goship / Viettel Post / GHTK'
-                      : '📋 Bước 1: Chép toàn bộ thông tin để tạo đơn Ship'}
-                  </Text>
-                  </TouchableOpacity>
-
-                  {/* Goship.io 1-Tap Field Copy Grid & CSV Export */}
-                  <View
+                {/* Collapsible Manual Fallback Tools (Closed by default for zero visual clutter!) */}
+                <View
                   style={{
-                    backgroundColor: '#FAF4EC',
                     borderWidth: 1,
-                    borderColor: '#E5D5C3',
-                    borderRadius: 10,
-                    padding: 9,
-                    gap: 6,
+                    borderColor: '#ECE3D6',
+                    borderRadius: 12,
+                    backgroundColor: '#FFFFFF',
+                    overflow: 'hidden',
                   }}>
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      fontWeight: '800',
-                      color: '#5C4033',
-                    }}>
-                    ⚡ Chép nhanh từng ô cho Goship.io / Xuất file CSV:
-                  </Text>
-                  <View
+                  <TouchableOpacity
+                    onPress={() => setShowManualTools((v) => !v)}
+                    activeOpacity={0.75}
                     style={{
                       flexDirection: 'row',
-                      flexWrap: 'wrap',
-                      gap: 6,
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      gap: 8,
                     }}>
-                    {[
-                      {
-                        key: 'gs_order_id',
-                        label: '🔖 Chép Mã đơn đối tác',
-                        val: order.id,
-                      },
-                      {
-                        key: 'gs_name',
-                        label: '👤 Chép Tên',
-                        val: order.shippingAddress?.fullName || 'Khách hàng',
-                      },
-                      {
-                        key: 'gs_phone',
-                        label: '📞 Chép SĐT',
-                        val: order.shippingAddress?.phone || '',
-                      },
-                      {
-                        key: 'gs_detail',
-                        label: '🏠 Chép ĐC chi tiết',
-                        val: order.shippingAddress?.detailAddress || fullAddress,
-                      },
-                      {
-                        key: 'gs_cod',
-                        label: `💰 Chép COD (${codAmount})`,
-                        val: String(codAmount),
-                      },
-                      {
-                        key: 'gs_items',
-                        label: '🧶 Chép Tên SP & Thiệp',
-                        val: order.items
-                          .map((i) => {
-                            const c = i.product.giftCardNote
-                              ? ` [Thiệp: ${i.product.giftCardNote}]`
-                              : '';
-                            return `${i.product.name} (x${i.quantity})${c}`;
-                          })
-                          .join(', '),
-                      },
-                    ].map((btn) => (
-                      <TouchableOpacity
-                        key={btn.key}
-                        style={styles.portalChip}
-                        onPress={() => handleCopy(btn.val, btn.key)}
-                        activeOpacity={0.8}>
-                        <Text style={styles.portalChipText}>
-                          {copiedKey === btn.key ? '✅ Đã chép!' : btn.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                    <TouchableOpacity
-                      style={[
-                        styles.portalChip,
-                        { backgroundColor: '#4A3427', borderColor: '#4A3427' },
-                      ]}
-                      onPress={() => exportOrdersToGoshipCsv([order])}
-                      activeOpacity={0.8}>
-                      <Text style={[styles.portalChipText, { color: '#FFFDF9' }]}>
-                        📥 Tải CSV Goship.io
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  </View>
-
-                {/* Quick Portal Shortcuts */}
-                <View style={styles.portalRow}>
-                  <Text style={styles.portalHint}>Mở nhanh web đặt ship:</Text>
-                  <View style={styles.portalPillsWrap}>
-                    {ADMIN_BOOKING_PORTALS.map((p) => (
-                      <TouchableOpacity
-                        key={p.name}
-                        style={styles.portalChip}
-                        onPress={() => Linking.openURL(p.url)}>
-                        <Text style={styles.portalChipText}>{p.name}</Text>
-                        <ExternalLink size={11} color="#5C4332" />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.toolkitDivider} />
-
-                {/* Step B: Attach Carrier & Tracking Number */}
-                <Text style={styles.toolkitStepTitle}>
-                  🚚 Bước 2: Gắn đơn vị vận chuyển & Mã vận đơn cho khách
-                </Text>
-
-                <View style={styles.carrierChipsWrap}>
-                  {SHIPPING_CARRIERS.map((c) => {
-                    const active = selectedCarrier === c.shortLabel;
-                    return (
-                      <TouchableOpacity
-                        key={c.id}
-                        style={[
-                          styles.carrierChip,
-                          active && styles.carrierChipActive,
-                        ]}
-                        onPress={() => setSelectedCarrier(c.shortLabel)}
-                        activeOpacity={0.8}>
-                        <Text
-                          style={[
-                            styles.carrierChipText,
-                            active && styles.carrierChipTextActive,
-                          ]}>
-                          {c.shortLabel}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <TextInput
-                  style={styles.trackingInput}
-                  placeholder="Nhập mã vận đơn (VD: S21948291) hoặc dán link theo dõi Grab/Ahamove..."
-                  placeholderTextColor={COLORS.lightText}
-                  value={trackingInput}
-                  onChangeText={setTrackingInput}
-                />
-
-                <View style={styles.saveTrackingActions}>
-                  <TouchableOpacity
-                    style={styles.saveAndShipBtn}
-                    onPress={() => handleSaveTracking(true)}
-                    activeOpacity={0.85}>
-                    <Truck size={15} color="#FFFDF9" />
-                    <Text style={styles.saveAndShipBtnText}>
-                      Lưu vận đơn & Báo khách Đang giao
+                    <Text
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: '700',
+                        color: '#5C4332',
+                      }}>
+                      Công cụ thủ công (Chép phiếu, CSV, gắn mã vận đơn tay)
                     </Text>
+                    {showManualTools ? (
+                      <ChevronUp size={16} color="#6E5A4B" />
+                    ) : (
+                      <ChevronDown size={16} color="#6E5A4B" />
+                    )}
                   </TouchableOpacity>
 
-                  {trackingUrl && (savedTracking || trackingInput.trim()) ? (
-                    <TouchableOpacity
-                      style={styles.testTrackBtn}
-                      onPress={() => Linking.openURL(trackingUrl)}>
-                      <ExternalLink size={14} color="#3D2B1F" />
-                      <Text style={styles.testTrackBtnText}>Thử tra cứu</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
+                  {showManualTools && (
+                    <View
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingBottom: 12,
+                        paddingTop: 4,
+                        gap: 10,
+                        borderTopWidth: 1,
+                        borderTopColor: '#F3ECE2',
+                      }}>
+                      <TouchableOpacity
+                        style={[
+                          styles.copyFullSlipBtn,
+                          copiedKey === 'full_slip' && styles.copyFullSlipBtnDone,
+                        ]}
+                        onPress={() =>
+                          handleCopy(formatShippingSlipForClipboard(order), 'full_slip')
+                        }
+                        activeOpacity={0.85}>
+                        {copiedKey === 'full_slip' ? (
+                          <CheckCircle2 size={16} color="#15803D" />
+                        ) : (
+                          <Copy size={15} color="#FAF5EE" />
+                        )}
+                        <Text
+                          style={[
+                            styles.copyFullSlipText,
+                            copiedKey === 'full_slip' && { color: '#15803D' },
+                          ]}>
+                          {copiedKey === 'full_slip'
+                            ? 'Đã chép toàn bộ phiếu giao hàng'
+                            : 'Chép toàn bộ thông tin đơn Ship'}
+                        </Text>
+                      </TouchableOpacity>
 
-                {savedNotice && (
-                  <Text style={styles.savedNoticeText}>
-                    ✅ Đã đồng bộ mã vận đơn & tự động gửi Email báo mã vận đơn tới Gmail khách hàng!
-                  </Text>
-                )}
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {[
+                          { key: 'gs_order_id', label: 'Mã đơn', val: order.id },
+                          {
+                            key: 'gs_name',
+                            label: 'Tên khách',
+                            val: order.shippingAddress?.fullName || 'Khách hàng',
+                          },
+                          {
+                            key: 'gs_phone',
+                            label: 'SĐT',
+                            val: order.shippingAddress?.phone || '',
+                          },
+                          {
+                            key: 'gs_detail',
+                            label: 'Địa chỉ',
+                            val: order.shippingAddress?.detailAddress || fullAddress,
+                          },
+                          {
+                            key: 'gs_cod',
+                            label: `COD (${codAmount})`,
+                            val: String(codAmount),
+                          },
+                          {
+                            key: 'gs_items',
+                            label: 'Tên SP & Thiệp',
+                            val: order.items
+                              .map((i) => {
+                                const c = i.product.giftCardNote
+                                  ? ` [Thiệp: ${i.product.giftCardNote}]`
+                                  : '';
+                                return `${i.product.name} (x${i.quantity})${c}`;
+                              })
+                              .join(', '),
+                          },
+                        ].map((btn) => (
+                          <TouchableOpacity
+                            key={btn.key}
+                            style={styles.portalChip}
+                            onPress={() => handleCopy(btn.val, btn.key)}
+                            activeOpacity={0.8}>
+                            <Text style={styles.portalChipText}>
+                              {copiedKey === btn.key ? 'Đã chép' : `Chép ${btn.label}`}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity
+                          style={[
+                            styles.portalChip,
+                            { backgroundColor: '#3D2B1F', borderColor: '#3D2B1F' },
+                          ]}
+                          onPress={() => exportOrdersToGoshipCsv([order])}
+                          activeOpacity={0.8}>
+                          <Text style={[styles.portalChipText, { color: '#FFFDF9' }]}>
+                            Tải CSV Goship
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.portalRow}>
+                        <Text style={styles.portalHint}>Mở nhanh web đặt ship:</Text>
+                        <View style={styles.portalPillsWrap}>
+                          {ADMIN_BOOKING_PORTALS.map((p) => (
+                            <TouchableOpacity
+                              key={p.name}
+                              style={styles.portalChip}
+                              onPress={() => Linking.openURL(p.url)}>
+                              <Text style={styles.portalChipText}>{p.name}</Text>
+                              <ExternalLink size={11} color="#5C4332" />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.toolkitDivider} />
+
+                      <Text style={styles.toolkitStepTitle}>
+                        Gắn đơn vị vận chuyển & Mã vận đơn thủ công
+                      </Text>
+
+                      <View style={styles.carrierChipsWrap}>
+                        {SHIPPING_CARRIERS.map((c) => {
+                          const active = selectedCarrier === c.shortLabel;
+                          return (
+                            <TouchableOpacity
+                              key={c.id}
+                              style={[
+                                styles.carrierChip,
+                                active && styles.carrierChipActive,
+                              ]}
+                              onPress={() => setSelectedCarrier(c.shortLabel)}
+                              activeOpacity={0.8}>
+                              <Text
+                                style={[
+                                  styles.carrierChipText,
+                                  active && styles.carrierChipTextActive,
+                                ]}>
+                                {c.shortLabel}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      <TextInput
+                        style={styles.trackingInput}
+                        placeholder="Nhập mã vận đơn hoặc dán link theo dõi..."
+                        placeholderTextColor={COLORS.lightText}
+                        value={trackingInput}
+                        onChangeText={setTrackingInput}
+                      />
+
+                      <View style={styles.saveTrackingActions}>
+                        <TouchableOpacity
+                          style={styles.saveAndShipBtn}
+                          onPress={() => handleSaveTracking(true)}
+                          activeOpacity={0.85}>
+                          <Truck size={15} color="#FFFDF9" />
+                          <Text style={styles.saveAndShipBtnText}>
+                            Lưu vận đơn & Báo đang giao
+                          </Text>
+                        </TouchableOpacity>
+
+                        {trackingUrl && (savedTracking || trackingInput.trim()) ? (
+                          <TouchableOpacity
+                            style={styles.testTrackBtn}
+                            onPress={() => Linking.openURL(trackingUrl)}>
+                            <ExternalLink size={14} color="#3D2B1F" />
+                            <Text style={styles.testTrackBtnText}>Tra cứu</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+
+                      {savedNotice && (
+                        <Text style={styles.savedNoticeText}>
+                          Đã lưu mã vận đơn & gửi Email thông báo cho khách.
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
               </View>
             )}
           </View>
           )}
-
-          {/* 3. Ordered Items */}
-          <View style={[styles.section, isMobile && styles.sectionMobile]}>
-            <Text style={styles.sectionTitle}>
-              Sản phẩm trong đơn ({order.items.reduce((s, i) => s + i.quantity, 0)} món)
-            </Text>
-            {order.items.map((item) => {
-              const baseId = String(
-                item.product.baseProductId || item.product.id || ''
-              ).split('__')[0];
-              const liveCatalogProd = products.find((p) => p.id === baseId);
-              const resolvedThumb =
-                item.product.image || liveCatalogProd?.image || null;
-
-              return (
-                <View key={item.product.id} style={styles.itemBlockWrap}>
-                  <View style={styles.itemRow}>
-                    <TouchableOpacity
-                      style={styles.itemIcon}
-                      onPress={() => router.push(`/product/${baseId}`)}>
-                      {resolvedThumb ? (
-                        <Image
-                          source={
-                            typeof resolvedThumb === 'string'
-                              ? { uri: resolvedThumb }
-                              : (resolvedThumb as any)
-                          }
-                          style={styles.itemProductImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <Package size={20} color={COLORS.primary} />
-                      )}
-                    </TouchableOpacity>
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName} numberOfLines={2}>
-                        {item.product.name}
-                      </Text>
-                      <Text style={styles.itemMeta}>
-                        SL: {item.quantity} x {formatVND(item.price)}
-                      </Text>
-                      {Boolean(item.product.giftCardNote) && (
-                        <View
-                          style={{
-                            marginTop: 5,
-                            backgroundColor: '#FDF6EC',
-                            borderWidth: 1,
-                            borderColor: '#E5D3C0',
-                            borderRadius: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 5,
-                          }}>
-                          <Text
-                            style={{
-                              fontSize: 11.5,
-                              color: '#5C4033',
-                              fontWeight: '600',
-                            }}>
-                            💌 Nội dung thiệp: &ldquo;{item.product.giftCardNote}&rdquo;
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                      <Text style={styles.itemTotal}>
-                        {formatVND(item.price * item.quantity)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
 
           {/* Compact CTA when viewing "Hoàn thành" -> switch to "Đánh giá" */}
           {order.status === 'Hoàn thành' &&
@@ -4216,79 +4272,7 @@ export default function OrderDetailScreen() {
             </View>
           )}
 
-          {/* 4. Payment & Order Total */}
-          <View style={[styles.section, isMobile && styles.sectionMobile]}>
-            <View style={styles.metaLineRow}>
-              <Text style={styles.sectionTitle}>Phương thức thanh toán</Text>
-              <Text style={styles.sectionValue}>{order.paymentMethod}</Text>
-            </View>
-            <View style={styles.metaLineRow}>
-              <Text style={styles.sectionTitle}>Ngày đặt hàng</Text>
-              <Text style={styles.sectionSub}>
-                {new Date(order.createdAt).toLocaleDateString('vi-VN', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </Text>
-            </View>
-            {order.shippingAddress?.promoCode &&
-              Number(order.shippingAddress?.discountAmount) > 0 && (
-                <View style={styles.metaLineRow}>
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { color: '#065F46', fontWeight: '800' },
-                    ]}>
-                    🎟️ Mã giảm giá ({order.shippingAddress.promoCode})
-                  </Text>
-                  <Text
-                    style={[
-                      styles.sectionValue,
-                      { color: '#065F46', fontWeight: '900' },
-                    ]}>
-                    -{formatVND(Number(order.shippingAddress.discountAmount))}
-                  </Text>
-                </View>
-              )}
-            {order.shippingAddress?.bonusGiftProductName && (
-              <View style={styles.metaLineRow}>
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    { color: '#EE4D2D', fontWeight: '800', flex: 1, paddingRight: 8 },
-                  ]}>
-                  🎁 Quà tặng kèm ({order.shippingAddress.bonusGiftProductName})
-                </Text>
-                <Text
-                  style={[
-                    styles.sectionValue,
-                    { color: '#15803D', fontWeight: '900' },
-                  ]}>
-                  0₫
-                </Text>
-              </View>
-            )}
-            {order.shippingAddress?.shippingFee !== undefined && (
-              <View style={styles.metaLineRow}>
-                <Text style={styles.sectionTitle}>Phí vận chuyển</Text>
-                <Text style={styles.sectionValue}>
-                  {order.shippingAddress.shippingFee === 0
-                    ? 'Miễn phí (0₫)'
-                    : formatVND(order.shippingAddress.shippingFee)}
-                </Text>
-              </View>
-            )}
-            <View style={styles.totalDivider} />
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Tổng thanh toán</Text>
-              <Text style={styles.totalValue}>{formatVND(order.total)}</Text>
-            </View>
-          </View>
-
-          <View style={{ height: 60 }} />
+          <View style={{ height: 110 }} />
         </View>
       </ScrollView>
     </SafeAreaView>

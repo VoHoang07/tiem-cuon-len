@@ -32,9 +32,9 @@ interface GeoPoint {
 }
 
 const DEFAULT_WAREHOUSE_POINT: GeoPoint = {
-  lat: 10.8412,
-  lon: 106.8371,
-  shortLabel: 'TP. Thủ Đức, TP.HCM',
+  lat: 10.7241,
+  lon: 106.6286,
+  shortLabel: 'Quận 8, TP.HCM',
 };
 
 const HCMC_DISTRICT_COORDS: Record<string, { lat: number; lon: number }> = {
@@ -351,7 +351,7 @@ export function ShopeeDeliveryRouteMap({
           ]
             .filter(Boolean)
             .join(', ')
-        : order.shippingAddress?.pickupWarehouseLabel || 'TP. Thủ Đức, Hồ Chí Minh';
+        : order.shippingAddress?.pickupWarehouseLabel || 'Quận 8, Hồ Chí Minh';
     const origin = encodeURIComponent(originText);
     const dest = encodeURIComponent(
       [
